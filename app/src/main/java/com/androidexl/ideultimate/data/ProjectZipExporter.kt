@@ -72,7 +72,7 @@ object ProjectZipExporter {
         val collapsed = cleaned.split(' ')
             .filter { it.isNotBlank() }
             .joinToString("-")
-        return collapsed.ifBlank { "project" }
+        return if (collapsed.any { it.isLetterOrDigit() }) collapsed else "project"
     }
 
     private fun escapeXml(value: String): String = value
