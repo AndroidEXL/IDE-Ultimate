@@ -661,6 +661,7 @@ fun IdeProjectScreen(
                         parentNode = parentContainerNode,
                         allWidgets = flattenAllNodes(widgetNodes),
                         recentProperties = recentProperties,
+                        existingViewLogicItems = logicItems.filter { it.section == IdeLogicSection.VIEW },
                         onSelectOtherWidget = { selectedWidgetUid = it.uid },
                         onSelectParentLayout = {
                             if (parentContainerNode != null) {
@@ -683,9 +684,25 @@ fun IdeProjectScreen(
                         onClickProperty = { prop ->
                             openPropertyDialog(selectedNode, prop)
                         },
-                        onOpenLogicEvent = {
-                            selectedWidgetUid = null
-                            activeTabName = IdeProjectTab.LOGIC.name
+                        onToggleWidgetEvent = { eventOpt ->
+                            val eventName = "${selectedNode.viewId}: ${eventOpt.eventKey}"
+                            val existing = logicItems.firstOrNull {
+                                it.section == IdeLogicSection.VIEW &&
+                                    it.targetViewId == selectedNode.viewId &&
+                                    it.name == eventName
+                            }
+                            if (existing != null) {
+                                updateLogicItems(logicItems.filterNot { it.id == existing.id })
+                            } else {
+                                val newItem = IdeLogicItem(
+                                    section = IdeLogicSection.VIEW,
+                                    name = eventName,
+                                    subtitle = "${selectedNode.type.displayName} (@+id/${selectedNode.viewId}) • ${eventOpt.subtitle}",
+                                    targetViewId = selectedNode.viewId,
+                                    bodyCode = "// ${selectedNode.viewId} ${eventOpt.eventKey}\n",
+                                )
+                                updateLogicItems(logicItems + newItem)
+                            }
                         },
                         bottomBarPadding = bottomBarPadding,
                     )
@@ -5211,6 +5228,7 @@ private fun IdeWidgetPropertyBottomPanel(
     parentNode: IdeWidgetNode? = null,
     allWidgets: List<IdeWidgetNode>,
     recentProperties: List<IdeWidgetProperty>,
+    existingViewLogicItems: List<IdeLogicItem> = emptyList(),
     onSelectOtherWidget: (IdeWidgetNode) -> Unit,
     onSelectParentLayout: () -> Unit = {},
     onMoveUp: () -> Unit,
@@ -5218,7 +5236,7 @@ private fun IdeWidgetPropertyBottomPanel(
     onDelete: () -> Unit,
     onSave: () -> Unit,
     onClickProperty: (IdeWidgetProperty) -> Unit,
-    onOpenLogicEvent: () -> Unit,
+    onToggleWidgetEvent: (IdeViewEventOption) -> Unit = {},
     bottomBarPadding: Dp = 0.dp,
 ) {
     var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
@@ -5229,6 +5247,9 @@ private fun IdeWidgetPropertyBottomPanel(
         IdeWidgetProperty.entries.filter { prop ->
             isPropertyAvailableForWidget(prop, node.type)
         }
+    }
+    val availableEvents = remember(node.type) {
+        getEventsForWidgetType(node.type)
     }
     val displayedProperties = remember(node.type, activePropTab, recentProperties.size) {
         when (activePropTab) {
@@ -5474,7 +5495,7 @@ private fun IdeWidgetPropertyBottomPanel(
 
         Spacer(Modifier.height(6.dp))
 
-        // 3. Horizontal Scrollable Row of Rounded Property Cards (See All removed as requested)
+        // 3. Horizontal Scrollable Row of Rounded Property / Event Cards
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5483,19 +5504,17 @@ private fun IdeWidgetPropertyBottomPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (activePropTab == WidgetPropTab.EVENT) {
-                listOf("On Click", "On Click\nLong", "On Touch").forEach { eventLabel ->
-                    SketchPropertySquareCard(
-                        label = eventLabel,
-                        highlighted = false,
-                        onClick = onOpenLogicEvent,
-                    ) { tint ->
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            tint = tint,
-                            modifier = Modifier.size(20.dp),
-                        )
+                availableEvents.forEach { eventOpt ->
+                    val isEnabled = existingViewLogicItems.any {
+                        it.section == IdeLogicSection.VIEW &&
+                            it.targetViewId == node.viewId &&
+                            it.name == "${node.viewId}: ${eventOpt.eventKey}"
                     }
+                    SketchEventSquareCard(
+                        label = eventOpt.cardLabel,
+                        isEnabled = isEnabled,
+                        onClick = { onToggleWidgetEvent(eventOpt) },
+                    )
                 }
             } else {
                 displayedProperties.forEach { prop ->
@@ -6235,6 +6254,86 @@ private fun SketchPropertySquareCard(
     }
 }
 
+@Composable
+private fun SketchEventSquareCard(
+    label: String,
+    isEnabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
+    val bgColor = if (isEnabled) Color(0xFF132A26) else Color(0xFF161F40)
+    val borderColor = if (isEnabled) Color(0xFF22C55E).copy(alpha = 0.65f) else Color(0x28FFFFFF)
+    val contentTint = if (isEnabled) Color(0xFF4ADE80) else Ink.copy(alpha = 0.92f)
+
+    Box(
+        modifier = Modifier
+            .width(88.dp)
+            .height(74.dp)
+            .clip(shape)
+            .background(bgColor)
+            .border(1.dp, borderColor, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 7.dp),
+    ) {
+        // Status Dot at Top-End: Green when enabled (مفعل), Red when disabled (غير مفعل)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(dotColor.copy(alpha = 0.25f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.5.dp)
+                    .clip(CircleShape)
+                    .background(dotColor),
+            )
+        }
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(Modifier.size(18.dp)) {
+                    val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    val bolt = Path().apply {
+                        moveTo(size.width * 0.56f, size.height * 0.10f)
+                        lineTo(size.width * 0.24f, size.height * 0.54f)
+                        lineTo(size.width * 0.50f, size.height * 0.54f)
+                        lineTo(size.width * 0.44f, size.height * 0.90f)
+                        lineTo(size.width * 0.76f, size.height * 0.46f)
+                        lineTo(size.width * 0.50f, size.height * 0.46f)
+                        close()
+                    }
+                    drawPath(bolt, color = contentTint, style = stroke)
+                }
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    lineHeight = 11.5.sp,
+                    fontWeight = if (isEnabled) FontWeight.Bold else FontWeight.Medium,
+                ),
+                color = contentTint,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 // ============================================================================
 // 3. Bottom Bar Matching Screenshot Layout (Left XML Pill + Right Run Split Pill)
 // ============================================================================
@@ -6471,27 +6570,305 @@ private val ALL_ACTIVITY_EVENT_TEMPLATES = listOf(
 
 private data class IdeViewEventOption(
     val eventKey: String,
+    val cardLabel: String,
     val title: String,
     val subtitle: String,
 )
 
-private val VIEW_EVENT_OPTIONS = listOf(
-    IdeViewEventOption(
-        eventKey = "onClick",
-        title = "onClick",
-        subtitle = "On Click • عند الضغط على العنصر",
-    ),
-    IdeViewEventOption(
-        eventKey = "onLongClick",
-        title = "onLongClick (On Click Long)",
-        subtitle = "On Click Long • عند الضغط المطوّل على العنصر",
-    ),
-    IdeViewEventOption(
-        eventKey = "onTouch",
-        title = "onTouch (On Touch)",
-        subtitle = "On Touch • عند لمس العنصر",
-    ),
-)
+private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption> = when (type) {
+    // 1. Text Widgets — Every Text widget has its own distinct events!
+    IdeWidgetType.TEXT_VIEW -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On TextView clicked • عند الضغط على النص"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On TextView long clicked • عند الضغط المطوّل"),
+        IdeViewEventOption("onTextLinkClick", "OnLink\nClick", "onTextLinkClick", "On link/URL clicked inside TextView"),
+        IdeViewEventOption("onTextCopied", "OnText\nCopied", "onTextCopied", "On TextView text copied"),
+    )
+    IdeWidgetType.EDIT_TEXT -> listOf(
+        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On EditText text changed (charSeq, start, before, count)"),
+        IdeViewEventOption("beforeTextChanged", "Before\nText", "beforeTextChanged", "Before EditText text changes"),
+        IdeViewEventOption("afterTextChanged", "After\nText", "afterTextChanged", "After EditText editable text changed"),
+        IdeViewEventOption("onFocusChange", "OnFocus\nChange", "onFocusChange", "On EditText focus gained or lost"),
+        IdeViewEventOption("onEditorAction", "OnEditor\nAction", "onEditorAction", "On keyboard IME action (Done/Search/Send)"),
+    )
+    IdeWidgetType.AUTO_COMPLETE_TEXT -> listOf(
+        IdeViewEventOption("onSuggestionClick", "OnItem\nSelect", "onSuggestionClick", "On autocomplete suggestion item selected"),
+        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On AutoComplete query text changed"),
+        IdeViewEventOption("onDropdownDismiss", "OnPopup\nDismiss", "onDropdownDismiss", "On suggestions dropdown dismissed"),
+        IdeViewEventOption("onThresholdReached", "OnFilter\nReady", "onThresholdReached", "On completion threshold reached"),
+    )
+    IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> listOf(
+        IdeViewEventOption("onTokenAdded", "OnToken\nAdded", "onTokenAdded", "On comma-separated token added"),
+        IdeViewEventOption("onTokenRemoved", "OnToken\nRemoved", "onTokenRemoved", "On token removed from field"),
+        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On MultiAutoComplete text changed"),
+        IdeViewEventOption("onDropdownDismiss", "OnPopup\nDismiss", "onDropdownDismiss", "On suggestions popup dismissed"),
+    )
+    IdeWidgetType.CHECKED_TEXT_VIEW -> listOf(
+        IdeViewEventOption("onCheckedChanged", "OnCheck\nChanged", "onCheckedChanged", "On CheckedTextView check state toggled"),
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On CheckedTextView clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On CheckedTextView long clicked"),
+    )
+    IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> listOf(
+        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On TextInputEditText text changed"),
+        IdeViewEventOption("onEndIconClick", "OnEndIcon\nClick", "onEndIconClick", "On clear/password toggle icon clicked"),
+        IdeViewEventOption("onErrorChanged", "OnError\nState", "onErrorChanged", "On validation error state changed"),
+        IdeViewEventOption("onEditorAction", "OnEditor\nAction", "onEditorAction", "On keyboard IME action pressed"),
+        IdeViewEventOption("onFocusChange", "OnFocus\nChange", "onFocusChange", "On TextInput focus changed"),
+    )
+
+    // 2. Layouts — Each Layout has its own events
+    IdeWidgetType.LINEAR_H -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On Horizontal LinearLayout clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On Horizontal LinearLayout long clicked"),
+        IdeViewEventOption("onChildAdded", "OnChild\nAdded", "onChildAdded", "On child view added to Linear(H)"),
+        IdeViewEventOption("onChildRemoved", "OnChild\nRemoved", "onChildRemoved", "On child view removed from Linear(H)"),
+    )
+    IdeWidgetType.LINEAR_V -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On Vertical LinearLayout clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On Vertical LinearLayout long clicked"),
+        IdeViewEventOption("onChildAdded", "OnChild\nAdded", "onChildAdded", "On child view added to Linear(V)"),
+        IdeViewEventOption("onLayoutChange", "OnLayout\nChange", "onLayoutChange", "On Linear(V) bounds changed"),
+    )
+    IdeWidgetType.SCROLL_H -> listOf(
+        IdeViewEventOption("onScrollChange", "OnScroll\nChange", "onScrollChange", "On vertical ScrollView scroll position changed"),
+        IdeViewEventOption("onReachBottom", "OnReach\nBottom", "onReachBottom", "On ScrollView scrolled to bottom"),
+        IdeViewEventOption("onReachTop", "OnReach\nTop", "onReachTop", "On ScrollView scrolled to top"),
+        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On ScrollView touch event"),
+    )
+    IdeWidgetType.SCROLL_V -> listOf(
+        IdeViewEventOption("onHorizontalScroll", "OnHoriz\nScroll", "onHorizontalScroll", "On HorizontalScrollView scroll X changed"),
+        IdeViewEventOption("onReachEnd", "OnReach\nEnd", "onReachEnd", "On HorizontalScrollView reached end"),
+        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On HorizontalScrollView touch event"),
+    )
+
+    // 3. Image Widgets — Distinct events per Image widget
+    IdeWidgetType.IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageView clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ImageView long clicked"),
+        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On ImageView touched"),
+    )
+    IdeWidgetType.CIRCLE_IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onAvatarClick", "OnAvatar\nClick", "onAvatarClick", "On CircleImageView avatar clicked"),
+        IdeViewEventOption("onBorderClick", "OnBorder\nClick", "onBorderClick", "On CircleImageView border tapped"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On CircleImageView long clicked"),
+    )
+    IdeWidgetType.IMAGE_BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageButton clicked"),
+        IdeViewEventOption("onPressState", "OnPress\nState", "onPressState", "On ImageButton pressed/released"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ImageButton long clicked"),
+    )
+    IdeWidgetType.ROUNDED_IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On RoundedImageView clicked"),
+        IdeViewEventOption("onCornerChange", "OnCorner\nChange", "onCornerChange", "On corner radius changed"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On RoundedImageView long clicked"),
+    )
+    IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On ShapeableImageView clicked"),
+        IdeViewEventOption("onShapeChanged", "OnShape\nChange", "onShapeChanged", "On ShapeAppearanceModel updated"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ShapeableImageView long clicked"),
+    )
+    IdeWidgetType.ZOOM_IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onZoomChanged", "OnZoom\nChange", "onZoomChanged", "On pinch zoom scale changed"),
+        IdeViewEventOption("onDoubleTapZoom", "OnDouble\nTapZoom", "onDoubleTapZoom", "On double-tap zoom triggered"),
+        IdeViewEventOption("onSingleTap", "OnSingle\nTap", "onSingleTap", "On ZoomImageView single tapped"),
+    )
+    IdeWidgetType.ASPECT_IMAGE_VIEW -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On AspectImageView clicked"),
+        IdeViewEventOption("onRatioChanged", "OnRatio\nChange", "onRatioChanged", "On aspect ratio updated"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On AspectImageView long clicked"),
+    )
+    IdeWidgetType.IMAGE_FILTER_VIEW -> listOf(
+        IdeViewEventOption("onFilterChanged", "OnFilter\nChange", "onFilterChanged", "On saturation/warmth/contrast changed"),
+        IdeViewEventOption("onCrossfadeUpdate", "OnCross\nFade", "onCrossfadeUpdate", "On image crossfade progress changed"),
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageFilterView clicked"),
+    )
+
+    // 4. Button Widgets — Distinct events per Button widget
+    IdeWidgetType.BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On Button clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On Button long clicked"),
+        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On Button touch event"),
+    )
+    IdeWidgetType.MATERIAL_BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On MaterialButton clicked"),
+        IdeViewEventOption("onCheckedChanged", "OnCheck\nChange", "onCheckedChanged", "On MaterialButton check state changed"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On MaterialButton long clicked"),
+    )
+    IdeWidgetType.OUTLINED_BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On OutlinedButton clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On OutlinedButton long clicked"),
+        IdeViewEventOption("onHoverChange", "OnHover\nChange", "onHoverChange", "On OutlinedButton hover/press state"),
+    )
+    IdeWidgetType.TEXT_BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On TextButton clicked"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On TextButton long clicked"),
+    )
+    IdeWidgetType.FAB_BUTTON -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On FAB clicked"),
+        IdeViewEventOption("onShowHide", "OnShow\nHide", "onShowHide", "On FAB shown or hidden"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On FAB long clicked"),
+    )
+    IdeWidgetType.EXTENDED_FAB -> listOf(
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On ExtendedFAB clicked"),
+        IdeViewEventOption("onExtend", "OnExtend", "onExtend", "On ExtendedFAB expanded"),
+        IdeViewEventOption("onShrink", "OnShrink", "onShrink", "On ExtendedFAB collapsed to icon"),
+        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ExtendedFAB long clicked"),
+    )
+    IdeWidgetType.TOGGLE_BUTTON -> listOf(
+        IdeViewEventOption("onCheckedChange", "OnToggle\nChange", "onCheckedChange", "On ToggleButton switched ON/OFF"),
+        IdeViewEventOption("onToggleOn", "OnTurn\nON", "onToggleOn", "When ToggleButton becomes ON"),
+        IdeViewEventOption("onToggleOff", "OnTurn\nOFF", "onToggleOff", "When ToggleButton becomes OFF"),
+    )
+    IdeWidgetType.CHIP_BUTTON -> listOf(
+        IdeViewEventOption("onChipClick", "OnChip\nClick", "onChipClick", "On Chip clicked"),
+        IdeViewEventOption("onCloseIconClick", "OnClose\nIcon", "onCloseIconClick", "On Chip close (X) icon clicked"),
+        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On Chip selection changed"),
+    )
+
+    // 5. Choose Widgets — Distinct events per Choose widget
+    IdeWidgetType.CHECK_BOX -> listOf(
+        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On CheckBox checked/unchecked (isChecked)"),
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On CheckBox clicked"),
+    )
+    IdeWidgetType.RADIO_BUTTON -> listOf(
+        IdeViewEventOption("onRadioSelected", "OnRadio\nSelect", "onRadioSelected", "On RadioButton selected"),
+        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On RadioButton state changed"),
+    )
+    IdeWidgetType.SWITCH -> listOf(
+        IdeViewEventOption("onCheckedChange", "OnSwitch\nChange", "onCheckedChange", "On Switch toggled ON/OFF (isChecked)"),
+        IdeViewEventOption("onSlideThumb", "OnSlide\nThumb", "onSlideThumb", "On Switch thumb dragged"),
+    )
+    IdeWidgetType.SPINNER -> listOf(
+        IdeViewEventOption("onItemSelected", "OnItem\nSelected", "onItemSelected", "On Spinner option selected (position)"),
+        IdeViewEventOption("onNothingSelected", "OnNothing\nSelected", "onNothingSelected", "When Spinner selection cleared"),
+    )
+
+    // 6. Web Widgets — Distinct events per Web widget
+    IdeWidgetType.WEB_VIEW -> listOf(
+        IdeViewEventOption("onPageStarted", "OnPage\nStarted", "onPageStarted", "On WebView page loading started (url)"),
+        IdeViewEventOption("onPageFinished", "OnPage\nFinished", "onPageFinished", "On WebView page loading finished (url)"),
+        IdeViewEventOption("onReceivedError", "OnPage\nError", "onReceivedError", "On WebView loading error"),
+        IdeViewEventOption("onUrlOverride", "OnUrl\nOverride", "onUrlOverride", "On shouldOverrideUrlLoading"),
+    )
+    IdeWidgetType.CUSTOM_TAB_VIEW -> listOf(
+        IdeViewEventOption("onTabShown", "OnTab\nShown", "onTabShown", "On Chrome Custom Tab opened"),
+        IdeViewEventOption("onTabHidden", "OnTab\nClosed", "onTabHidden", "On Chrome Custom Tab closed"),
+        IdeViewEventOption("onNavigationEvent", "OnNav\nEvent", "onNavigationEvent", "On Custom Tab navigation event"),
+    )
+    IdeWidgetType.GECKO_WEB_VIEW -> listOf(
+        IdeViewEventOption("onGeckoPageStart", "OnGecko\nStart", "onGeckoPageStart", "On GeckoSession page start"),
+        IdeViewEventOption("onGeckoPageStop", "OnGecko\nStop", "onGeckoPageStop", "On GeckoSession page stop"),
+        IdeViewEventOption("onGeckoSecurity", "OnSecurity\nChange", "onGeckoSecurity", "On SSL security status changed"),
+    )
+    IdeWidgetType.AD_WEB_VIEW -> listOf(
+        IdeViewEventOption("onAdBlocked", "OnAd\nBlocked", "onAdBlocked", "When an ad request is blocked (blockedUrl)"),
+        IdeViewEventOption("onPageStarted", "OnPage\nStarted", "onPageStarted", "On AdBlockWebView page started"),
+        IdeViewEventOption("onPageFinished", "OnPage\nFinished", "onPageFinished", "On AdBlockWebView page finished"),
+    )
+    IdeWidgetType.SWIPE_WEB_VIEW -> listOf(
+        IdeViewEventOption("onSwipeRefresh", "OnPull\nRefresh", "onSwipeRefresh", "On pull-to-refresh gesture triggered"),
+        IdeViewEventOption("onPageFinished", "OnPage\nFinished", "onPageFinished", "On SwipeWebView page finished"),
+        IdeViewEventOption("onProgressChanged", "OnLoad\nProgress", "onProgressChanged", "On page loading progress (0..100)"),
+    )
+
+    // 7. List Widgets — Distinct events per List widget
+    IdeWidgetType.GRID_VIEW -> listOf(
+        IdeViewEventOption("onItemClick", "OnCell\nClick", "onItemClick", "On GridView cell clicked (position)"),
+        IdeViewEventOption("onItemLongClick", "OnCell\nLongClick", "onItemLongClick", "On GridView cell long clicked (position)"),
+        IdeViewEventOption("onScroll", "OnGrid\nScroll", "onScroll", "On GridView scrolled"),
+    )
+    IdeWidgetType.LIST_VIEW -> listOf(
+        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On ListView row clicked (position)"),
+        IdeViewEventOption("onItemLongClick", "OnItem\nLongClick", "onItemLongClick", "On ListView row long clicked (position)"),
+        IdeViewEventOption("onScrollChange", "OnList\nScroll", "onScrollChange", "On ListView scroll state changed"),
+    )
+    IdeWidgetType.TREE_VIEW -> listOf(
+        IdeViewEventOption("onNodeClick", "OnNode\nClick", "onNodeClick", "On TreeView node clicked"),
+        IdeViewEventOption("onNodeExpand", "OnNode\nExpand", "onNodeExpand", "On TreeView branch expanded"),
+        IdeViewEventOption("onNodeCollapse", "OnNode\nCollapse", "onNodeCollapse", "On TreeView branch collapsed"),
+    )
+    IdeWidgetType.RECYCLER_VIEW -> listOf(
+        IdeViewEventOption("onBindCustomView", "OnBind\nView", "onBindCustomView", "On RecyclerView ViewHolder bound (position)"),
+        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On RecyclerView item clicked"),
+        IdeViewEventOption("onScrollStateChanged", "OnScroll\nState", "onScrollStateChanged", "On RecyclerView scroll state changed"),
+    )
+    IdeWidgetType.VIEW_PAGER -> listOf(
+        IdeViewEventOption("onPageSelected", "OnPage\nSelected", "onPageSelected", "On ViewPager page selected (position)"),
+        IdeViewEventOption("onPageScrolled", "OnPage\nScrolled", "onPageScrolled", "On ViewPager page scrolling"),
+        IdeViewEventOption("onPageScrollState", "OnScroll\nState", "onPageScrollState", "On ViewPager scroll state changed"),
+    )
+    IdeWidgetType.EXPANDABLE_LIST_VIEW -> listOf(
+        IdeViewEventOption("onGroupClick", "OnGroup\nClick", "onGroupClick", "On ExpandableList group header clicked"),
+        IdeViewEventOption("onChildClick", "OnChild\nClick", "onChildClick", "On ExpandableList child item clicked"),
+        IdeViewEventOption("onGroupExpand", "OnGroup\nExpand", "onGroupExpand", "On ExpandableList group expanded"),
+        IdeViewEventOption("onGroupCollapse", "OnGroup\nCollapse", "onGroupCollapse", "On ExpandableList group collapsed"),
+    )
+    IdeWidgetType.STAGGERED_GRID_VIEW -> listOf(
+        IdeViewEventOption("onStaggeredItemClick", "OnTile\nClick", "onStaggeredItemClick", "On StaggeredGrid tile clicked"),
+        IdeViewEventOption("onBindStaggeredView", "OnBind\nTile", "onBindStaggeredView", "On StaggeredGrid tile bound"),
+        IdeViewEventOption("onSpanChanged", "OnSpan\nChange", "onSpanChanged", "On staggered span layout changed"),
+    )
+    IdeWidgetType.HORIZONTAL_LIST_VIEW -> listOf(
+        IdeViewEventOption("onHorizItemClick", "OnCard\nClick", "onHorizItemClick", "On HorizontalList item clicked"),
+        IdeViewEventOption("onHorizScrollEnd", "OnReach\nEnd", "onHorizScrollEnd", "On HorizontalList scrolled to end"),
+    )
+    IdeWidgetType.CAROUSEL_VIEW -> listOf(
+        IdeViewEventOption("onCarouselSnap", "OnCard\nSnap", "onCarouselSnap", "On CarouselView card snapped to center"),
+        IdeViewEventOption("onCarouselClick", "OnCard\nClick", "onCarouselClick", "On CarouselView active card clicked"),
+    )
+    IdeWidgetType.SWIPE_LIST_VIEW -> listOf(
+        IdeViewEventOption("onSwipeRefresh", "OnPull\nRefresh", "onSwipeRefresh", "On SwipeListView pull-to-refresh"),
+        IdeViewEventOption("onItemDismissed", "OnSwipe\nDismiss", "onItemDismissed", "On row swiped left/right"),
+        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On SwipeListView item clicked"),
+    )
+
+    // 8. Date & Time Widgets — Distinct events per Date/Time widget
+    IdeWidgetType.ANALOG_CLOCK -> listOf(
+        IdeViewEventOption("onTimeTick", "OnMinute\nTick", "onTimeTick", "On AnalogClock minute hand tick"),
+        IdeViewEventOption("onHourChime", "OnHour\nChime", "onHourChime", "On AnalogClock full hour reached"),
+        IdeViewEventOption("onClick", "OnClick", "onClick", "On AnalogClock clicked"),
+    )
+    IdeWidgetType.DIGITAL_CLOCK -> listOf(
+        IdeViewEventOption("onSecondTick", "OnSecond\nTick", "onSecondTick", "On DigitalClock second updated"),
+        IdeViewEventOption("onFormatChange", "OnFormat\nChange", "onFormatChange", "On 12h/24h format switched"),
+    )
+    IdeWidgetType.TIME_PICKER -> listOf(
+        IdeViewEventOption("onTimeChanged", "OnTime\nChanged", "onTimeChanged", "On TimePicker time changed (hourOfDay, minute)"),
+        IdeViewEventOption("onAmPmChanged", "OnAmPm\nChanged", "onAmPmChanged", "On AM/PM period toggled"),
+    )
+    IdeWidgetType.DATE_PICKER -> listOf(
+        IdeViewEventOption("onDateChanged", "OnDate\nChanged", "onDateChanged", "On DatePicker date changed (year, month, day)"),
+        IdeViewEventOption("onYearSelected", "OnYear\nSelected", "onYearSelected", "On DatePicker year selected"),
+    )
+    IdeWidgetType.CALENDAR_VIEW -> listOf(
+        IdeViewEventOption("onSelectedDayChange", "OnDay\nSelected", "onSelectedDayChange", "On CalendarView day selected (year, month, dayOfMonth)"),
+        IdeViewEventOption("onMonthChanged", "OnMonth\nChanged", "onMonthChanged", "On CalendarView month swiped"),
+    )
+    IdeWidgetType.TEXT_CLOCK -> listOf(
+        IdeViewEventOption("onTimeTick", "OnClock\nTick", "onTimeTick", "On TextClock formatted time updated"),
+        IdeViewEventOption("onTimeZoneChanged", "OnZone\nChange", "onTimeZoneChanged", "On TextClock timeZone changed"),
+    )
+    IdeWidgetType.CHRONOMETER -> listOf(
+        IdeViewEventOption("onChronometerTick", "OnTimer\nTick", "onChronometerTick", "On Chronometer tick every second"),
+        IdeViewEventOption("onChronometerStart", "OnStart", "onChronometerStart", "On Chronometer started"),
+        IdeViewEventOption("onChronometerStop", "OnStop", "onChronometerStop", "On Chronometer stopped"),
+    )
+    IdeWidgetType.COUNTDOWN_VIEW -> listOf(
+        IdeViewEventOption("onCountDownTick", "OnCount\nTick", "onCountDownTick", "On CountDown millisUntilFinished tick"),
+        IdeViewEventOption("onCountDownFinish", "OnCount\nFinish", "onCountDownFinish", "When CountDown reaches 00:00"),
+    )
+    IdeWidgetType.STOPWATCH_VIEW -> listOf(
+        IdeViewEventOption("onLapRecorded", "OnLap\nRecord", "onLapRecorded", "On Stopwatch lap time recorded"),
+        IdeViewEventOption("onStopwatchReset", "OnReset", "onStopwatchReset", "On Stopwatch reset to 00:00"),
+    )
+    IdeWidgetType.DATE_RANGE_PICKER -> listOf(
+        IdeViewEventOption("onRangeSelected", "OnRange\nSelected", "onRangeSelected", "On start & end date range selected"),
+        IdeViewEventOption("onRangeCleared", "OnRange\nCleared", "onRangeCleared", "On date range selection cleared"),
+    )
+    IdeWidgetType.WORLD_CLOCK_VIEW -> listOf(
+        IdeViewEventOption("onCityChanged", "OnCity\nChange", "onCityChanged", "On WorldClock city/timezone changed"),
+        IdeViewEventOption("onDayNightSwitch", "OnDay\nNight", "onDayNightSwitch", "On WorldClock day/night transition"),
+    )
+}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -6518,9 +6895,6 @@ private fun IdeLogicEventWorkspace(
     var renameDialogItem by remember { mutableStateOf<IdeLogicItem?>(null) }
     var renameDialogText by remember { mutableStateOf("") }
 
-    var editingCodeItem by remember { mutableStateOf<IdeLogicItem?>(null) }
-    var showImportOrFullCodeSheet by remember { mutableStateOf(false) }
-
     val allViewWidgets = remember(widgetNodes) { flattenAllNodes(widgetNodes) }
     val filteredItems = remember(logicItems, activeSection) {
         logicItems.filter { it.section == activeSection }
@@ -6534,7 +6908,8 @@ private fun IdeLogicEventWorkspace(
         Row(
             modifier = Modifier.fillMaxSize(),
         ) {
-            // 1. Left Vertical Category Rail (matches screenshot: Activity | View | Component | Drawer | Functions)
+            // 1. Left Vertical Category Rail (Activity | View | Component | Drawer | Functions)
+            // Clicking any section ONLY switches activeSection — never opens a bottom sheet!
             Column(
                 modifier = Modifier
                     .width(90.dp)
@@ -6553,19 +6928,6 @@ private fun IdeLogicEventWorkspace(
                             .clip(RoundedCornerShape(14.dp))
                             .clickable {
                                 activeSection = section
-                                when (section) {
-                                    IdeLogicSection.VIEW -> {
-                                        preselectedViewNodeForSheet = null
-                                        showAddViewSheet = true
-                                    }
-                                    IdeLogicSection.FUNCTIONS -> {
-                                        if (logicItems.none { it.section == IdeLogicSection.FUNCTIONS }) {
-                                            editingFunctionItem = null
-                                            showFunctionSheet = true
-                                        }
-                                    }
-                                    else -> {}
-                                }
                             }
                             .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -6621,7 +6983,7 @@ private fun IdeLogicEventWorkspace(
                     .background(Color(0x1FFFFFFF)),
             )
 
-            // 2. Right Content Area (matches screenshot: Import Code pill + Event/Function cards)
+            // 2. Right Content Area (Import Code button in Activity + Event/Function cards — no popup sheets on click!)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -6630,170 +6992,39 @@ private fun IdeLogicEventWorkspace(
                     .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 92.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Top Pill Button: "Import Code" (in Activity) or Section Action Pill
-                val topPillText = when (activeSection) {
-                    IdeLogicSection.ACTIVITY -> "Import Code"
-                    IdeLogicSection.VIEW -> "Select View Events (On Click / On Click Long / On Touch)"
-                    IdeLogicSection.FUNCTIONS -> "Add Function • إضافة دالة جديدة"
-                    IdeLogicSection.COMPONENT -> "Add Component Event"
-                    IdeLogicSection.DRAWER -> "Add Drawer Event"
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Color(0xFF151F44))
-                        .border(
-                            width = 1.dp,
-                            color = Color(0x38FFFFFF),
-                            shape = RoundedCornerShape(percent = 50),
-                        )
-                        .clickable {
-                            when (activeSection) {
-                                IdeLogicSection.ACTIVITY -> showImportOrFullCodeSheet = true
-                                IdeLogicSection.VIEW -> {
-                                    preselectedViewNodeForSheet = null
-                                    showAddViewSheet = true
-                                }
-                                IdeLogicSection.FUNCTIONS -> {
-                                    editingFunctionItem = null
-                                    showFunctionSheet = true
-                                }
-                                IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
-                                    showAddComponentOrDrawerSheet = true
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = topPillText,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Ink,
-                    )
-                }
-
-                // If in View section, also show quick chips for every widget in View so tapping any widget opens its 3 events sheet
-                if (activeSection == IdeLogicSection.VIEW && allViewWidgets.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF101836))
-                            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "عناصر View الحالية (اضغط على أي عنصر لإضافة On Click / On Click Long / On Touch):",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            ),
-                            color = Cyan,
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            allViewWidgets.forEach { wNode ->
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(Color(0xFF1B2854))
-                                        .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(50))
-                                        .clickable {
-                                            preselectedViewNodeForSheet = wNode
-                                            showAddViewSheet = true
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    SketchWidgetIcon(type = wNode.type, tint = Cyan)
-                                    Text(
-                                        text = wNode.viewId,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontFamily = JetBrainsMono,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                        ),
-                                        color = Ink,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Event / Function Cards List (exact card style from screenshot!)
-                if (filteredItems.isEmpty()) {
+                if (activeSection == IdeLogicSection.ACTIVITY) {
+                    // Standalone "Import Code" button in Activity (kept as a clean button without opening an explanatory bottom sheet)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Color(0xFF121B3C))
-                            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(18.dp))
-                            .clickable {
-                                when (activeSection) {
-                                    IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
-                                    IdeLogicSection.VIEW -> {
-                                        preselectedViewNodeForSheet = null
-                                        showAddViewSheet = true
-                                    }
-                                    IdeLogicSection.FUNCTIONS -> {
-                                        editingFunctionItem = null
-                                        showFunctionSheet = true
-                                    }
-                                    IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
-                                        showAddComponentOrDrawerSheet = true
-                                    }
-                                }
-                            }
-                            .padding(horizontal = 18.dp, vertical = 28.dp),
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(Color(0xFF151F44))
+                            .border(
+                                width = 1.dp,
+                                color = Color(0x38FFFFFF),
+                                shape = RoundedCornerShape(percent = 50),
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = null,
-                                tint = Cyan,
-                                modifier = Modifier.size(28.dp),
-                            )
-                            Text(
-                                text = when (activeSection) {
-                                    IdeLogicSection.ACTIVITY -> "لا توجد أحداث Activity مضافة — اضغط على (+) لإضافة حدث"
-                                    IdeLogicSection.VIEW -> "اضغط هنا أو على زر (+) لاختيار عنصر وإضافة onClick / onLongClick / onTouch"
-                                    IdeLogicSection.FUNCTIONS -> "لا توجد دوال في Functions بعد — اضغط لإضافة دالة جديدة للمشروع"
-                                    IdeLogicSection.COMPONENT -> "اضغط على زر (+) لإضافة حدث Component"
-                                    IdeLogicSection.DRAWER -> "اضغط على زر (+) لإضافة حدث Drawer"
-                                },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                                color = Ink,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                } else {
-                    filteredItems.forEach { item ->
-                        IdeLogicEventCard(
-                            item = item,
-                            onClick = { editingCodeItem = item },
-                            onLongClick = { longPressedItem = item },
+                        Text(
+                            text = "Import Code",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
                         )
                     }
+                }
+
+                // Event / Function Cards List (clicking an item does NOT open any bottom sheet!)
+                filteredItems.forEach { item ->
+                    IdeLogicEventCard(
+                        item = item,
+                        onClick = {},
+                        onLongClick = { longPressedItem = item },
+                    )
                 }
             }
         }
@@ -6885,7 +7116,7 @@ private fun IdeLogicEventWorkspace(
     }
 
     // ========================================================================
-    // Bottom Sheet 2: View Events Bottom Sheet (On Click, On Click Long, On Touch for every widget in View)
+    // Bottom Sheet 2: View Events Bottom Sheet (Widget-specific Events with Red/Green dots)
     // ========================================================================
     if (showAddViewSheet) {
         AddViewEventBottomSheet(
@@ -6893,27 +7124,21 @@ private fun IdeLogicEventWorkspace(
             preselectedWidget = preselectedViewNodeForSheet,
             existingViewItems = logicItems.filter { it.section == IdeLogicSection.VIEW },
             onToggleOrOpenViewEvent = { widgetNode, eventOpt ->
+                val eventName = "${widgetNode.viewId}: ${eventOpt.eventKey}"
                 val existing = logicItems.firstOrNull {
                     it.section == IdeLogicSection.VIEW &&
                         it.targetViewId == widgetNode.viewId &&
-                        it.name == "${widgetNode.viewId}: ${eventOpt.eventKey}"
+                        it.name == eventName
                 }
                 if (existing != null) {
-                    showAddViewSheet = false
-                    editingCodeItem = existing
+                    onUpdateLogicItems(logicItems.filterNot { it.id == existing.id })
                 } else {
-                    val defaultBody = when (eventOpt.eventKey) {
-                        "onClick" -> "// ${widgetNode.viewId} onClick\n"
-                        "onLongClick" -> "// ${widgetNode.viewId} onLongClick (On Click Long)\ntrue"
-                        "onTouch" -> "// ${widgetNode.viewId} onTouch (On Touch)\nfalse"
-                        else -> ""
-                    }
                     val newItem = IdeLogicItem(
                         section = IdeLogicSection.VIEW,
-                        name = "${widgetNode.viewId}: ${eventOpt.eventKey}",
+                        name = eventName,
                         subtitle = "${widgetNode.type.displayName} (@+id/${widgetNode.viewId}) • ${eventOpt.subtitle}",
                         targetViewId = widgetNode.viewId,
-                        bodyCode = defaultBody,
+                        bodyCode = "// ${widgetNode.viewId} ${eventOpt.eventKey}\n",
                     )
                     onUpdateLogicItems(logicItems + newItem)
                 }
@@ -7122,85 +7347,6 @@ private fun IdeLogicEventWorkspace(
                 }
             },
         )
-    }
-
-    // ========================================================================
-    // Bottom Sheet 6: Tapping a Card in Logic -> Edit Event/Function Body Code
-    // ========================================================================
-    val currentEditingCodeItem = editingCodeItem
-    if (currentEditingCodeItem != null) {
-        IdeLogicItemEditorBottomSheet(
-            item = currentEditingCodeItem,
-            onSaveBodyCode = { updatedBody ->
-                onUpdateLogicItems(
-                    logicItems.map {
-                        if (it.id == currentEditingCodeItem.id) it.copy(bodyCode = updatedBody) else it
-                    },
-                )
-                editingCodeItem = null
-            },
-            onResetBodyCode = {
-                onUpdateLogicItems(
-                    logicItems.map {
-                        if (it.id == currentEditingCodeItem.id) it.copy(bodyCode = "") else it
-                    },
-                )
-                editingCodeItem = editingCodeItem?.copy(bodyCode = "")
-            },
-            onDismiss = { editingCodeItem = null },
-        )
-    }
-
-    // ========================================================================
-    // Bottom Sheet 7: Import Code / Full Activity Source Editor
-    // ========================================================================
-    if (showImportOrFullCodeSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = { showImportOrFullCodeSheet = false },
-            sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
-            contentColor = Ink,
-            scrimColor = Color(0xD903060F),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(520.dp)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = "Import Code & Full Activity Source",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = JetBrainsMono,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Ink,
-                    )
-                    TextButton(onClick = { showImportOrFullCodeSheet = false }) {
-                        Text(stringResource(R.string.dialog_save), color = Cyan)
-                    }
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    IdeLogicCodeEditor(
-                        project = project,
-                        xmlPage = xmlPage,
-                        activeFlavor = activeFlavor,
-                        onSelectFlavor = onSelectFlavor,
-                        code = code,
-                        onCodeChange = onCodeChange,
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -7579,7 +7725,7 @@ private fun AddViewEventBottomSheet(
                     color = Ink,
                 )
                 Text(
-                    text = "اختر On Click أو On Click Long أو On Touch لأي عنصر في View",
+                    text = "نقطة خضراء = الحدث مفعل • نقطة حمراء = الحدث غير مفعل",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                     color = Cyan,
                 )
@@ -7595,7 +7741,7 @@ private fun AddViewEventBottomSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "لا توجد عناصر في صفحة View حالياً — أضف عناصر في تبويب View أولاً لتظهر هنا مع أحداث On Click و On Click Long و On Touch.",
+                            text = "لا توجد عناصر في صفحة View حالياً — أضف عناصر في تبويب View أولاً لتظهر هنا مع أحداثها الخاصة.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink,
                             textAlign = TextAlign.Center,
@@ -7610,6 +7756,9 @@ private fun AddViewEventBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         widgetsToShow.forEach { wNode ->
+                            val widgetEvents = remember(wNode.type) {
+                                getEventsForWidgetType(wNode.type)
+                            }
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -7635,21 +7784,22 @@ private fun AddViewEventBottomSheet(
                                     )
                                 }
 
-                                VIEW_EVENT_OPTIONS.forEach { evOpt ->
+                                widgetEvents.forEach { evOpt ->
                                     val isAdded = existingViewItems.any {
                                         it.targetViewId == wNode.viewId &&
                                             it.name == "${wNode.viewId}: ${evOpt.eventKey}"
                                     }
+                                    val dotColor = if (isAdded) Color(0xFF22C55E) else Color(0xFFEF4444)
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(
-                                                if (isAdded) Cyan.copy(alpha = 0.16f) else Color(0xFF1B2752),
+                                                if (isAdded) Color(0xFF132A26) else Color(0xFF1B2752),
                                             )
                                             .border(
                                                 width = 1.dp,
-                                                color = if (isAdded) Cyan else Color(0x26FFFFFF),
+                                                color = if (isAdded) Color(0xFF22C55E).copy(alpha = 0.65f) else Color(0x26FFFFFF),
                                                 shape = RoundedCornerShape(12.dp),
                                             )
                                             .clickable { onToggleOrOpenViewEvent(wNode, evOpt) }
@@ -7665,7 +7815,7 @@ private fun AddViewEventBottomSheet(
                                                     fontSize = 12.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                 ),
-                                                color = if (isAdded) Cyan else Ink,
+                                                color = if (isAdded) Color(0xFF4ADE80) else Ink,
                                             )
                                             Text(
                                                 text = evOpt.subtitle,
@@ -7673,12 +7823,20 @@ private fun AddViewEventBottomSheet(
                                                 color = Muted,
                                             )
                                         }
-                                        Icon(
-                                            imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
-                                            contentDescription = null,
-                                            tint = if (isAdded) Cyan else Ink,
-                                            modifier = Modifier.size(18.dp),
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(dotColor.copy(alpha = 0.25f)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(9.dp)
+                                                    .clip(CircleShape)
+                                                    .background(dotColor),
+                                            )
+                                        }
                                     }
                                 }
                             }
