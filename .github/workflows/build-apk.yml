@@ -129,6 +129,12 @@ jobs:
 
           if [ -z "$DEBUG_SHA" ] || [ -z "$RELEASE_SHA" ]; then
             echo "::error title=Signing::Could not read the certificate digest from one of the APKs"
+            printf '%s\n' "$DEBUG_OUT" | head -12 | while IFS= read -r line; do
+              echo "::error title=apksigner debug::${line:0:400}"
+            done
+            printf '%s\n' "$RELEASE_OUT" | head -12 | while IFS= read -r line; do
+              echo "::error title=apksigner release::${line:0:400}"
+            done
             exit 1
           fi
           if [ "$DEBUG_SHA" != "$RELEASE_SHA" ]; then
