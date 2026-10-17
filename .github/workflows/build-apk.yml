@@ -100,6 +100,26 @@ jobs:
           sha256sum *.apk | tee checksums.txt
           ls -lh
 
+      - name: Verify packaged version
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          AAPT2="$(find "$SDK/build-tools" -maxdepth 2 -type f -name aapt2 | sort -V | tail -1)"
+          EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
+          echo "Gradle: versionName=$EXPECTED_NAME versionCode=$EXPECTED_CODE"
+
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            BADGING="$("$AAPT2" dump badging "$apk" 2>/dev/null | head -1)"
+            NAME=$(printf '%s' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+            CODE=$(printf '%s' "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+            echo "== $apk -> versionName=$NAME versionCode=$CODE"
+            echo "::notice title=APK $(basename "$apk")::versionName=$NAME versionCode=$CODE"
+            if [ "$NAME" != "$EXPECTED_NAME" ] || [ "$CODE" != "$EXPECTED_CODE" ]; then
+              echo "::error title=Version mismatch::$apk reports $NAME/$CODE, expected $EXPECTED_NAME/$EXPECTED_CODE"
+              exit 1
+            fi
+          done
+
       - name: Verify APK signatures
         run: |
           SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -202,6 +222,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt \
-            --title "IDE Ultimate $GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt \
+              --title "IDE Ultimate $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
