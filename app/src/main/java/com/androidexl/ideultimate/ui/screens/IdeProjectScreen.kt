@@ -52,10 +52,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -122,6 +124,7 @@ import com.androidexl.ideultimate.data.CodeEditorFlavor
 import com.androidexl.ideultimate.data.IdeFunctionParam
 import com.androidexl.ideultimate.data.IdeLogicItem
 import com.androidexl.ideultimate.data.IdeLogicSection
+import com.androidexl.ideultimate.data.IdeWidgetCategory
 import com.androidexl.ideultimate.data.IdeWidgetNode
 import com.androidexl.ideultimate.data.IdeWidgetType
 import com.androidexl.ideultimate.data.ProjectImageItem
