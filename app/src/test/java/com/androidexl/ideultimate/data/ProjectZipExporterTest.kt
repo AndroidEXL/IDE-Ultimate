@@ -38,6 +38,14 @@ class ProjectZipExporterTest {
     }
 
     @Test
+    fun packageAndDirectoryAreDerivedFromTheName() {
+        assertEquals("com.ideultimate.projects.notesapp", ProjectZipExporter.packageName("Notes App"))
+        assertEquals("Notes-App", ProjectZipExporter.directoryName("Notes App"))
+        assertEquals("com.ideultimate.projects.app", ProjectZipExporter.packageName("***"))
+        assertEquals("com.ideultimate.projects.app2cool", ProjectZipExporter.packageName("2cool"))
+    }
+
+    @Test
     fun exportFileNameIsSafe() {
         assertEquals("Notes-App.zip", ProjectZipExporter.suggestedFileName("Notes App"))
         assertEquals("project.zip", ProjectZipExporter.suggestedFileName("***"))

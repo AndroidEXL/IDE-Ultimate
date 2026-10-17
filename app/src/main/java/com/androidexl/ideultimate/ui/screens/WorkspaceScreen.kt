@@ -135,6 +135,7 @@ fun WorkspaceScreen(
     val currentFolder = currentParentId?.let { repository.itemById(it) }
     val children = repository.childrenOf(currentParentId)
 
+    var openProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var sheet by remember { mutableStateOf<WorkspaceSheet?>(null) }
     var dialog by remember { mutableStateOf<NameDialog?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceItem?>(null) }
@@ -215,77 +216,94 @@ fun WorkspaceScreen(
             comet = false,
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .safeDrawingPadding(),
-        ) {
-            WorkspaceTopBar(
-                title = currentFolder?.name ?: stringResource(R.string.workspace_title),
-                subtitle = if (currentFolder == null) {
-                    stringResource(R.string.workspace_subtitle)
-                } else {
-                    stringResource(R.string.workspace_count, repository.childCount(currentFolder.id))
+        val openProject = openProjectId?.let { id -> repository.itemById(id) }
+        if (openProject != null) {
+            ProjectDetailScreen(
+                project = openProject,
+                onBack = { openProjectId = null },
+                onExport = {
+                    pendingExport = openProject
+                    exportLauncher.launch(ProjectZipExporter.suggestedFileName(openProject.name))
                 },
-                onBack = { navigateUp() },
+                onRename = { dialog = NameDialog.Rename(openProject) },
+                onDelete = { deleteTarget = openProject },
+                onNewProject = {
+                    dialog = NameDialog.Create(openProject.parentId, WorkspaceItemType.PROJECT)
+                },
             )
-
-            if (pathIds.isNotEmpty()) {
-                Breadcrumbs(
-                    pathIds = pathIds,
-                    nameOf = { id -> repository.itemById(id)?.name },
-                    onRoot = { pathCsv = "" },
-                    onCrumb = { index -> pathCsv = pathIds.take(index + 1).joinToString("|") },
-                )
-            }
-
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding(),
             ) {
-                if (children.isEmpty()) {
-                    EmptyWorkspace(Modifier.fillMaxSize())
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 148.dp),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = 20.dp,
-                            end = 20.dp,
-                            top = 10.dp,
-                            bottom = 130.dp,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        items(children, key = { it.id }) { item ->
-                            when (item.type) {
-                                WorkspaceItemType.FOLDER -> FolderTile(
-                                    item = item,
-                                    childCount = repository.childCount(item.id),
-                                    onClick = { openFolder(item) },
-                                    onLongClick = { sheet = WorkspaceSheet.FolderActions(item) },
-                                )
-                                WorkspaceItemType.PROJECT -> ProjectTile(
-                                    item = item,
-                                    onClick = { sheet = WorkspaceSheet.ProjectActions(item) },
-                                    onLongClick = { sheet = WorkspaceSheet.ProjectActions(item) },
-                                )
+                WorkspaceTopBar(
+                    title = currentFolder?.name ?: stringResource(R.string.workspace_title),
+                    subtitle = if (currentFolder == null) {
+                        stringResource(R.string.workspace_subtitle)
+                    } else {
+                        stringResource(R.string.workspace_count, repository.childCount(currentFolder.id))
+                    },
+                    onBack = { navigateUp() },
+                )
+
+                if (pathIds.isNotEmpty()) {
+                    Breadcrumbs(
+                        pathIds = pathIds,
+                        nameOf = { id -> repository.itemById(id)?.name },
+                        onRoot = { pathCsv = "" },
+                        onCrumb = { index -> pathCsv = pathIds.take(index + 1).joinToString("|") },
+                    )
+                }
+
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                ) {
+                    if (children.isEmpty()) {
+                        EmptyWorkspace(Modifier.fillMaxSize())
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 148.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 20.dp,
+                                end = 20.dp,
+                                top = 10.dp,
+                                bottom = 130.dp,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            items(children, key = { it.id }) { item ->
+                                when (item.type) {
+                                    WorkspaceItemType.FOLDER -> FolderTile(
+                                        item = item,
+                                        childCount = repository.childCount(item.id),
+                                        onClick = { openFolder(item) },
+                                        onLongClick = { sheet = WorkspaceSheet.FolderActions(item) },
+                                    )
+                                    WorkspaceItemType.PROJECT -> ProjectTile(
+                                        item = item,
+                                        onClick = { openProjectId = item.id },
+                                        onLongClick = { sheet = WorkspaceSheet.ProjectActions(item) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        WorkspaceFab(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 14.dp, bottom = 16.dp),
-            onClick = { sheet = WorkspaceSheet.Create },
-        )
+            WorkspaceFab(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 14.dp, bottom = 16.dp),
+                onClick = { sheet = WorkspaceSheet.Create },
+            )
+        }
 
         SnackbarOverlay(
             visible = message != null,
@@ -472,6 +490,7 @@ fun WorkspaceScreen(
                 TextButton(
                     onClick = {
                         repository.delete(currentDelete.id)
+                        if (openProjectId == currentDelete.id) openProjectId = null
                         deleteTarget = null
                         showMessage(context.getString(R.string.msg_deleted))
                     },

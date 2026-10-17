@@ -11,12 +11,20 @@ import java.util.zip.ZipOutputStream
  */
 object ProjectZipExporter {
 
-    fun suggestedFileName(projectName: String): String = "${safeDirectoryName(projectName)}.zip"
+    fun suggestedFileName(projectName: String): String = "${directoryName(projectName)}.zip"
+
+    /** Folder name used at the root of the exported ZIP. */
+    fun directoryName(projectName: String): String =
+        safeDirectoryName(projectName.trim().ifBlank { "Project" })
+
+    /** Application id / package of the generated project. */
+    fun packageName(projectName: String): String =
+        "com.ideultimate.projects.${packageSlug(projectName.trim().ifBlank { "Project" })}"
 
     fun buildZip(projectName: String): ByteArray {
         val displayName = projectName.trim().ifBlank { "Project" }
-        val directory = safeDirectoryName(displayName)
-        val packageName = "com.ideultimate.projects.${packageSlug(displayName)}"
+        val directory = directoryName(displayName)
+        val appPackage = packageName(displayName)
 
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
@@ -24,11 +32,11 @@ object ProjectZipExporter {
             zip.add("$directory/build.gradle.kts", rootBuildGradle)
             zip.add("$directory/gradle.properties", gradleProperties)
             zip.add("$directory/.gitignore", gitignore)
-            zip.add("$directory/app/build.gradle.kts", appBuildGradle(packageName))
+            zip.add("$directory/app/build.gradle.kts", appBuildGradle(appPackage))
             zip.add("$directory/app/src/main/AndroidManifest.xml", manifest())
             zip.add(
-                "$directory/app/src/main/java/${packageName.replace('.', '/')}/MainActivity.kt",
-                mainActivity(packageName, displayName),
+                "$directory/app/src/main/java/${appPackage.replace('.', '/')}/MainActivity.kt",
+                mainActivity(appPackage, displayName),
             )
             zip.add("$directory/app/src/main/res/values/strings.xml", stringsXml(displayName))
             zip.add("$directory/app/src/main/res/values/themes.xml", themesXml)
