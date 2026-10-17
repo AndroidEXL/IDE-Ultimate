@@ -116,9 +116,7 @@ import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
-import com.androidexl.ideultimate.ui.theme.NavySurface
 import com.androidexl.ideultimate.ui.theme.Teal
-import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 import kotlin.math.roundToInt
 
