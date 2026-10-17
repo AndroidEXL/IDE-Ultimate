@@ -10,7 +10,7 @@
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
     <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
-    <string name="splash_version">v1.8.0</string>
+    <string name="splash_version">v1.9.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.8.0</string>
+    <string name="home_version">Version 1.9.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -123,15 +123,37 @@
     <string name="create_project_submit_btn">Create Project Now</string>
     <string name="create_project_save_btn">Save Project Changes</string>
 
+    <!-- Authentication Bottom Sheet (Sign In / Sign Up) -->
+    <string name="auth_title_login">Sign In</string>
+    <string name="auth_title_register">Create New Account</string>
+    <string name="auth_subtitle">Sign in or create a new account to publish projects, code, and libraries</string>
+    <string name="auth_tab_login">Sign In</string>
+    <string name="auth_tab_register">New Sign Up</string>
+    <string name="auth_pick_avatar_hint">Pick account icon from device</string>
+    <string name="auth_field_name">Name</string>
+    <string name="auth_field_email">Email</string>
+    <string name="auth_field_password">Password</string>
+    <string name="auth_field_confirm_password">Confirm Password</string>
+    <string name="auth_btn_login">Sign In</string>
+    <string name="auth_btn_register">Create Account &amp; Sign In</string>
+    <string name="auth_btn_logout">Log Out</string>
+    <string name="auth_error_email_invalid">Please enter a valid email address.</string>
+    <string name="auth_error_password_short">Password must be at least 6 characters.</string>
+    <string name="auth_error_password_mismatch">Passwords do not match.</string>
+    <string name="auth_error_email_taken">This email is already registered. Please sign in.</string>
+    <string name="auth_error_invalid_credentials">Invalid email or password.</string>
+    <string name="auth_msg_logged_in">Welcome %1$s</string>
+    <string name="auth_msg_logged_out">Logged out</string>
+
     <!-- Store Code Screen (3 Sections) -->
     <string name="store_code_title">Store Code</string>
     <string name="store_code_subtitle">New Projects · Code Snippets · Custom Libraries</string>
     <string name="section_new_projects">New Projects</string>
     <string name="section_new_projects_desc">Latest store projects (tap to view &amp; download)</string>
     <string name="section_code_snippets">Code Snippets</string>
-    <string name="section_code_snippets_desc">Ready-to-use snippets to copy or import as project</string>
+    <string name="section_code_snippets_desc">Ready-to-use snippets to view, copy, or import</string>
     <string name="section_custom_libraries">Custom Libraries</string>
-    <string name="section_custom_libraries_desc">Private &amp; custom packages for your projects</string>
+    <string name="section_custom_libraries_desc">Custom libraries &amp; packages to view and copy</string>
     <string name="store_use_as_project">Use as Project</string>
     <string name="store_copy_code">Copy Code</string>
     <string name="store_copied_msg">Copied %1$s</string>
@@ -142,29 +164,45 @@
     <string name="profile_stat_likes">Likes</string>
     <string name="profile_stat_dislikes">Dislikes</string>
     <string name="profile_stat_subscribers">Subscribers</string>
-    <string name="profile_empty_projects">No projects added yet. Tap + to create a new project.</string>
-    <string name="profile_empty_collection">No projects saved in Collection yet.</string>
+    <string name="profile_empty_projects">No items added yet. Tap + to create a project, code snippet, or library.</string>
+    <string name="profile_empty_collection">No items saved in Collection yet.</string>
     <string name="profile_action_edit_data">Edit Data</string>
-    <string name="profile_action_edit_data_desc">Update project name, icon, details, links, and screenshots.</string>
+    <string name="profile_action_edit_data_desc">Update name, icon, type, details, code, or links and screenshots.</string>
 
-    <!-- Store Project Form (Create / Edit) -->
-    <string name="store_form_create_title">Create New Project</string>
-    <string name="store_form_edit_title">Edit Project Data</string>
-    <string name="store_form_subtitle">Icon · Program Name · Details · Links · Screenshots</string>
+    <!-- Store Item Form (Create / Edit: Project / Code Snippet / Library) -->
+    <string name="store_form_create_title">Create New Item</string>
+    <string name="store_form_edit_title">Edit Data</string>
+    <string name="store_form_subtitle">Choose type (Project · Code · Library) and fill in details</string>
+    <string name="store_form_type_label">Item Type</string>
+    <string name="store_form_type_hint">For Code Snippets or Libraries, the code editor appears directly below Details without links or images</string>
+    <string name="store_type_project">Project</string>
+    <string name="store_type_code">Code</string>
+    <string name="store_type_library">Library</string>
     <string name="store_form_pick_icon">Icon from Device</string>
     <string name="store_form_program_name">Program Name</string>
-    <string name="store_form_program_name_hint">Type the program name…</string>
+    <string name="store_form_code_name">Code Snippet Name</string>
+    <string name="store_form_library_name">Library Name</string>
+    <string name="store_form_program_name_hint">Type the name here…</string>
     <string name="store_form_details_label">Project Details</string>
-    <string name="store_form_details_hint">Write full details and features of the project…</string>
+    <string name="store_form_code_details_label">Code Snippet Details</string>
+    <string name="store_form_library_details_label">Library Details</string>
+    <string name="store_form_details_hint">Write full details and description…</string>
+    <string name="store_form_code_box_label">Source Code</string>
+    <string name="store_form_code_box_hint">Write your code directly below the details</string>
+    <string name="store_form_library_box_label">Library Code / Dependency</string>
+    <string name="store_form_library_box_hint">Write the library dependency or code directly below the details</string>
     <string name="store_form_links_section">Download Links</string>
     <string name="store_form_add_link_btn">Add Download Link</string>
     <string name="store_form_images_section">Project Screenshots</string>
     <string name="store_form_add_images_btn">Add Project Images</string>
     <string name="store_form_add_image_url_btn">Image Link</string>
-    <string name="store_form_save_btn">Save Project</string>
-    <string name="store_form_error_details">Please enter the project details first.</string>
+    <string name="store_form_save_btn">Save</string>
+    <string name="store_form_error_details">Please enter the details first.</string>
+    <string name="store_form_error_code">Please enter the code first.</string>
 
-    <!-- Store Project View Screen (Read-only) -->
+    <!-- Store View Screens (Project View, Code Snippet View, Library View) -->
+    <string name="code_view_screen_title">Code Snippet View</string>
+    <string name="library_view_screen_title">Library View</string>
     <string name="store_save_later">Save for Later</string>
     <string name="store_saved_in_collection">Saved in Collection</string>
     <string name="store_btn_like">Like</string>
@@ -182,15 +220,15 @@
     <string name="msg_removed_from_collection">Removed from Collection</string>
 
     <string name="delete_folder_title">Delete folder &quot;%1$s&quot;?</string>
-    <string name="delete_project_title">Delete project &quot;%1$s&quot;?</string>
+    <string name="delete_project_title">Delete item &quot;%1$s&quot;?</string>
     <string name="delete_folder_message">The folder and everything inside it will be removed permanently. This cannot be undone.</string>
-    <string name="delete_project_message">The project will be removed permanently. This cannot be undone.</string>
+    <string name="delete_project_message">The item will be removed permanently. This cannot be undone.</string>
     <string name="delete_folder_count">The folder contains %1$d item(s) that will be removed too.</string>
     <string name="delete_confirm">Delete permanently</string>
 
     <string name="msg_folder_created">Folder created</string>
-    <string name="msg_project_created">Project created successfully</string>
-    <string name="msg_project_updated">Project changes saved</string>
+    <string name="msg_project_created">Saved successfully</string>
+    <string name="msg_project_updated">Changes saved</string>
     <string name="msg_renamed">Name updated</string>
     <string name="msg_deleted">Item deleted</string>
     <string name="export_success">&quot;%1$s&quot; exported successfully</string>

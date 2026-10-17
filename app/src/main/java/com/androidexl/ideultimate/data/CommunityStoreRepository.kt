@@ -13,74 +13,75 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.util.UUID
+
+enum class StoreItemType {
+    PROJECT,
+    CODE_SNIPPET,
+    LIBRARY,
+}
 
 data class StoreProjectItem(
     val id: String = UUID.randomUUID().toString(),
+    val type: StoreItemType = StoreItemType.PROJECT,
     val name: String,
     val details: String,
+    val codeContent: String = "",
     val iconPreset: Int = 0,
     val customIconPath: String? = null,
     val language: ProjectLanguage = ProjectLanguage.KOTLIN,
     val downloadLinks: List<String> = emptyList(),
     val imagePaths: List<String> = emptyList(),
-    val likesCount: Int = 24,
-    val dislikesCount: Int = 1,
+    val likesCount: Int = 0,
+    val dislikesCount: Int = 0,
     val userReaction: Int = 0, // 1 = liked, -1 = disliked, 0 = none
     val savedInCollection: Boolean = false,
-    val createdByCurrentUser: Boolean = true,
-    val authorName: String = "AndroidEXL",
+    val createdByUserId: String = "",
+    val createdByCurrentUser: Boolean = false,
+    val authorName: String = "",
     val createdAt: Long = System.currentTimeMillis(),
 )
 
-data class CodeSnippetItem(
-    val id: String,
-    val title: String,
-    val description: String,
-    val language: ProjectLanguage,
-    val iconPreset: Int,
-    val code: String,
-)
-
-data class CustomLibraryItem(
-    val id: String,
+data class UserAccountRecord(
+    val userId: String,
     val name: String,
-    val summary: String,
-    val language: ProjectLanguage,
-    val version: String,
-    val dependencyLine: String,
-    val docsUrl: String,
+    val email: String,
+    val passwordHash: String,
+    val avatarPath: String? = null,
+    val subscribersCount: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
 )
 
 /**
- * Persistent & Firebase-synced repository (`https://sketchware-f2a24-default-rtdb.firebaseio.com`) for:
- * 1. New Store Projects (قسم المشاريع الجديدة)
- * 2. Code Snippets (قسم الأكواد البرمجية)
- * 3. Custom Libraries (قسم المكتبات الخاصة)
- * 4. User Profile (Projects tab, Collection tab, Likes/Dislikes/Subscribers stats)
+ * Real-time Firebase-backed repository (`https://sketchware-f2a24-default-rtdb.firebaseio.com`)
+ * with:
+ * - Zero fake user & zero demo/sample items
+ * - Full user authentication (Sign In & Sign Up with Name, Icon, Email, Password, Confirm Password)
+ * - 3 item types: PROJECT (قسم المشاريع الجديدة), CODE_SNIPPET (قسم الأكواد البرمجية), LIBRARY (قسم المكتبات الخاصة)
  */
 class CommunityStoreRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val prefs = appContext
-        .getSharedPreferences("ide_ultimate_community_v1", Context.MODE_PRIVATE)
+        .getSharedPreferences("ide_ultimate_community_v2", Context.MODE_PRIVATE)
 
-    val currentUserId: String = prefs.getString(KEY_USER_ID, null) ?: run {
-        val generated = "user_" + UUID.randomUUID().toString().take(8)
-        prefs.edit().putString(KEY_USER_ID, generated).apply()
-        generated
-    }
+    var currentUserId by mutableStateOf(prefs.getString(KEY_USER_ID, "") ?: "")
+        private set
 
-    var userName by mutableStateOf(prefs.getString(KEY_USER_NAME, "AndroidEXL") ?: "AndroidEXL")
+    var userName by mutableStateOf(prefs.getString(KEY_USER_NAME, "") ?: "")
+        private set
+
+    var userEmail by mutableStateOf(prefs.getString(KEY_USER_EMAIL, "") ?: "")
         private set
 
     var userAvatarPath by mutableStateOf(prefs.getString(KEY_USER_AVATAR, null))
         private set
 
-    var isLoggedIn by mutableStateOf(prefs.getBoolean(KEY_LOGGED_IN, true))
+    var isLoggedIn by mutableStateOf(prefs.getBoolean(KEY_LOGGED_IN, false) && currentUserId.isNotBlank())
         private set
 
-    var subscribersCount by mutableIntStateOf(prefs.getInt(KEY_SUBSCRIBERS, 1280))
+    var subscribersCount by mutableIntStateOf(prefs.getInt(KEY_SUBSCRIBERS, 0))
         private set
 
     var isFirebaseConnected by mutableStateOf(false)
@@ -89,28 +90,34 @@ class CommunityStoreRepository(context: Context) {
     val firebaseProjectId: String = FirebaseConfig.PROJECT_ID
     val firebaseDatabaseUrl: String = FirebaseConfig.FIREBASE_URL
 
-    val projects: SnapshotStateList<StoreProjectItem> = mutableStateListOf()
-    val codeSnippets: SnapshotStateList<CodeSnippetItem> = mutableStateListOf()
-    val customLibraries: SnapshotStateList<CustomLibraryItem> = mutableStateListOf()
+    /** All store items across the 3 types (PROJECT, CODE_SNIPPET, LIBRARY) — starts empty with 0 demo items. */
+    val items: SnapshotStateList<StoreProjectItem> = mutableStateListOf()
 
+    private val accounts: SnapshotStateList<UserAccountRecord> = mutableStateListOf()
     private var firebaseDb: FirebaseDatabase? = null
 
     init {
-        val raw = prefs.getString(KEY_PROJECTS, null)
-        if (raw == null) {
-            seedDefaultStoreProjects()
-        } else {
-            projects.addAll(runCatching { parseProjects(raw) }.getOrDefault(emptyList()))
+        val rawItems = prefs.getString(KEY_ITEMS, null)
+        if (rawItems != null) {
+            items.addAll(runCatching { parseItems(rawItems) }.getOrDefault(emptyList()))
         }
-        codeSnippets.addAll(defaultCodeSnippets())
-        customLibraries.addAll(defaultCustomLibraries())
-
+        val rawAccounts = prefs.getString(KEY_ACCOUNTS, null)
+        if (rawAccounts != null) {
+            accounts.addAll(runCatching { parseAccounts(rawAccounts) }.getOrDefault(emptyList()))
+        }
         initFirebaseRealtimeSync()
     }
 
     private fun initFirebaseRealtimeSync() {
         val db = FirebaseConfig.ensureInitialized(appContext) ?: return
         firebaseDb = db
+
+        // Remove any legacy demo items that existed in earlier versions
+        runCatching {
+            FirebaseConfig.LEGACY_DEMO_NODES.forEach { legacyPath ->
+                db.getReference(legacyPath).removeValue()
+            }
+        }
 
         // 1. Monitor Firebase connection state (.info/connected)
         runCatching {
@@ -126,149 +133,79 @@ class CommunityStoreRepository(context: Context) {
                 })
         }
 
-        // 2. Sync Store Projects (ide_ultimate/store_projects)
+        // 2. Sync registered accounts (ide_ultimate/accounts)
         runCatching {
-            val projectsRef = db.getReference(FirebaseConfig.NODE_STORE_PROJECTS)
-            projectsRef.keepSynced(true)
-            projectsRef.addValueEventListener(object : ValueEventListener {
+            val accountsRef = db.getReference(FirebaseConfig.NODE_ACCOUNTS)
+            accountsRef.keepSynced(true)
+            accountsRef.addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    if (!snapshot.exists() || snapshot.childrenCount == 0L) {
-                        // Push initial projects to Firebase Realtime Database
-                        projects.forEach { pushProjectToFirebase(it) }
-                        return
+                    val loaded = ArrayList<UserAccountRecord>()
+                    for (child in snapshot.children) {
+                        val userId = child.child("userId").getValue(String::class.java)
+                            ?: child.key
+                            ?: continue
+                        val name = child.child("name").getValue(String::class.java) ?: continue
+                        val email = child.child("email").getValue(String::class.java) ?: continue
+                        val passwordHash = child.child("passwordHash").getValue(String::class.java) ?: continue
+                        val avatarPath = child.child("avatarPath").getValue(String::class.java)
+                            ?.takeIf { it.isNotBlank() }
+                        val subs = child.child("subscribersCount").getValue(Int::class.java) ?: 0
+                        val createdAt = child.child("createdAt").getValue(Long::class.java)
+                            ?: System.currentTimeMillis()
+                        loaded.add(
+                            UserAccountRecord(
+                                userId = userId,
+                                name = name,
+                                email = email,
+                                passwordHash = passwordHash,
+                                avatarPath = avatarPath,
+                                subscribersCount = subs,
+                                createdAt = createdAt,
+                            ),
+                        )
                     }
-                    val localById = projects.associateBy { it.id }
+                    accounts.clear()
+                    accounts.addAll(loaded)
+                    persistAccounts()
+
+                    if (isLoggedIn) {
+                        val currentAccount = accounts.firstOrNull { it.userId == currentUserId }
+                        if (currentAccount != null) {
+                            subscribersCount = currentAccount.subscribersCount
+                        }
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) = Unit
+            })
+        }
+
+        // 3. Sync Store Items (ide_ultimate/store_items) — no demo seeding
+        runCatching {
+            val itemsRef = db.getReference(FirebaseConfig.NODE_STORE_ITEMS)
+            itemsRef.keepSynced(true)
+            itemsRef.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val localById = items.associateBy { it.id }
                     val remoteList = ArrayList<StoreProjectItem>()
                     for (child in snapshot.children) {
-                        val parsed = parseProjectSnapshot(child, localById[child.key])
+                        val parsed = parseItemSnapshot(child, localById[child.key])
                         if (parsed != null) {
                             remoteList.add(parsed)
                         }
                     }
-                    if (remoteList.isNotEmpty()) {
-                        remoteList.sortByDescending { it.createdAt }
-                        projects.clear()
-                        projects.addAll(remoteList)
-                        persistProjects()
-                    }
+                    remoteList.sortByDescending { it.createdAt }
+                    items.clear()
+                    items.addAll(remoteList)
+                    persistItems()
                 }
 
                 override fun onCancelled(error: DatabaseError) = Unit
             })
         }
-
-        // 3. Sync Code Snippets (ide_ultimate/code_snippets)
-        runCatching {
-            val snippetsRef = db.getReference(FirebaseConfig.NODE_CODE_SNIPPETS)
-            snippetsRef.keepSynced(true)
-            snippetsRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (!snapshot.exists() || snapshot.childrenCount == 0L) {
-                        codeSnippets.forEach { snippet ->
-                            snippetsRef.child(snippet.id).setValue(
-                                mapOf(
-                                    "id" to snippet.id,
-                                    "title" to snippet.title,
-                                    "description" to snippet.description,
-                                    "language" to snippet.language.name,
-                                    "iconPreset" to snippet.iconPreset,
-                                    "code" to snippet.code,
-                                ),
-                            )
-                        }
-                        return
-                    }
-                    val loaded = ArrayList<CodeSnippetItem>()
-                    for (child in snapshot.children) {
-                        val id = child.child("id").getValue(String::class.java) ?: child.key ?: continue
-                        val title = child.child("title").getValue(String::class.java) ?: continue
-                        val description = child.child("description").getValue(String::class.java) ?: ""
-                        val langStr = child.child("language").getValue(String::class.java) ?: "KOTLIN"
-                        val language = runCatching { ProjectLanguage.valueOf(langStr) }
-                            .getOrDefault(ProjectLanguage.KOTLIN)
-                        val iconPreset = child.child("iconPreset").getValue(Int::class.java) ?: 0
-                        val code = child.child("code").getValue(String::class.java) ?: ""
-                        loaded.add(
-                            CodeSnippetItem(
-                                id = id,
-                                title = title,
-                                description = description,
-                                language = language,
-                                iconPreset = iconPreset,
-                                code = code,
-                            ),
-                        )
-                    }
-                    if (loaded.isNotEmpty()) {
-                        codeSnippets.clear()
-                        codeSnippets.addAll(loaded)
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) = Unit
-            })
-        }
-
-        // 4. Sync Custom Libraries (ide_ultimate/custom_libraries)
-        runCatching {
-            val libsRef = db.getReference(FirebaseConfig.NODE_CUSTOM_LIBRARIES)
-            libsRef.keepSynced(true)
-            libsRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (!snapshot.exists() || snapshot.childrenCount == 0L) {
-                        customLibraries.forEach { lib ->
-                            libsRef.child(lib.id).setValue(
-                                mapOf(
-                                    "id" to lib.id,
-                                    "name" to lib.name,
-                                    "summary" to lib.summary,
-                                    "language" to lib.language.name,
-                                    "version" to lib.version,
-                                    "dependencyLine" to lib.dependencyLine,
-                                    "docsUrl" to lib.docsUrl,
-                                ),
-                            )
-                        }
-                        return
-                    }
-                    val loaded = ArrayList<CustomLibraryItem>()
-                    for (child in snapshot.children) {
-                        val id = child.child("id").getValue(String::class.java) ?: child.key ?: continue
-                        val name = child.child("name").getValue(String::class.java) ?: continue
-                        val summary = child.child("summary").getValue(String::class.java) ?: ""
-                        val langStr = child.child("language").getValue(String::class.java) ?: "KOTLIN"
-                        val language = runCatching { ProjectLanguage.valueOf(langStr) }
-                            .getOrDefault(ProjectLanguage.KOTLIN)
-                        val version = child.child("version").getValue(String::class.java) ?: "1.0.0"
-                        val dep = child.child("dependencyLine").getValue(String::class.java) ?: ""
-                        val docs = child.child("docsUrl").getValue(String::class.java) ?: ""
-                        loaded.add(
-                            CustomLibraryItem(
-                                id = id,
-                                name = name,
-                                summary = summary,
-                                language = language,
-                                version = version,
-                                dependencyLine = dep,
-                                docsUrl = docs,
-                            ),
-                        )
-                    }
-                    if (loaded.isNotEmpty()) {
-                        customLibraries.clear()
-                        customLibraries.addAll(loaded)
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) = Unit
-            })
-        }
-
-        // 5. Push/sync current user profile to Firebase (ide_ultimate/users/<userId>)
-        syncUserProfileToFirebase()
     }
 
-    private fun parseProjectSnapshot(
+    private fun parseItemSnapshot(
         snapshot: DataSnapshot,
         localExisting: StoreProjectItem?,
     ): StoreProjectItem? {
@@ -276,8 +213,13 @@ class CommunityStoreRepository(context: Context) {
             val id = snapshot.child("id").getValue(String::class.java)
                 ?: snapshot.key
                 ?: return null
+            val typeStr = snapshot.child("type").getValue(String::class.java)
+                ?: StoreItemType.PROJECT.name
+            val type = runCatching { StoreItemType.valueOf(typeStr) }
+                .getOrDefault(StoreItemType.PROJECT)
             val name = snapshot.child("name").getValue(String::class.java) ?: return null
             val details = snapshot.child("details").getValue(String::class.java) ?: ""
+            val codeContent = snapshot.child("codeContent").getValue(String::class.java) ?: ""
             val iconPreset = snapshot.child("iconPreset").getValue(Int::class.java) ?: 0
             val customIconPath = snapshot.child("customIconPath").getValue(String::class.java)
                 ?.takeIf { it.isNotBlank() }
@@ -291,21 +233,19 @@ class CommunityStoreRepository(context: Context) {
                 .mapNotNull { it.getValue(String::class.java)?.takeIf { s -> s.isNotBlank() } }
             val likesCount = snapshot.child("likesCount").getValue(Int::class.java) ?: 0
             val dislikesCount = snapshot.child("dislikesCount").getValue(Int::class.java) ?: 0
-            val authorName = snapshot.child("authorName").getValue(String::class.java) ?: "AndroidEXL"
-            val createdByUserId = snapshot.child("createdByUserId").getValue(String::class.java)
-            val createdByCurrentUser = when {
-                createdByUserId != null -> createdByUserId == currentUserId || authorName == userName
-                localExisting != null -> localExisting.createdByCurrentUser
-                else -> authorName == userName
-            }
+            val authorName = snapshot.child("authorName").getValue(String::class.java) ?: ""
+            val createdByUserId = snapshot.child("createdByUserId").getValue(String::class.java) ?: ""
+            val isMine = isLoggedIn && currentUserId.isNotBlank() && createdByUserId == currentUserId
             val createdAt = snapshot.child("createdAt").getValue(Long::class.java)
                 ?: localExisting?.createdAt
                 ?: System.currentTimeMillis()
 
             StoreProjectItem(
                 id = id,
+                type = type,
                 name = name,
                 details = details,
+                codeContent = codeContent,
                 iconPreset = iconPreset,
                 customIconPath = customIconPath,
                 language = language,
@@ -315,20 +255,23 @@ class CommunityStoreRepository(context: Context) {
                 dislikesCount = dislikesCount,
                 userReaction = localExisting?.userReaction ?: 0,
                 savedInCollection = localExisting?.savedInCollection ?: false,
-                createdByCurrentUser = createdByCurrentUser,
+                createdByUserId = createdByUserId,
+                createdByCurrentUser = isMine,
                 authorName = authorName,
                 createdAt = createdAt,
             )
         }.getOrNull()
     }
 
-    private fun pushProjectToFirebase(item: StoreProjectItem) {
+    private fun pushItemToFirebase(item: StoreProjectItem) {
         val db = firebaseDb ?: return
         runCatching {
             val payload = mapOf(
                 "id" to item.id,
+                "type" to item.type.name,
                 "name" to item.name,
                 "details" to item.details,
+                "codeContent" to item.codeContent,
                 "iconPreset" to item.iconPreset,
                 "customIconPath" to (item.customIconPath ?: ""),
                 "language" to item.language.name,
@@ -337,69 +280,197 @@ class CommunityStoreRepository(context: Context) {
                 "likesCount" to item.likesCount,
                 "dislikesCount" to item.dislikesCount,
                 "authorName" to item.authorName,
-                "createdByUserId" to currentUserId,
+                "createdByUserId" to item.createdByUserId,
                 "createdAt" to item.createdAt,
             )
-            db.getReference(FirebaseConfig.NODE_STORE_PROJECTS)
+            db.getReference(FirebaseConfig.NODE_STORE_ITEMS)
                 .child(item.id)
                 .setValue(payload)
         }
     }
 
-    private fun syncUserProfileToFirebase() {
+    private fun pushAccountToFirebase(account: UserAccountRecord) {
         val db = firebaseDb ?: return
         runCatching {
-            val profileData = mapOf(
-                "userId" to currentUserId,
-                "userName" to userName,
-                "userAvatarPath" to (userAvatarPath ?: ""),
-                "isLoggedIn" to isLoggedIn,
-                "subscribersCount" to subscribersCount,
-                "projectsCount" to userPublishedProjects().size,
-                "likesCount" to totalUserLikes(),
-                "dislikesCount" to totalUserDislikes(),
-                "updatedAt" to System.currentTimeMillis(),
+            val payload = mapOf(
+                "userId" to account.userId,
+                "name" to account.name,
+                "email" to account.email,
+                "passwordHash" to account.passwordHash,
+                "avatarPath" to (account.avatarPath ?: ""),
+                "subscribersCount" to account.subscribersCount,
+                "createdAt" to account.createdAt,
             )
+            db.getReference(FirebaseConfig.NODE_ACCOUNTS)
+                .child(account.userId)
+                .setValue(payload)
             db.getReference(FirebaseConfig.NODE_USERS)
-                .child(currentUserId)
-                .setValue(profileData)
+                .child(account.userId)
+                .setValue(
+                    payload + mapOf(
+                        "projectsCount" to userPublishedProjects().size,
+                        "likesCount" to totalUserLikes(),
+                        "dislikesCount" to totalUserDislikes(),
+                    ),
+                )
         }
     }
 
+    /**
+     * Sign up a new user with Name, Avatar, Email, Password, and Confirm Password.
+     */
+    fun registerNewAccount(
+        name: String,
+        email: String,
+        password: String,
+        avatarPath: String?,
+    ): Result<UserAccountRecord> {
+        val cleanName = name.trim()
+        val cleanEmail = email.trim().lowercase()
+        val existing = accounts.firstOrNull { it.email.equals(cleanEmail, ignoreCase = true) }
+        if (existing != null) {
+            return Result.failure(IllegalArgumentException("EMAIL_TAKEN"))
+        }
+
+        val newId = "usr_" + UUID.randomUUID().toString().replace("-", "").take(12)
+        val record = UserAccountRecord(
+            userId = newId,
+            name = cleanName,
+            email = cleanEmail,
+            passwordHash = hashPassword(password),
+            avatarPath = avatarPath,
+            subscribersCount = 0,
+        )
+        accounts.add(record)
+        persistAccounts()
+        pushAccountToFirebase(record)
+        applyActiveSession(record)
+        return Result.success(record)
+    }
+
+    /**
+     * Sign in an existing user with Email and Password.
+     */
+    fun signInWithEmailPassword(
+        email: String,
+        password: String,
+    ): Result<UserAccountRecord> {
+        val cleanEmail = email.trim().lowercase()
+        val hashed = hashPassword(password)
+        val matched = accounts.firstOrNull {
+            it.email.equals(cleanEmail, ignoreCase = true) && it.passwordHash == hashed
+        } ?: return Result.failure(IllegalArgumentException("INVALID_CREDENTIALS"))
+
+        applyActiveSession(matched)
+        return Result.success(matched)
+    }
+
+    private fun applyActiveSession(account: UserAccountRecord) {
+        currentUserId = account.userId
+        userName = account.name
+        userEmail = account.email
+        userAvatarPath = account.avatarPath
+        subscribersCount = account.subscribersCount
+        isLoggedIn = true
+
+        prefs.edit()
+            .putString(KEY_USER_ID, currentUserId)
+            .putString(KEY_USER_NAME, userName)
+            .putString(KEY_USER_EMAIL, userEmail)
+            .putString(KEY_USER_AVATAR, userAvatarPath)
+            .putInt(KEY_SUBSCRIBERS, subscribersCount)
+            .putBoolean(KEY_LOGGED_IN, true)
+            .apply()
+
+        refreshOwnershipFlags()
+    }
+
+    fun logout() {
+        isLoggedIn = false
+        currentUserId = ""
+        userName = ""
+        userEmail = ""
+        userAvatarPath = null
+        subscribersCount = 0
+
+        prefs.edit()
+            .putBoolean(KEY_LOGGED_IN, false)
+            .remove(KEY_USER_ID)
+            .remove(KEY_USER_NAME)
+            .remove(KEY_USER_EMAIL)
+            .remove(KEY_USER_AVATAR)
+            .putInt(KEY_SUBSCRIBERS, 0)
+            .apply()
+
+        refreshOwnershipFlags()
+    }
+
+    private fun refreshOwnershipFlags() {
+        for (i in items.indices) {
+            val current = items[i]
+            val mine = isLoggedIn && currentUserId.isNotBlank() && current.createdByUserId == currentUserId
+            if (current.createdByCurrentUser != mine) {
+                items[i] = current.copy(createdByCurrentUser = mine)
+            }
+        }
+        persistItems()
+    }
+
     fun updateProfile(newName: String, newAvatarPath: String?) {
-        val trimmed = newName.trim().ifBlank { "AndroidEXL" }
+        if (!isLoggedIn) return
+        val trimmed = newName.trim().ifBlank { userName }
         userName = trimmed
         userAvatarPath = newAvatarPath
         prefs.edit()
             .putString(KEY_USER_NAME, trimmed)
             .putString(KEY_USER_AVATAR, newAvatarPath)
             .apply()
-        syncUserProfileToFirebase()
+
+        val idx = accounts.indexOfFirst { it.userId == currentUserId }
+        if (idx >= 0) {
+            val updatedAccount = accounts[idx].copy(
+                name = trimmed,
+                avatarPath = newAvatarPath,
+            )
+            accounts[idx] = updatedAccount
+            persistAccounts()
+            pushAccountToFirebase(updatedAccount)
+        }
     }
 
-    fun toggleLogin() {
-        isLoggedIn = !isLoggedIn
-        prefs.edit().putBoolean(KEY_LOGGED_IN, isLoggedIn).apply()
-        syncUserProfileToFirebase()
-    }
+    fun itemById(id: String): StoreProjectItem? = items.firstOrNull { it.id == id }
 
-    fun projectById(id: String): StoreProjectItem? = projects.firstOrNull { it.id == id }
+    fun newProjects(): List<StoreProjectItem> =
+        items.filter { it.type == StoreItemType.PROJECT }.sortedByDescending { it.createdAt }
+
+    fun codeSnippetItems(): List<StoreProjectItem> =
+        items.filter { it.type == StoreItemType.CODE_SNIPPET }.sortedByDescending { it.createdAt }
+
+    fun customLibraryItems(): List<StoreProjectItem> =
+        items.filter { it.type == StoreItemType.LIBRARY }.sortedByDescending { it.createdAt }
 
     fun userPublishedProjects(): List<StoreProjectItem> =
-        projects.filter { it.createdByCurrentUser }.sortedByDescending { it.createdAt }
+        if (!isLoggedIn) {
+            emptyList()
+        } else {
+            items.filter { it.createdByUserId == currentUserId || it.createdByCurrentUser }
+                .sortedByDescending { it.createdAt }
+        }
 
     fun savedCollectionProjects(): List<StoreProjectItem> =
-        projects.filter { it.savedInCollection }.sortedByDescending { it.createdAt }
+        items.filter { it.savedInCollection }.sortedByDescending { it.createdAt }
 
     fun totalUserLikes(): Int =
-        projects.filter { it.createdByCurrentUser }.sumOf { it.likesCount }
+        userPublishedProjects().sumOf { it.likesCount }
 
     fun totalUserDislikes(): Int =
-        projects.filter { it.createdByCurrentUser }.sumOf { it.dislikesCount }
+        userPublishedProjects().sumOf { it.dislikesCount }
 
-    fun createStoreProject(
+    fun createStoreItem(
+        type: StoreItemType,
         name: String,
         details: String,
+        codeContent: String,
         customIconPath: String?,
         iconPreset: Int = 0,
         language: ProjectLanguage = ProjectLanguage.KOTLIN,
@@ -407,89 +478,113 @@ class CommunityStoreRepository(context: Context) {
         imagePaths: List<String>,
     ): StoreProjectItem {
         val item = StoreProjectItem(
+            type = type,
             name = name.trim(),
             details = details.trim(),
+            codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
             iconPreset = iconPreset,
             customIconPath = customIconPath,
             language = language,
-            downloadLinks = downloadLinks.filter { it.isNotBlank() },
-            imagePaths = imagePaths.filter { it.isNotBlank() },
-            likesCount = 1,
+            downloadLinks = if (type == StoreItemType.PROJECT) {
+                downloadLinks.filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            },
+            imagePaths = if (type == StoreItemType.PROJECT) {
+                imagePaths.filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            },
+            likesCount = 0,
             dislikesCount = 0,
             userReaction = 0,
             savedInCollection = false,
+            createdByUserId = currentUserId,
             createdByCurrentUser = true,
-            authorName = userName,
+            authorName = userName.ifBlank { "User" },
         )
-        projects.add(0, item)
-        persistProjects()
-        pushProjectToFirebase(item)
-        syncUserProfileToFirebase()
+        items.add(0, item)
+        persistItems()
+        pushItemToFirebase(item)
         return item
     }
 
-    fun updateStoreProject(
+    fun updateStoreItem(
         id: String,
+        type: StoreItemType,
         name: String,
         details: String,
+        codeContent: String,
         customIconPath: String?,
         iconPreset: Int,
+        language: ProjectLanguage,
         downloadLinks: List<String>,
         imagePaths: List<String>,
     ) {
-        val index = projects.indexOfFirst { it.id == id }
+        val index = items.indexOfFirst { it.id == id }
         if (index < 0) return
-        val existing = projects[index]
+        val existing = items[index]
         val updated = existing.copy(
+            type = type,
             name = name.trim(),
             details = details.trim(),
+            codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
             customIconPath = customIconPath,
             iconPreset = iconPreset,
-            downloadLinks = downloadLinks.filter { it.isNotBlank() },
-            imagePaths = imagePaths.filter { it.isNotBlank() },
+            language = language,
+            downloadLinks = if (type == StoreItemType.PROJECT) {
+                downloadLinks.filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            },
+            imagePaths = if (type == StoreItemType.PROJECT) {
+                imagePaths.filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            },
         )
-        projects[index] = updated
-        persistProjects()
-        pushProjectToFirebase(updated)
-        syncUserProfileToFirebase()
+        items[index] = updated
+        persistItems()
+        pushItemToFirebase(updated)
     }
 
-    fun deleteStoreProject(id: String) {
-        if (projects.removeAll { it.id == id }) {
-            persistProjects()
+    fun deleteStoreItem(id: String) {
+        if (items.removeAll { it.id == id }) {
+            persistItems()
             runCatching {
-                firebaseDb?.getReference(FirebaseConfig.NODE_STORE_PROJECTS)
+                firebaseDb?.getReference(FirebaseConfig.NODE_STORE_ITEMS)
                     ?.child(id)
                     ?.removeValue()
             }
-            syncUserProfileToFirebase()
         }
     }
 
     fun toggleSaveInCollection(id: String): Boolean {
-        val index = projects.indexOfFirst { it.id == id }
+        val index = items.indexOfFirst { it.id == id }
         if (index < 0) return false
-        val current = projects[index]
+        val current = items[index]
         val nextSaved = !current.savedInCollection
-        projects[index] = current.copy(savedInCollection = nextSaved)
-        persistProjects()
-        runCatching {
-            val ref = firebaseDb?.getReference(FirebaseConfig.NODE_COLLECTIONS)
-                ?.child(currentUserId)
-                ?.child(id)
-            if (nextSaved) {
-                ref?.setValue(true)
-            } else {
-                ref?.removeValue()
+        items[index] = current.copy(savedInCollection = nextSaved)
+        persistItems()
+        if (currentUserId.isNotBlank()) {
+            runCatching {
+                val ref = firebaseDb?.getReference(FirebaseConfig.NODE_COLLECTIONS)
+                    ?.child(currentUserId)
+                    ?.child(id)
+                if (nextSaved) {
+                    ref?.setValue(true)
+                } else {
+                    ref?.removeValue()
+                }
             }
         }
         return nextSaved
     }
 
     fun toggleLike(id: String) {
-        val index = projects.indexOfFirst { it.id == id }
+        val index = items.indexOfFirst { it.id == id }
         if (index < 0) return
-        val item = projects[index]
+        val item = items[index]
         val updated = when (item.userReaction) {
             1 -> item.copy(
                 likesCount = (item.likesCount - 1).coerceAtLeast(0),
@@ -505,22 +600,15 @@ class CommunityStoreRepository(context: Context) {
                 userReaction = 1,
             )
         }
-        projects[index] = updated
-        persistProjects()
-        pushProjectToFirebase(updated)
-        runCatching {
-            firebaseDb?.getReference(FirebaseConfig.NODE_REACTIONS)
-                ?.child(currentUserId)
-                ?.child(id)
-                ?.setValue(updated.userReaction)
-        }
-        syncUserProfileToFirebase()
+        items[index] = updated
+        persistItems()
+        pushItemToFirebase(updated)
     }
 
     fun toggleDislike(id: String) {
-        val index = projects.indexOfFirst { it.id == id }
+        val index = items.indexOfFirst { it.id == id }
         if (index < 0) return
-        val item = projects[index]
+        val item = items[index]
         val updated = when (item.userReaction) {
             -1 -> item.copy(
                 dislikesCount = (item.dislikesCount - 1).coerceAtLeast(0),
@@ -536,25 +624,26 @@ class CommunityStoreRepository(context: Context) {
                 userReaction = -1,
             )
         }
-        projects[index] = updated
-        persistProjects()
-        pushProjectToFirebase(updated)
-        runCatching {
-            firebaseDb?.getReference(FirebaseConfig.NODE_REACTIONS)
-                ?.child(currentUserId)
-                ?.child(id)
-                ?.setValue(updated.userReaction)
-        }
-        syncUserProfileToFirebase()
+        items[index] = updated
+        persistItems()
+        pushItemToFirebase(updated)
     }
 
-    private fun persistProjects() {
+    private fun hashPassword(raw: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val bytes = digest.digest(raw.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun persistItems() {
         val array = JSONArray()
-        projects.forEach { item ->
+        items.forEach { item ->
             val json = JSONObject().apply {
                 put("id", item.id)
+                put("type", item.type.name)
                 put("name", item.name)
                 put("details", item.details)
+                put("codeContent", item.codeContent)
                 put("iconPreset", item.iconPreset)
                 put("customIconPath", item.customIconPath ?: JSONObject.NULL)
                 put("language", item.language.name)
@@ -564,16 +653,17 @@ class CommunityStoreRepository(context: Context) {
                 put("dislikesCount", item.dislikesCount)
                 put("userReaction", item.userReaction)
                 put("savedInCollection", item.savedInCollection)
+                put("createdByUserId", item.createdByUserId)
                 put("createdByCurrentUser", item.createdByCurrentUser)
                 put("authorName", item.authorName)
                 put("createdAt", item.createdAt)
             }
             array.put(json)
         }
-        prefs.edit().putString(KEY_PROJECTS, array.toString()).apply()
+        prefs.edit().putString(KEY_ITEMS, array.toString()).apply()
     }
 
-    private fun parseProjects(raw: String): List<StoreProjectItem> {
+    private fun parseItems(raw: String): List<StoreProjectItem> {
         val array = JSONArray(raw)
         val list = ArrayList<StoreProjectItem>(array.length())
         for (i in 0 until array.length()) {
@@ -586,6 +676,9 @@ class CommunityStoreRepository(context: Context) {
             val images = (0 until imagesArr.length()).mapNotNull { idx ->
                 imagesArr.optString(idx).takeIf { it.isNotBlank() }
             }
+            val type = runCatching {
+                StoreItemType.valueOf(obj.optString("type", StoreItemType.PROJECT.name))
+            }.getOrDefault(StoreItemType.PROJECT)
             val lang = runCatching {
                 ProjectLanguage.valueOf(obj.optString("language", ProjectLanguage.KOTLIN.name))
             }.getOrDefault(ProjectLanguage.KOTLIN)
@@ -594,11 +687,15 @@ class CommunityStoreRepository(context: Context) {
             } else {
                 obj.optString("customIconPath").ifBlank { null }
             }
+            val ownerId = obj.optString("createdByUserId", "")
+            val isMine = isLoggedIn && currentUserId.isNotBlank() && ownerId == currentUserId
             list.add(
                 StoreProjectItem(
                     id = obj.getString("id"),
+                    type = type,
                     name = obj.getString("name"),
                     details = obj.optString("details"),
+                    codeContent = obj.optString("codeContent", ""),
                     iconPreset = obj.optInt("iconPreset", 0),
                     customIconPath = customIcon,
                     language = lang,
@@ -608,8 +705,9 @@ class CommunityStoreRepository(context: Context) {
                     dislikesCount = obj.optInt("dislikesCount", 0),
                     userReaction = obj.optInt("userReaction", 0),
                     savedInCollection = obj.optBoolean("savedInCollection", false),
-                    createdByCurrentUser = obj.optBoolean("createdByCurrentUser", true),
-                    authorName = obj.optString("authorName", "AndroidEXL"),
+                    createdByUserId = ownerId,
+                    createdByCurrentUser = isMine,
+                    authorName = obj.optString("authorName", ""),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                 ),
             )
@@ -617,196 +715,56 @@ class CommunityStoreRepository(context: Context) {
         return list
     }
 
-    private fun defaultCodeSnippets(): List<CodeSnippetItem> = listOf(
-        CodeSnippetItem(
-            id = "snip_compose_auth",
-            title = "NeonAuthUI",
-            description = "شاشة تسجيل دخول زجاجية متحركة بـ Jetpack Compose",
-            language = ProjectLanguage.KOTLIN,
-            iconPreset = 3,
-            code = """
-                @Composable
-                fun NeonAuthScreen(onLogin: (String) -> Unit) {
-                    var email by remember { mutableStateOf("") }
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text("Welcome Back", style = MaterialTheme.typography.headlineMedium)
-                        Spacer(Modifier.height(16.dp))
-                        OutlinedTextField(value = email, onValueChange = { email = it })
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = { onLogin(email) }) { Text("Sign In") }
-                    }
-                }
-            """.trimIndent(),
-        ),
-        CodeSnippetItem(
-            id = "snip_flutter_cart",
-            title = "FlutterShopCart",
-            description = "واجهة متجر إلكتروني وسلة مشتريات متكاملة بـ Flutter",
-            language = ProjectLanguage.FLUTTER,
-            iconPreset = 1,
-            code = """
-                class ShopCartPage extends StatefulWidget {
-                  const ShopCartPage({super.key});
-                  @override
-                  State<ShopCartPage> createState() => _ShopCartPageState();
-                }
+    private fun persistAccounts() {
+        val array = JSONArray()
+        accounts.forEach { acc ->
+            val json = JSONObject().apply {
+                put("userId", acc.userId)
+                put("name", acc.name)
+                put("email", acc.email)
+                put("passwordHash", acc.passwordHash)
+                put("avatarPath", acc.avatarPath ?: JSONObject.NULL)
+                put("subscribersCount", acc.subscribersCount)
+                put("createdAt", acc.createdAt)
+            }
+            array.put(json)
+        }
+        prefs.edit().putString(KEY_ACCOUNTS, array.toString()).apply()
+    }
 
-                class _ShopCartPageState extends State<ShopCartPage> {
-                  int count = 1;
-                  @override
-                  Widget build(BuildContext context) {
-                    return Scaffold(
-                      appBar: AppBar(title: const Text('Flutter Shop')),
-                      floatingActionButton: FloatingActionButton(
-                        onPressed: () => setState(() => count++),
-                        child: Text('${'$'}count'),
-                      ),
-                    );
-                  }
-                }
-            """.trimIndent(),
-        ),
-        CodeSnippetItem(
-            id = "snip_java_notes",
-            title = "JavaNotesHelper",
-            description = "إدارة الملاحظات وحفظ البيانات محليًا بلغة Java",
-            language = ProjectLanguage.JAVA,
-            iconPreset = 2,
-            code = """
-                public class NotesRepository {
-                    private final List<String> notes = new ArrayList<>();
-
-                    public void addNote(String text) {
-                        if (text != null && !text.trim().isEmpty()) {
-                            notes.add(text.trim());
-                        }
-                    }
-
-                    public List<String> getAllNotes() {
-                        return Collections.unmodifiableList(notes);
-                    }
-                }
-            """.trimIndent(),
-        ),
-        CodeSnippetItem(
-            id = "snip_kotlin_api",
-            title = "KotlinRestFetcher",
-            description = "جلب بيانات JSON غير متزامن عبر Kotlin Coroutines",
-            language = ProjectLanguage.KOTLIN,
-            iconPreset = 0,
-            code = """
-                suspend fun fetchJson(url: String): Result<String> =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            URL(url).openStream().bufferedReader().use { it.readText() }
-                        }
-                    }
-            """.trimIndent(),
-        ),
-    )
-
-    private fun defaultCustomLibraries(): List<CustomLibraryItem> = listOf(
-        CustomLibraryItem(
-            id = "lib_neon_ui",
-            name = "IDE-NeonGlassKit",
-            summary = "مكتبة بطاقات زجاجية وأنيميشن نيون جاهزة لمشاريع Jetpack Compose",
-            language = ProjectLanguage.KOTLIN,
-            version = "2.4.0",
-            dependencyLine = "implementation(\"com.androidexl.libs:neon-glass-kit:2.4.0\")",
-            docsUrl = "https://github.com/AndroidEXL/IDE-Ultimate",
-        ),
-        CustomLibraryItem(
-            id = "lib_flutter_motion",
-            name = "flutter_space_motion",
-            summary = "حزمة أنيميشن وانتقالات ثلاثية الأبعاد لتطبيقات Flutter",
-            language = ProjectLanguage.FLUTTER,
-            version = "1.8.2",
-            dependencyLine = "flutter_space_motion: ^1.8.2",
-            docsUrl = "https://github.com/AndroidEXL/IDE-Ultimate",
-        ),
-        CustomLibraryItem(
-            id = "lib_java_zip",
-            name = "AndroidZipEngine",
-            summary = "مكتبة Java سريعة لضغط وتصدير ملفات المشاريع بصيغة ZIP",
-            language = ProjectLanguage.JAVA,
-            version = "1.3.0",
-            dependencyLine = "implementation(\"com.androidexl.libs:android-zip-engine:1.3.0\")",
-            docsUrl = "https://github.com/AndroidEXL/IDE-Ultimate",
-        ),
-    )
-
-    private fun seedDefaultStoreProjects() {
-        projects.addAll(
-            listOf(
-                StoreProjectItem(
-                    id = "proj_ide_ultimate_studio",
-                    name = "IDE Ultimate Studio",
-                    details = "مشروع بيئة تطوير متكاملة لنظام أندرويد مبني بـ Kotlin و Jetpack Compose مع شاشة Splash سينمائية، إدارة الفولدرات والمشاريع، وتصدير الكود إلى ZIP.",
-                    iconPreset = 0,
-                    language = ProjectLanguage.KOTLIN,
-                    downloadLinks = listOf(
-                        "https://github.com/AndroidEXL/IDE-Ultimate/releases/latest",
-                    ),
-                    imagePaths = listOf(
-                        "https://raw.githubusercontent.com/AndroidEXL/IDE-Ultimate/arena/45f97ffd-ide-ultimate/docs/splash_preview.png",
-                        "https://raw.githubusercontent.com/AndroidEXL/IDE-Ultimate/arena/45f97ffd-ide-ultimate/docs/workspace_preview.png",
-                    ),
-                    likesCount = 148,
-                    dislikesCount = 3,
-                    savedInCollection = true,
-                    createdByCurrentUser = true,
-                    authorName = "AndroidEXL",
+    private fun parseAccounts(raw: String): List<UserAccountRecord> {
+        val array = JSONArray(raw)
+        val list = ArrayList<UserAccountRecord>(array.length())
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            val avatar = if (obj.isNull("avatarPath")) {
+                null
+            } else {
+                obj.optString("avatarPath").ifBlank { null }
+            }
+            list.add(
+                UserAccountRecord(
+                    userId = obj.getString("userId"),
+                    name = obj.getString("name"),
+                    email = obj.getString("email"),
+                    passwordHash = obj.getString("passwordHash"),
+                    avatarPath = avatar,
+                    subscribersCount = obj.optInt("subscribersCount", 0),
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                 ),
-                StoreProjectItem(
-                    id = "proj_flutter_commerce_pro",
-                    name = "Flutter Commerce Pro",
-                    details = "تطبيق متجر إلكتروني كامل بـ Flutter و Material 3 يشمل سلة المشتريات، بوابات الدفع، وصفحة تفاصيل المنتجات مع أنيميشن سلس.",
-                    iconPreset = 1,
-                    language = ProjectLanguage.FLUTTER,
-                    downloadLinks = listOf(
-                        "https://github.com/AndroidEXL/IDE-Ultimate/releases",
-                    ),
-                    imagePaths = listOf(
-                        "https://raw.githubusercontent.com/AndroidEXL/IDE-Ultimate/arena/45f97ffd-ide-ultimate/docs/project_detail_preview.png",
-                    ),
-                    likesCount = 92,
-                    dislikesCount = 2,
-                    savedInCollection = true,
-                    createdByCurrentUser = true,
-                    authorName = "AndroidEXL",
-                ),
-                StoreProjectItem(
-                    id = "proj_java_file_explorer",
-                    name = "Java File Explorer",
-                    details = "مدير ملفات أندرويد سريع مبني بلغة Java يدعم ضغط وفك ضغط ملفات ZIP وتصفح الذاكرة الداخلية.",
-                    iconPreset = 2,
-                    language = ProjectLanguage.JAVA,
-                    downloadLinks = listOf(
-                        "https://github.com/AndroidEXL/IDE-Ultimate",
-                    ),
-                    imagePaths = listOf(
-                        "https://raw.githubusercontent.com/AndroidEXL/IDE-Ultimate/arena/45f97ffd-ide-ultimate/docs/workspace_sheet_preview.png",
-                    ),
-                    likesCount = 64,
-                    dislikesCount = 1,
-                    savedInCollection = false,
-                    createdByCurrentUser = false,
-                    authorName = "CommunityDev",
-                ),
-            ),
-        )
-        persistProjects()
+            )
+        }
+        return list
     }
 
     private companion object {
-        const val KEY_PROJECTS = "store_projects_v1"
-        const val KEY_USER_ID = "user_id_v1"
-        const val KEY_USER_NAME = "user_name_v1"
-        const val KEY_USER_AVATAR = "user_avatar_v1"
-        const val KEY_LOGGED_IN = "user_logged_in_v1"
-        const val KEY_SUBSCRIBERS = "user_subscribers_v1"
+        const val KEY_ITEMS = "store_items_v2"
+        const val KEY_ACCOUNTS = "store_accounts_v2"
+        const val KEY_USER_ID = "user_id_v2"
+        const val KEY_USER_NAME = "user_name_v2"
+        const val KEY_USER_EMAIL = "user_email_v2"
+        const val KEY_USER_AVATAR = "user_avatar_v2"
+        const val KEY_LOGGED_IN = "user_logged_in_v2"
+        const val KEY_SUBSCRIBERS = "user_subscribers_v2"
     }
 }

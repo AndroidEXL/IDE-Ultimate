@@ -10,7 +10,7 @@
     <string name="splash_status_ready">جاهز للبرمجة</string>
     <string name="splash_skip">تخطي</string>
     <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
-    <string name="splash_version">v1.8.0</string>
+    <string name="splash_version">v1.9.0</string>
 
     <!-- Home -->
     <string name="home_greeting">أهلًا بك من جديد</string>
@@ -21,7 +21,7 @@
     <string name="home_start">ابدأ الآن</string>
     <string name="home_tools">أدواتك</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">الإصدار 1.8.0</string>
+    <string name="home_version">الإصدار 1.9.0</string>
     <string name="home_replay_splash">إعادة الافتتاحية</string>
     <string name="home_footer">صُنع بشغف باستخدام Kotlin و Jetpack Compose</string>
     <string name="home_soon">قادمة قريبًا في هذا العرض</string>
@@ -123,15 +123,37 @@
     <string name="create_project_submit_btn">إنشاء المشروع الآن</string>
     <string name="create_project_save_btn">حفظ تعديلات المشروع</string>
 
+    <!-- Authentication Bottom Sheet (تسجيل الدخول / تسجيل دخول جديد) -->
+    <string name="auth_title_login">تسجيل الدخول</string>
+    <string name="auth_title_register">تسجيل دخول جديد</string>
+    <string name="auth_subtitle">سجّل دخولك أو أنشئ حسابًا جديدًا لنشر مشاريعك وأكوادك ومكتباتك</string>
+    <string name="auth_tab_login">تسجيل الدخول</string>
+    <string name="auth_tab_register">تسجيل دخول جديد</string>
+    <string name="auth_pick_avatar_hint">اختر أيقونة حسابك من الجهاز</string>
+    <string name="auth_field_name">الاسم</string>
+    <string name="auth_field_email">الإيميل</string>
+    <string name="auth_field_password">الباسورد</string>
+    <string name="auth_field_confirm_password">تأكيد الباسورد</string>
+    <string name="auth_btn_login">تسجيل الدخول</string>
+    <string name="auth_btn_register">إنشاء الحساب وتسجيل الدخول</string>
+    <string name="auth_btn_logout">تسجيل الخروج</string>
+    <string name="auth_error_email_invalid">اكتب بريدًا إلكترونيًا صحيحًا.</string>
+    <string name="auth_error_password_short">كلمة المرور يجب أن تكون 6 أحرف على الأقل.</string>
+    <string name="auth_error_password_mismatch">كلمتا المرور غير متطابقتين.</string>
+    <string name="auth_error_email_taken">هذا الإيميل مسجّل بالفعل، استخدم تسجيل الدخول.</string>
+    <string name="auth_error_invalid_credentials">الإيميل أو الباسورد غير صحيح.</string>
+    <string name="auth_msg_logged_in">مرحباً بك %1$s</string>
+    <string name="auth_msg_logged_out">تم تسجيل الخروج</string>
+
     <!-- Store Code Screen (3 Sections) -->
     <string name="store_code_title">Store Code</string>
     <string name="store_code_subtitle">المشاريع الجديدة · الأكواد البرمجية · المكتبات الخاصة</string>
     <string name="section_new_projects">قسم المشاريع الجديدة</string>
     <string name="section_new_projects_desc">أحدث المشاريع المضافة في المتجر (اضغط للعرض والتحميل)</string>
     <string name="section_code_snippets">قسم الأكواد البرمجية</string>
-    <string name="section_code_snippets_desc">أكواد جاهزة للنسخ أو الاستيراد كمشروع</string>
+    <string name="section_code_snippets_desc">أكواد برمجية جاهزة للعرض والنسخ والاستيراد</string>
     <string name="section_custom_libraries">قسم المكتبات الخاصة</string>
-    <string name="section_custom_libraries_desc">مكتبات وحزم جاهزة للإضافة في مشاريعك</string>
+    <string name="section_custom_libraries_desc">مكتبات وحزم خاصة جاهزة للعرض والنسخ</string>
     <string name="store_use_as_project">استيراد كمشروع</string>
     <string name="store_copy_code">نسخ الكود</string>
     <string name="store_copied_msg">تم نسخ %1$s</string>
@@ -142,29 +164,45 @@
     <string name="profile_stat_likes">اللايكات</string>
     <string name="profile_stat_dislikes">عدم الإعجاب</string>
     <string name="profile_stat_subscribers">المشتركين</string>
-    <string name="profile_empty_projects">لم تقم بإضافة مشاريع بعد. اضغط زر + لإنشاء مشروع جديد.</string>
-    <string name="profile_empty_collection">لا توجد مشاريع محفوظة في Collection بعد.</string>
+    <string name="profile_empty_projects">لم تقم بإضافة عناصر بعد. اضغط زر + لإنشاء مشروع أو كود أو مكتبة.</string>
+    <string name="profile_empty_collection">لا توجد عناصر محفوظة في Collection بعد.</string>
     <string name="profile_action_edit_data">تعديل البيانات</string>
-    <string name="profile_action_edit_data_desc">تعديل اسم المشروع، الأيقونة، التفاصيل، الروابط والصور.</string>
+    <string name="profile_action_edit_data_desc">تعديل الاسم، الأيقونة، النوع، التفاصيل، الكود أو الروابط والصور.</string>
 
-    <!-- Store Project Form (Create / Edit) -->
-    <string name="store_form_create_title">إنشاء مشروع جديد</string>
-    <string name="store_form_edit_title">تعديل بيانات المشروع</string>
-    <string name="store_form_subtitle">الأيقونة · اسم البرنامج · التفاصيل · الروابط · الصور</string>
+    <!-- Store Item Form (Create / Edit: Project / Code Snippet / Library) -->
+    <string name="store_form_create_title">إضافة عنصر جديد</string>
+    <string name="store_form_edit_title">تعديل البيانات</string>
+    <string name="store_form_subtitle">اختر النوع (مشروع · كود برمجي · مكتبة) واملأ البيانات</string>
+    <string name="store_form_type_label">نوع المشروع / الإضافة</string>
+    <string name="store_form_type_hint">لو اخترت كود برمجي أو مكتبة سيظهر حقل الكود مباشرةً تحت التفاصيل بدون روابط أو صور</string>
+    <string name="store_type_project">مشروع</string>
+    <string name="store_type_code">كود برمجي</string>
+    <string name="store_type_library">مكتبة</string>
     <string name="store_form_pick_icon">الأيقونة من الجهاز</string>
     <string name="store_form_program_name">اسم البرنامج</string>
-    <string name="store_form_program_name_hint">اكتب اسم البرنامج هنا…</string>
+    <string name="store_form_code_name">اسم الكود البرمجي</string>
+    <string name="store_form_library_name">اسم المكتبة</string>
+    <string name="store_form_program_name_hint">اكتب الاسم هنا…</string>
     <string name="store_form_details_label">تفاصيل المشروع</string>
-    <string name="store_form_details_hint">اكتب وصفًا وتفاصيل كاملة عن المشروع ومميزاته…</string>
+    <string name="store_form_code_details_label">تفاصيل الكود البرمجي</string>
+    <string name="store_form_library_details_label">تفاصيل المكتبة</string>
+    <string name="store_form_details_hint">اكتب وصفًا وتفاصيل كاملة…</string>
+    <string name="store_form_code_box_label">الكود البرمجي</string>
+    <string name="store_form_code_box_hint">اكتب الكود البرمجي كاملًا هنا تحت التفاصيل مباشرةً</string>
+    <string name="store_form_library_box_label">كود المكتبة / التضمين</string>
+    <string name="store_form_library_box_hint">اكتب سطر تضمين المكتبة أو كود المكتبة هنا تحت التفاصيل مباشرةً</string>
     <string name="store_form_links_section">روابط التحميل</string>
     <string name="store_form_add_link_btn">إضافة رابط تحميل</string>
     <string name="store_form_images_section">صور المشروع</string>
     <string name="store_form_add_images_btn">إضافة صور المشروع</string>
     <string name="store_form_add_image_url_btn">رابط صورة</string>
-    <string name="store_form_save_btn">حفظ المشروع</string>
-    <string name="store_form_error_details">اكتب تفاصيل المشروع أولًا.</string>
+    <string name="store_form_save_btn">حفظ</string>
+    <string name="store_form_error_details">اكتب التفاصيل أولًا.</string>
+    <string name="store_form_error_code">اكتب الكود أولًا.</string>
 
-    <!-- Store Project View Screen (Read-only) -->
+    <!-- Store View Screens (Project View, Code Snippet View, Library View) -->
+    <string name="code_view_screen_title">عرض الكود البرمجي</string>
+    <string name="library_view_screen_title">عرض المكتبة الخاصة</string>
     <string name="store_save_later">حفظ لاحقًا</string>
     <string name="store_saved_in_collection">محفوظ في Collection</string>
     <string name="store_btn_like">أعجبني</string>
@@ -178,19 +216,19 @@
     <string name="store_download_sheet_subtitle">اختر رابط التحميل أو نزّل ملف ZIP مباشرةً:</string>
     <string name="store_download_link_item">رابط التحميل #%1$d</string>
     <string name="store_download_zip_direct">تحميل كملف ZIP جاهز</string>
-    <string name="msg_saved_to_collection">تم حفظ المشروع في Collection</string>
-    <string name="msg_removed_from_collection">تمت إزالة المشروع من Collection</string>
+    <string name="msg_saved_to_collection">تم الحفظ في Collection</string>
+    <string name="msg_removed_from_collection">تمت الإزالة من Collection</string>
 
     <string name="delete_folder_title">حذف الفولدر &quot;%1$s&quot;؟</string>
-    <string name="delete_project_title">حذف المشروع &quot;%1$s&quot;؟</string>
+    <string name="delete_project_title">حذف العنصر &quot;%1$s&quot;؟</string>
     <string name="delete_folder_message">سيُحذف الفولدر وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
-    <string name="delete_project_message">سيُحذف المشروع نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_project_message">سيُحذف العنصر نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
     <string name="delete_folder_count">يحتوي الفولدر على %1$d عنصرًا ستتم إزالته أيضًا.</string>
     <string name="delete_confirm">حذف نهائي</string>
 
     <string name="msg_folder_created">تم إنشاء الفولدر</string>
-    <string name="msg_project_created">تم إنشاء المشروع بنجاح</string>
-    <string name="msg_project_updated">تم حفظ تعديلات المشروع</string>
+    <string name="msg_project_created">تم الحفظ بنجاح</string>
+    <string name="msg_project_updated">تم حفظ التعديلات</string>
     <string name="msg_renamed">تم تحديث الاسم</string>
     <string name="msg_deleted">تم الحذف</string>
     <string name="export_success">تم تصدير &quot;%1$s&quot; بنجاح</string>

@@ -36,7 +36,7 @@ data class WorkspaceItem(
 
 /**
  * Persistent workspace model backed by SharedPreferences + disk synchronization
- * under `/storage/emulated/0/.IDE Ultimate`.
+ * under `/storage/emulated/0/.IDE Ultimate` (starts empty with zero demo items).
  */
 class WorkspaceRepository(context: Context) {
 
@@ -47,12 +47,10 @@ class WorkspaceRepository(context: Context) {
 
     init {
         val raw = prefs.getString(KEY_ITEMS, null)
-        if (raw == null) {
-            seedDemoContent()
-        } else {
+        if (raw != null) {
             items.addAll(runCatching { parseItems(raw) }.getOrDefault(emptyList()))
-            syncToFileSystem()
         }
+        syncToFileSystem()
     }
 
     fun itemById(id: String): WorkspaceItem? = items.firstOrNull { it.id == id }
@@ -313,78 +311,8 @@ class WorkspaceRepository(context: Context) {
         return result
     }
 
-    private fun seedDemoContent() {
-        val android = WorkspaceItem(name = "مشاريع Android", type = WorkspaceItemType.FOLDER, parentId = null)
-        val flutter = WorkspaceItem(name = "تطبيقات Flutter", type = WorkspaceItemType.FOLDER, parentId = null)
-        val templates = WorkspaceItem(name = "قوالب جاهزة", type = WorkspaceItemType.FOLDER, parentId = null)
-
-        items.addAll(listOf(android, flutter, templates))
-        // Root project so the user immediately sees projects can live directly in the root too
-        items.add(
-            WorkspaceItem(
-                name = "IDE Starter",
-                type = WorkspaceItemType.PROJECT,
-                parentId = null,
-                packageName = "com.ideultimate.projects.idestarter",
-                language = ProjectLanguage.KOTLIN,
-                versionCode = 1,
-                versionName = "1.0.0",
-                iconPreset = 0,
-            ),
-        )
-        items.add(
-            WorkspaceItem(
-                name = "HelloCompose",
-                type = WorkspaceItemType.PROJECT,
-                parentId = android.id,
-                packageName = "com.ideultimate.projects.hellocompose",
-                language = ProjectLanguage.KOTLIN,
-                versionCode = 2,
-                versionName = "1.2.0",
-                iconPreset = 0,
-            ),
-        )
-        items.add(
-            WorkspaceItem(
-                name = "NotesApp",
-                type = WorkspaceItemType.PROJECT,
-                parentId = android.id,
-                packageName = "com.ideultimate.projects.notesapp",
-                language = ProjectLanguage.JAVA,
-                versionCode = 1,
-                versionName = "1.0.0",
-                iconPreset = 2,
-            ),
-        )
-        items.add(
-            WorkspaceItem(
-                name = "ShopFlutter",
-                type = WorkspaceItemType.PROJECT,
-                parentId = flutter.id,
-                packageName = "com.ideultimate.projects.shopflutter",
-                language = ProjectLanguage.FLUTTER,
-                versionCode = 3,
-                versionName = "2.0.0",
-                iconPreset = 1,
-            ),
-        )
-        items.add(
-            WorkspaceItem(
-                name = "Starter Template",
-                type = WorkspaceItemType.PROJECT,
-                parentId = templates.id,
-                packageName = "com.ideultimate.projects.startertemplate",
-                language = ProjectLanguage.KOTLIN,
-                versionCode = 1,
-                versionName = "1.0.0",
-                iconPreset = 3,
-            ),
-        )
-        persist()
-    }
-
     companion object {
         const val WORKSPACE_DISK_PATH = "/storage/emulated/0/.IDE Ultimate"
-        private const val KEY_ITEMS = "items_v4"
+        private const val KEY_ITEMS = "items_v5"
     }
 }

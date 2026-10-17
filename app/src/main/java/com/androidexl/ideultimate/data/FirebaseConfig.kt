@@ -21,12 +21,20 @@ object FirebaseConfig {
     const val API_KEY = "AIzaSyABSZalOZMBGQR6z9NKm-tEVmY6ZfDqhLA"
 
     const val NODE_ROOT = "ide_ultimate"
-    const val NODE_STORE_PROJECTS = "$NODE_ROOT/store_projects"
-    const val NODE_CODE_SNIPPETS = "$NODE_ROOT/code_snippets"
-    const val NODE_CUSTOM_LIBRARIES = "$NODE_ROOT/custom_libraries"
+    const val NODE_STORE_ITEMS = "$NODE_ROOT/store_items"
+    const val NODE_ACCOUNTS = "$NODE_ROOT/accounts"
     const val NODE_USERS = "$NODE_ROOT/users"
     const val NODE_COLLECTIONS = "$NODE_ROOT/collections"
     const val NODE_REACTIONS = "$NODE_ROOT/reactions"
+
+    // Legacy demo nodes to clean up automatically so no demo items remain
+    val LEGACY_DEMO_NODES = listOf(
+        "$NODE_ROOT/store_projects/proj_ide_ultimate_studio",
+        "$NODE_ROOT/store_projects/proj_flutter_commerce_pro",
+        "$NODE_ROOT/store_projects/proj_java_file_explorer",
+        "$NODE_ROOT/code_snippets",
+        "$NODE_ROOT/custom_libraries",
+    )
 
     @Volatile
     private var persistenceConfigured = false

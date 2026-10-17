@@ -107,10 +107,12 @@ import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.CommunityStoreRepository
 import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.ProjectZipExporter
+import com.androidexl.ideultimate.data.StoreItemType
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceItemType
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.components.AppTab
+import com.androidexl.ideultimate.ui.components.AuthBottomSheet
 import com.androidexl.ideultimate.ui.components.FolderNavIcon
 import com.androidexl.ideultimate.ui.components.GlassIconButton
 import com.androidexl.ideultimate.ui.components.LogoMark
@@ -198,8 +200,17 @@ fun WorkspaceScreen(
 
     // Community / Store & Profile overlay states
     var showUserProfile by rememberSaveable { mutableStateOf(false) }
+    var showAuthBottomSheet by rememberSaveable { mutableStateOf(false) }
     var openStoreProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var storeFormMode by remember { mutableStateOf<StoreFormMode?>(null) }
+
+    fun handleAvatarOrAuthClick() {
+        if (storeRepository.isLoggedIn) {
+            showUserProfile = true
+        } else {
+            showAuthBottomSheet = true
+        }
+    }
 
     var sheet by remember { mutableStateOf<WorkspaceSheet?>(null) }
     var folderDialog by remember { mutableStateOf<FolderDialog?>(null) }
@@ -320,38 +331,44 @@ fun WorkspaceScreen(
         )
 
         val currentStoreForm = storeFormMode
-        val activeStoreProject = openStoreProjectId?.let { storeRepository.projectById(it) }
+        val activeStoreProject = openStoreProjectId?.let { storeRepository.itemById(it) }
         val currentMode = projectPageMode
         val openProject = openProjectId?.let { id -> repository.itemById(id) }
 
         when {
-            // 1. Store Project Create / Edit Page (from Profile -> Projects FAB or Edit)
+            // 1. Store Item Create / Edit Page (PROJECT, CODE_SNIPPET, LIBRARY)
             currentStoreForm != null -> {
                 val editingTarget = (currentStoreForm as? StoreFormMode.Edit)
-                    ?.let { storeRepository.projectById(it.projectId) }
+                    ?.let { storeRepository.itemById(it.projectId) }
                 StoreProjectFormScreen(
                     editingItem = editingTarget,
                     onBack = { storeFormMode = null },
-                    onSave = { formData ->
+                    onSave = { type, name, details, codeContent, customIconPath, iconPreset, language, downloadLinks, imagePaths ->
                         if (editingTarget != null) {
-                            storeRepository.updateStoreProject(
+                            storeRepository.updateStoreItem(
                                 id = editingTarget.id,
-                                name = formData.name,
-                                details = formData.details,
-                                customIconPath = formData.customIconPath,
-                                iconPreset = formData.iconPreset,
-                                downloadLinks = formData.downloadLinks,
-                                imagePaths = formData.imagePaths,
+                                type = type,
+                                name = name,
+                                details = details,
+                                codeContent = codeContent,
+                                customIconPath = customIconPath,
+                                iconPreset = iconPreset,
+                                language = language,
+                                downloadLinks = downloadLinks,
+                                imagePaths = imagePaths,
                             )
                             showMessage(context.getString(R.string.msg_project_updated))
                         } else {
-                            storeRepository.createStoreProject(
-                                name = formData.name,
-                                details = formData.details,
-                                customIconPath = formData.customIconPath,
-                                iconPreset = formData.iconPreset,
-                                downloadLinks = formData.downloadLinks,
-                                imagePaths = formData.imagePaths,
+                            storeRepository.createStoreItem(
+                                type = type,
+                                name = name,
+                                details = details,
+                                codeContent = codeContent,
+                                customIconPath = customIconPath,
+                                iconPreset = iconPreset,
+                                language = language,
+                                downloadLinks = downloadLinks,
+                                imagePaths = imagePaths,
                             )
                             showMessage(context.getString(R.string.msg_project_created))
                         }
@@ -361,39 +378,83 @@ fun WorkspaceScreen(
                 )
             }
 
-            // 2. Read-only Store Project View Page (opened from Store, Profile Projects, or Collection)
+            // 2. Read-only View Pages for Store Item (Project View, Code Snippet View, or Library View)
             activeStoreProject != null -> {
-                StoreProjectViewScreen(
-                    project = activeStoreProject,
-                    onBack = { openStoreProjectId = null },
-                    onToggleSaveLater = {
-                        val saved = storeRepository.toggleSaveInCollection(activeStoreProject.id)
-                        showMessage(
-                            context.getString(
-                                if (saved) R.string.msg_saved_to_collection else R.string.msg_removed_from_collection,
-                            ),
+                val onToggleSave: () -> Unit = {
+                    val saved = storeRepository.toggleSaveInCollection(activeStoreProject.id)
+                    showMessage(
+                        context.getString(
+                            if (saved) R.string.msg_saved_to_collection else R.string.msg_removed_from_collection,
+                        ),
+                    )
+                }
+                when (activeStoreProject.type) {
+                    StoreItemType.PROJECT -> {
+                        StoreProjectViewScreen(
+                            project = activeStoreProject,
+                            onBack = { openStoreProjectId = null },
+                            onToggleSaveLater = onToggleSave,
+                            onLike = { storeRepository.toggleLike(activeStoreProject.id) },
+                            onDislike = { storeRepository.toggleDislike(activeStoreProject.id) },
+                            onDownloadZip = {
+                                pendingStoreZipName = activeStoreProject.name
+                                exportLauncher.launch(
+                                    ProjectZipExporter.suggestedFileName(activeStoreProject.name),
+                                )
+                            },
+                            bottomBarPadding = bottomBarPadding,
                         )
-                    },
-                    onLike = { storeRepository.toggleLike(activeStoreProject.id) },
-                    onDislike = { storeRepository.toggleDislike(activeStoreProject.id) },
-                    onDownloadZip = {
-                        pendingStoreZipName = activeStoreProject.name
-                        exportLauncher.launch(
-                            ProjectZipExporter.suggestedFileName(activeStoreProject.name),
+                    }
+
+                    StoreItemType.CODE_SNIPPET -> {
+                        StoreCodeSnippetViewScreen(
+                            item = activeStoreProject,
+                            onBack = { openStoreProjectId = null },
+                            onToggleSaveLater = onToggleSave,
+                            onToggleLike = { storeRepository.toggleLike(activeStoreProject.id) },
+                            onToggleDislike = { storeRepository.toggleDislike(activeStoreProject.id) },
+                            onUseAsProject = {
+                                val targetName = activeStoreProject.name
+                                val targetLang = activeStoreProject.language
+                                openStoreProjectId = null
+                                showUserProfile = false
+                                onSelectTab(AppTab.ProjectManager)
+                                projectPageMode = ProjectPageMode.Create(
+                                    parentId = currentParentId,
+                                    initialName = targetName,
+                                    initialLanguage = targetLang,
+                                )
+                            },
+                            bottomBarPadding = bottomBarPadding,
                         )
-                    },
-                    bottomBarPadding = bottomBarPadding,
-                )
+                    }
+
+                    StoreItemType.LIBRARY -> {
+                        StoreLibraryViewScreen(
+                            item = activeStoreProject,
+                            onBack = { openStoreProjectId = null },
+                            onToggleSaveLater = onToggleSave,
+                            onToggleLike = { storeRepository.toggleLike(activeStoreProject.id) },
+                            onToggleDislike = { storeRepository.toggleDislike(activeStoreProject.id) },
+                            bottomBarPadding = bottomBarPadding,
+                        )
+                    }
+                }
             }
 
-            // 3. User Profile Page (opened by tapping the User Avatar next to the Search bar)
-            showUserProfile -> {
+            // 3. User Profile Page (opened by tapping the User Avatar when logged in)
+            showUserProfile && storeRepository.isLoggedIn -> {
                 UserProfileScreen(
                     storeRepository = storeRepository,
                     onBack = { showUserProfile = false },
-                    onOpenStoreProject = { item -> openStoreProjectId = item.id },
-                    onCreateStoreProject = { storeFormMode = StoreFormMode.Create },
-                    onEditStoreProject = { item -> storeFormMode = StoreFormMode.Edit(item.id) },
+                    onLogout = {
+                        storeRepository.logout()
+                        showUserProfile = false
+                        showMessage(context.getString(R.string.auth_msg_logged_out))
+                    },
+                    onOpenCreateStoreProject = { storeFormMode = StoreFormMode.Create },
+                    onOpenEditStoreProject = { item -> storeFormMode = StoreFormMode.Edit(item.id) },
+                    onOpenViewStoreItem = { item -> openStoreProjectId = item.id },
                     bottomBarPadding = bottomBarPadding,
                 )
             }
@@ -402,16 +463,8 @@ fun WorkspaceScreen(
             activeTab == AppTab.StoreCode -> {
                 StoreCodeScreen(
                     storeRepository = storeRepository,
-                    onOpenProfile = { showUserProfile = true },
-                    onOpenStoreProject = { item -> openStoreProjectId = item.id },
-                    onUseSnippetAsProject = { snippet ->
-                        onSelectTab(AppTab.ProjectManager)
-                        projectPageMode = ProjectPageMode.Create(
-                            parentId = currentParentId,
-                            initialName = snippet.title,
-                            initialLanguage = snippet.language,
-                        )
-                    },
+                    onAvatarOrAuthClick = { handleAvatarOrAuthClick() },
+                    onOpenStoreItem = { item -> openStoreProjectId = item.id },
                     bottomBarPadding = bottomBarPadding,
                 )
             }
@@ -539,14 +592,14 @@ fun WorkspaceScreen(
                         onReplaySplash = onReplaySplash,
                     )
 
-                    // Top Search Bar + User Avatar (opens UserProfileScreen on tap)
+                    // Top Search Bar + User Avatar (opens UserProfileScreen or AuthBottomSheet on tap)
                     Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                         SearchAndUserTopBar(
                             query = searchQuery,
                             onQueryChange = { searchQuery = it },
                             avatarPath = storeRepository.userAvatarPath,
                             isLoggedIn = storeRepository.isLoggedIn,
-                            onAvatarClick = { showUserProfile = true },
+                            onAvatarClick = { handleAvatarOrAuthClick() },
                         )
                     }
 
@@ -648,6 +701,18 @@ fun WorkspaceScreen(
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 108.dp + bottomBarPadding, start = 24.dp, end = 24.dp),
+        )
+    }
+
+    if (showAuthBottomSheet) {
+        AuthBottomSheet(
+            storeRepository = storeRepository,
+            onDismiss = { showAuthBottomSheet = false },
+            onAuthenticated = {
+                showAuthBottomSheet = false
+                showUserProfile = true
+                showMessage(context.getString(R.string.auth_msg_logged_in, storeRepository.userName))
+            },
         )
     }
 
