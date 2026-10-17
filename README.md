@@ -18,9 +18,9 @@
 
 ## ✨ نظرة سريعة
 
-| الافتتاحية (Splash) | مساحة العمل |
-| :---: | :---: |
-| <img src="docs/splash_preview.png" width="310" /> | <img src="docs/workspace_preview.png" width="310" /> |
+| الافتتاحية (Splash) | مساحة العمل | تفاصيل المشروع |
+| :---: | :---: | :---: |
+| <img src="docs/splash_preview.png" width="240" /> | <img src="docs/workspace_preview.png" width="240" /> | <img src="docs/project_detail_preview.png" width="240" /> |
 
 مشروع Android كامل بواجهة عربية (RTL) وثيم داكن فضائي، يجمع بين:
 
@@ -40,8 +40,8 @@
 [**Releases**](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest) — بدون تسجيل دخول:
 
 ```
-IDE-Ultimate-1.1.0-release.apk   ← للاستخدام اليومي
-IDE-Ultimate-1.1.0-debug.apk     ← للتصحيح والتجارب
+IDE-Ultimate-1.2.0-release.apk   ← للاستخدام اليومي
+IDE-Ultimate-1.2.0-debug.apk     ← للتصحيح والتجارب
 ```
 
 **أو من خلال Actions:**
@@ -50,8 +50,8 @@ IDE-Ultimate-1.1.0-debug.apk     ← للتصحيح والتجارب
 2. اضغط **Run workflow** (أو انتظر تشغيله تلقائيًا بعد أي Push).
 3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`
    (يتطلب تسجيل الدخول إلى GitHub):
-   - `IDE-Ultimate-1.1.0-debug.apk`
-   - `IDE-Ultimate-1.1.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
+   - `IDE-Ultimate-1.2.0-debug.apk`
+   - `IDE-Ultimate-1.2.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
    - `checksums.txt`
    - تقرير اختبارات الوحدة (`unit-test-report`)
 
@@ -60,8 +60,8 @@ IDE-Ultimate-1.1.0-debug.apk     ← للتصحيح والتجارب
 لإنشاء **Release** تلقائي مع ملفات APK مرفقة:
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ---
@@ -76,9 +76,10 @@ git push origin v1.1.0
 | --- | --- |
 | زر **+** (FAB) | نافذة سفلية: **مجلد جديد** أو **مشروع جديد** في الموقع الحالي |
 | الضغط على مجلد | فتح المجلد وعرض محتواه + Breadcrumbs للرجوع |
-| الضغط على مشروع | نافذة سفلية: تعديل الاسم · تصدير ZIP · إنشاء مشروع جديد · حذف |
+| الضغط على مشروع | **فتح صفحة المشروع**: اسم الحزمة، الملفات المضمّنة، وأزرار تصدير/تعديل/حذف/إضافة |
+| الضغط المطوّل على مشروع | نافذة سفلية: تعديل الاسم · تصدير ZIP · إنشاء مشروع جديد · حذف |
 | **ضغط مطوّل** على مجلد | نافذة سفلية: تعديل الاسم · حذف (مع تحذير بعدد العناصر داخله) |
-| **ضغط مطوّل** على مشروع | نفس خيارات المشروع الأربعة |
+| زر **تخطي/رجوع** داخل المشروع | يعود إلى شبكة المجلد والمشاريع |
 | زر الرجوع | خطوة للخلف داخل المجلدات، ثم العودة للرئيسية |
 
 تفاصيل تقنية:
@@ -87,6 +88,8 @@ git push origin v1.1.0
 - **حفظ دائم** في `SharedPreferences` عبر `WorkspaceRepository` (شجرة `parentId`) — تبقى بعد إغلاق التطبيق.
 - **تحقق من الأسماء**: لا يُسمح باسم فارغ أو مكرر داخل نفس المجلد (حتى مع اختلاف حالة الأحرف).
 - **حذف آمن**: حذف المجلد يشمل كل ما بداخله، مع نافذة تأكيد تعرض عدد العناصر المتأثرة.
+- **صفحة تفاصيل المشروع**: تُفتح بالضغط على المشروع وتعرض اسم الحزمة (`applicationId`)،
+  قائمة الملفات السبع التي ستُضمَّن في الأرشيف، وأزرار **تصدير ZIP**، **تعديل الاسم**، **حذف**، و**إنشاء مشروع جديد**.
 - **تصدير ZIP حقيقي** (`ProjectZipExporter`): ملف قابل للفتح مباشرة في Android Studio يحتوي
   `settings.gradle.kts`، `build.gradle.kts`، `app/build.gradle.kts`، `AndroidManifest.xml`،
   `MainActivity.kt` (Compose)، الموارد، و`README.md` — مع اسم حزمة مشتق من اسم المشروع.
@@ -127,6 +130,7 @@ IDE-Ultimate/
 │  │     ├─ screens/SplashScreen.kt     # الافتتاحية المتحركة
 │  │     ├─ screens/HomeScreen.kt       # الواجهة الرئيسية
 │  │     ├─ screens/WorkspaceScreen.kt  # المتصفح + النوافذ السفلية
+│  │     ├─ screens/ProjectDetailScreen.kt # صفحة المشروع وملفاته
 │  │     └─ theme/                      # الألوان، الخطوط، Typography
 │  ├─ res/
 │  │  ├─ drawable/                    # شعارات Vector + AnimatedVector
@@ -217,9 +221,9 @@ experience: a nebula backdrop, a twinkling star field with an occasional shootin
 a slowly rotating code-hexagon logo, staged text reveals, and a gradient loader with a
 live status readout. It ships with a full adaptive launcher icon (including a monochrome
 layer for Android 13+), RTL-first Arabic UI, and a GitHub Actions workflow that builds
-debug + release APKs and uploads them as run artifacts. Version 1.1 adds a Workspace page
-with a folder/project grid, FAB bottom sheets, long-press rename/delete, and real ZIP export
-of a ready-to-open Gradle project (covered by JVM unit tests).
+debug + release APKs and uploads them as run artifacts. Version 1.2 adds a Workspace page
+with a folder/project grid, FAB bottom sheets, long-press rename/delete, a project detail page
+opened on tap, and real ZIP export of a ready-to-open Gradle project (covered by JVM unit tests).
 
 ```bash
 ./gradlew assembleDebug

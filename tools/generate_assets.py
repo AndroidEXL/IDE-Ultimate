@@ -485,8 +485,10 @@ def main():
     build_banner()
     build_workspace_preview()
     build_workspace_sheet_preview()
+    build_project_detail_preview()
     build_workspace_preview()
     build_workspace_sheet_preview()
+    build_project_detail_preview()
     print("Done.")
 
 
@@ -887,6 +889,92 @@ def build_workspace_sheet_preview():
     out = DOCS / "workspace_sheet_preview.png"
     base.convert("RGB").save(out, optimize=True)
     print(f"  docs/workspace_sheet_preview.png  {out.stat().st_size / 1024:.0f} KB")
+
+
+def build_project_detail_preview():
+    base = workspace_base("NotesApp", "مشروع Kotlin")
+
+    # Project hero card.
+    card = (48, 300, 1032, 900)
+    glass_panel(base, card, 60, CYAN)
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle((914, 336, 1000, 422), radius=28, fill=(255, 255, 255, 12),
+                        outline=CYAN + (90,), width=2)
+    paste_text(base, "</>", "jetbrains_mono_bold.ttf", 26, 957, 366, CYAN, align="center")
+
+    paste_text(base, "NotesApp", "almarai_bold.ttf", 44, 884, 342, INK, align="right")
+    paste_text(base, "جاهز للتصدير والبناء", "almarai_regular.ttf", 26, 884, 404, TEAL, align="right")
+
+    paste_text(base, "اسم الحزمة (applicationId)", "almarai_bold.ttf", 24, 960, 460, MUTED, align="right")
+    pkg = Image.new("RGBA", (840, 54), (0, 0, 0, 0))
+    ImageDraw.Draw(pkg).rounded_rectangle((0, 0, 839, 53), radius=14, fill=(7, 11, 28, 140))
+    base.alpha_composite(pkg, (96, 500))
+    paste_text(base, "com.ideultimate.projects.notesapp", "jetbrains_mono_medium.ttf", 26, 870, 510,
+               CYAN, align="right")
+
+    # Primary + icon buttons row.
+    grad = linear_gradient_rgba((560, 92), None, None, [VIOLET, (139, 92, 246), (217, 70, 239)])
+    btn = Image.new("RGBA", (560, 92), (0, 0, 0, 0))
+    btn.paste(grad, (0, 0), rounded_mask((560, 92), 30))
+    base.alpha_composite(btn, (470, 596))
+    paste_text(base, "تصدير ZIP", "almarai_bold.ttf", 30, 750, 618, (255, 255, 255), align="center")
+
+    icons_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    icons_layer_draw = ImageDraw.Draw(icons_layer)
+    for index, cx in enumerate([400, 320, 240]):
+        icons_layer_draw.ellipse((cx - 44, 620, cx + 44, 708), fill=(255, 255, 255, 17),
+                                 outline=(255, 255, 255, 40), width=2)
+        icon_center = (cx, 664)
+        if index == 0:
+            icons_layer_draw.line((cx - 16, 646, cx + 16, 646), fill=INK + (255,), width=6)
+            icons_layer_draw.line((cx + 16, 646, cx + 16, 682), fill=INK + (255,), width=6)
+            icons_layer_draw.line((cx + 16, 682, cx - 16, 682), fill=INK + (255,), width=6)
+            icons_layer_draw.line((cx - 16, 682, cx - 16, 646), fill=INK + (255,), width=6)
+            icons_layer_draw.line((cx, 660, cx, 680), fill=INK + (255,), width=6)
+        elif index == 1:
+            icons_layer_draw.line((cx + 14, 646, cx - 6, 670), fill=INK + (255,), width=6)
+            icons_layer_draw.polygon([(cx - 14, 678), (cx - 2, 673), (cx - 10, 664)], fill=INK + (255,))
+        else:
+            icons_layer_draw.rounded_rectangle((cx - 16, 654, cx + 16, 682), radius=5,
+                                               outline=INK + (255,), width=5)
+            icons_layer_draw.line((cx - 22, 646, cx + 22, 646), fill=INK + (255,), width=5)
+            icons_layer_draw.line((cx - 8, 638, cx + 8, 638), fill=INK + (255,), width=5)
+    base.alpha_composite(icons_layer)
+
+    paste_text(base, "سيُصدَّر مشروع Gradle كامل يمكن فتحه مباشرة في Android Studio.",
+               "almarai_regular.ttf", 22, 960, 742, MUTED, align="right", max_width=860)
+
+    # Files section.
+    heading_w = paste_text(base, "ملفات المشروع", "almarai_bold.ttf", 38, 1000, 950, INK, align="right")
+    chip = Image.new("RGBA", (64, 44), (0, 0, 0, 0))
+    ImageDraw.Draw(chip).rounded_rectangle((0, 0, 63, 43), radius=22, fill=CYAN + (30,), outline=CYAN + (80,), width=2)
+    chip_x = 1000 - heading_w - 22 - 64
+    base.alpha_composite(chip, (chip_x, 952))
+    paste_text(base, "7", "jetbrains_mono_medium.ttf", 24, chip_x + 32, 959, CYAN, align="center")
+    paste_text(base, "هذه الملفات تُضمَّن داخل ملف الـ ZIP.", "almarai_regular.ttf", 24, 1000, 1010, MUTED, align="right")
+
+    files = [
+        ("إعدادات المشروع", "settings.gradle.kts", "KTS", CYAN),
+        ("إعدادات البناء الرئيسية", "build.gradle.kts", "KTS", VIOLET_SOFT),
+        ("إعدادات بناء التطبيق", "app/build.gradle.kts", "KTS", FUCHSIA),
+        ("بيان التطبيق", "app/src/main/AndroidManifest.xml", "XML", VIOLET_SOFT),
+        ("الشاشة الرئيسية", "app/src/main/java/.../MainActivity.kt", "KT", TEAL),
+    ]
+
+    y = 1070
+    for label, path, badge, tint in files:
+        glass_panel(base, (48, y, 1032, y + 116), 32, None)
+        d.rounded_rectangle((938, y + 32, 1000, y + 84), radius=16, fill=tint + (34,), outline=tint + (70,), width=2)
+        paste_text(base, badge, "jetbrains_mono_bold.ttf", 18, 969, y + 48, tint, align="center")
+        paste_text(base, label, "almarai_bold.ttf", 30, 910, y + 22, INK, align="right")
+        paste_text(base, path, "jetbrains_mono_regular.ttf", 18, 910, y + 68, MUTED, align="right")
+        y += 128
+
+    draw_fab(base, 0, 0, 0) if False else None
+
+    out = DOCS / "project_detail_preview.png"
+    base.convert("RGB").save(out, optimize=True)
+    print(f"  docs/project_detail_preview.png  {out.stat().st_size / 1024:.0f} KB")
 
 
 if __name__ == "__main__":

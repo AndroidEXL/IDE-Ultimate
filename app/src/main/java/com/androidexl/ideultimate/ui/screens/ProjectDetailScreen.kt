@@ -71,7 +71,7 @@ private fun projectFiles(packageName: String): List<ProjectFile> {
         ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
         ProjectFile("build.gradle.kts", R.string.project_file_root_build, "KTS", VioletSoft),
         ProjectFile("app/build.gradle.kts", R.string.project_file_app_build, "KTS", Fuchsia),
-        ProjectFile("app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", VioletSoft),
+        ProjectFile("app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
         ProjectFile(
             "app/src/main/java/$packagePath/MainActivity.kt",
             R.string.project_file_code,
