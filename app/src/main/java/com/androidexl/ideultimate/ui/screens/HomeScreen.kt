@@ -379,7 +379,7 @@ private fun WorkspaceCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Kotlin • Compose • 1.7.0",
+                    text = "Kotlin • Compose • 1.8.0",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = Muted,
                 )

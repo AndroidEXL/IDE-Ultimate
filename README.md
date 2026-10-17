@@ -41,8 +41,8 @@
 [**Releases**](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest) — بدون تسجيل دخول:
 
 ```
-IDE-Ultimate-1.7.0-release.apk   ← للاستخدام اليومي
-IDE-Ultimate-1.7.0-debug.apk     ← للتصحيح والتجارب
+IDE-Ultimate-1.8.0-release.apk   ← للاستخدام اليومي
+IDE-Ultimate-1.8.0-debug.apk     ← للتصحيح والتجارب
 ```
 
 **أو من خلال Actions:**
@@ -51,8 +51,8 @@ IDE-Ultimate-1.7.0-debug.apk     ← للتصحيح والتجارب
 2. اضغط **Run workflow** (أو انتظر تشغيله تلقائيًا بعد أي Push).
 3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`
    (يتطلب تسجيل الدخول إلى GitHub):
-   - `IDE-Ultimate-1.7.0-debug.apk`
-   - `IDE-Ultimate-1.7.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح العرض الثابت)
+   - `IDE-Ultimate-1.8.0-debug.apk`
+   - `IDE-Ultimate-1.8.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح العرض الثابت)
    - `checksums.txt`
    - تقرير اختبارات الوحدة (`unit-test-report`)
 
@@ -68,8 +68,8 @@ IDE-Ultimate-1.7.0-debug.apk     ← للتصحيح والتجارب
 لإنشاء **Release** تلقائي مع ملفات APK مرفقة:
 
 ```bash
-git tag v1.7.0
-git push origin v1.7.0
+git tag v1.8.0
+git push origin v1.8.0
 ```
 
 ---

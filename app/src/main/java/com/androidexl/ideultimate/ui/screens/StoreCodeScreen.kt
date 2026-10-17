@@ -154,6 +154,14 @@ fun StoreCodeScreen(
 
         Spacer(Modifier.height(10.dp))
 
+        FirebaseRealtimeStatusBar(
+            projectId = storeRepository.firebaseProjectId,
+            databaseUrl = storeRepository.firebaseDatabaseUrl,
+            isConnected = storeRepository.isFirebaseConnected,
+        )
+
+        Spacer(Modifier.height(10.dp))
+
         // Language Filter Chips
         Row(
             modifier = Modifier
@@ -776,6 +784,56 @@ fun CustomLibraryCard(
                     color = Color.White,
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun FirebaseRealtimeStatusBar(
+    projectId: String,
+    databaseUrl: String,
+    isConnected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val dotColor = if (isConnected) Teal else Cyan
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0x16090F26))
+                .border(1.dp, dotColor.copy(alpha = 0.38f), RoundedCornerShape(14.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(dotColor),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Firebase RTDB • $projectId",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Ink,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = databaseUrl.removePrefix("https://"),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 10.sp,
+                ),
+                color = dotColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
