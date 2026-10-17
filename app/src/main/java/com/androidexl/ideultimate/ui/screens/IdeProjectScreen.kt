@@ -2,13 +2,16 @@ package com.androidexl.ideultimate.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -130,6 +134,136 @@ private enum class IdeProjectTab(val title: String) {
     EMULATOR("Emulator"),
 }
 
+private enum class IdeBuildMethod(
+    val title: String,
+    val descriptionAr: String,
+    val badgeColor: Color,
+    val commandPreview: String,
+) {
+    GRADLE(
+        title = "Gradle",
+        descriptionAr = "بناء المشروع الكامل عبر محرك Android Gradle الرسمي (:app:assembleDebug)",
+        badgeColor = Color(0xFF34D399),
+        commandPreview = "./gradlew :app:assembleDebug --parallel",
+    ),
+    GITHUB_ACTIONS(
+        title = "GitHub Actions",
+        descriptionAr = "بناء سحابي متكامل عبر سير عمل GitHub Actions CI/CD",
+        badgeColor = Color(0xFF38BDF8),
+        commandPreview = "gh workflow run build-apk.yml --ref main",
+    ),
+    SIMPLE(
+        title = "Simple",
+        descriptionAr = "بناء سريع خفيف ومعاينة فورية مباشرة داخل IDE Ultimate",
+        badgeColor = Color(0xFFA78BFA),
+        commandPreview = "ide-simple-compiler --fast-preview",
+    ),
+}
+
+private enum class IdeSideMenuItem(
+    val title: String,
+    val subtitleAr: String,
+    val badgeText: String,
+    val accentColor: Color,
+) {
+    LIBRARY_MANAGER(
+        title = "Library Manager",
+        subtitleAr = "إدارة مكتبات AndroidX و Material و AppCompat",
+        badgeText = "LIB",
+        accentColor = Color(0xFF38BDF8),
+    ),
+    ICON_MANAGER(
+        title = "Icon Manager",
+        subtitleAr = "إدارة أيقونات التطبيق و Vector Drawables",
+        badgeText = "ICO",
+        accentColor = Color(0xFFF472B6),
+    ),
+    SOUND_MANAGER(
+        title = "Sound Manager",
+        subtitleAr = "إدارة الملفات الصوتية والمؤثرات داخل res/raw",
+        badgeText = "SND",
+        accentColor = Color(0xFFFBBF24),
+    ),
+    FONT_MANAGER(
+        title = "Font Manager",
+        subtitleAr = "إدارة خطوط التطبيق المخصصة داخل res/font",
+        badgeText = "FNT",
+        accentColor = Color(0xFFA78BFA),
+    ),
+    RESOURCES_MANAGER(
+        title = "Resources Manager",
+        subtitleAr = "إدارة كافة موارد المشروع (drawable / raw / mipmap)",
+        badgeText = "RES",
+        accentColor = Color(0xFF34D399),
+    ),
+    TERMINAL_ANDROID(
+        title = "Terminal Android",
+        subtitleAr = "طرفية أوامر Android Shell و Gradle المدمجة",
+        badgeText = "SH",
+        accentColor = Color(0xFF2DD4BF),
+    ),
+    ACTIVITY_MANAGER(
+        title = "Activity Manager",
+        subtitleAr = "إدارة صفحات النشاطات (Activities) وملفات XML",
+        badgeText = "ACT",
+        accentColor = Color(0xFF60A5FA),
+    ),
+    ANDROID_MANIFEST_MANAGER(
+        title = "Android Menifaset Manager",
+        subtitleAr = "تحرير ومعاينة ملف AndroidManifest.xml للمشروع",
+        badgeText = "XML",
+        accentColor = Color(0xFFFB923C),
+    ),
+    PERMISSION_MANAGER(
+        title = "Permission Manager",
+        subtitleAr = "إدارة أذونات وصلاحيات النظام (uses-permission)",
+        badgeText = "PRM",
+        accentColor = Color(0xFFF87171),
+    ),
+    SECURITY_MANAGER(
+        title = "Security Manager",
+        subtitleAr = "إدارة التوقيع الرقمي Keystore وقواعد الحماية ProGuard",
+        badgeText = "SEC",
+        accentColor = Color(0xFF10B981),
+    ),
+    FILES_MANAGER(
+        title = "Files Manager",
+        subtitleAr = "متصفح ملفات ومجلدات المشروع على الذاكرة",
+        badgeText = "DIR",
+        accentColor = Color(0xFF38BDF8),
+    ),
+    STRINGS_TRANSLATION(
+        title = "Strings Translation",
+        subtitleAr = "إدارة النصوص والترجمات متعدّدة اللغات strings.xml",
+        badgeText = "STR",
+        accentColor = Color(0xFFE879F9),
+    ),
+    VALUES_MANAGER(
+        title = "Values Manager",
+        subtitleAr = "إدارة الألوان والأبعاد والأنماط (colors / styles / dimens)",
+        badgeText = "VAL",
+        accentColor = Color(0xFF818CF8),
+    ),
+    LOGCAT_READER_APP(
+        title = "Logcat Reder App",
+        subtitleAr = "قارئ سجلات التطبيق المباشر (Application Logcat)",
+        badgeText = "LOG",
+        accentColor = Color(0xFF22D3EE),
+    ),
+    LOGCAT_SYSTEM(
+        title = "Logcat System",
+        subtitleAr = "سجلات النظام الكاملة وتتبع الأعطال (System Logcat)",
+        badgeText = "SYS",
+        accentColor = Color(0xFFF59E0B),
+    ),
+    COLLECTION_MANAGER(
+        title = "Collection Manager",
+        subtitleAr = "مجموعات العناصر والبلوكات والأكواد المحفوظة",
+        badgeText = "COL",
+        accentColor = Color(0xFFC084FC),
+    ),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IdeProjectScreen(
@@ -223,6 +357,16 @@ fun IdeProjectScreen(
     var showXmlBottomSheet by rememberSaveable { mutableStateOf(false) }
     var showAddXmlDialog by rememberSaveable { mutableStateOf(false) }
     var showTempRunScreen by rememberSaveable { mutableStateOf(false) }
+    var showBuildMethodSheet by rememberSaveable { mutableStateOf(false) }
+    var showSideMenuDrawer by rememberSaveable { mutableStateOf(false) }
+    var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
+
+    var selectedBuildMethodName by rememberSaveable(project.id) {
+        mutableStateOf(repository.getBuildMethodForProject(project.id))
+    }
+    val selectedBuildMethod = remember(selectedBuildMethodName) {
+        IdeBuildMethod.fromName(selectedBuildMethodName)
+    }
 
     var selectedWidgetUid by remember(project.id, selectedXmlPage.xmlFileName) {
         mutableStateOf<String?>(null)
@@ -238,6 +382,9 @@ fun IdeProjectScreen(
 
     BackHandler {
         when {
+            activeSideMenuItem != null -> activeSideMenuItem = null
+            showSideMenuDrawer -> showSideMenuDrawer = false
+            showBuildMethodSheet -> showBuildMethodSheet = false
             showTempRunScreen -> showTempRunScreen = false
             selectedWidgetUid != null -> selectedWidgetUid = null
             else -> onBack()
@@ -249,6 +396,11 @@ fun IdeProjectScreen(
             project = project,
             activeXmlPage = selectedXmlPage,
             widgetNodes = widgetNodes,
+            buildMethod = selectedBuildMethod,
+            onChangeBuildMethod = { method ->
+                selectedBuildMethodName = method.name
+                repository.setBuildMethodForProject(project.id, method.name)
+            },
             onClose = { showTempRunScreen = false },
             modifier = modifier,
         )
@@ -256,159 +408,179 @@ fun IdeProjectScreen(
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(DeepNavy)
                 .safeDrawingPadding(),
         ) {
-            // 1. Top Toolbar: Back Arrow + Project Icon + Project Name/Version + Undo / Redo / Save / More
-            IdeSketchTopBar(
-                project = project,
-                canUndo = undoStack.isNotEmpty(),
-                canRedo = redoStack.isNotEmpty(),
-                onBack = onBack,
-                onUndo = { handleUndo() },
-                onRedo = { handleRedo() },
-                onSave = {
-                    repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
-                    repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, codeText)
-                },
-            )
-
-            // 2. 3-Tabs Bar (View | Logic | Emulator) with active bottom indicator line
-            IdeSketchTabsBar(
-                activeTab = activeTab,
-                onSelectTab = { tab ->
-                    selectedWidgetUid = null
-                    activeTabName = tab.name
-                },
-            )
-
-            // 3. Main Content Area
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+            Column(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                when (activeTab) {
-                    IdeProjectTab.VIEW -> {
-                        IdeViewDesigner(
-                            project = project,
-                            xmlPage = selectedXmlPage,
-                            widgetNodes = widgetNodes,
-                            selectedWidgetUid = selectedWidgetUid,
-                            onSelectWidgetUid = { selectedWidgetUid = it },
-                            onDraggingStateChange = { isDraggingWidget = it },
-                            onRequestEditTextView = { editingTextViewNode = it },
-                            onUpdateWidgets = { updateWidgetNodes(it) },
-                        )
-                    }
+                // 1. Top Toolbar: Back Arrow + Project Icon + Project Name/Version + Undo / Redo / Save / More (Side Menu)
+                IdeSketchTopBar(
+                    project = project,
+                    canUndo = undoStack.isNotEmpty(),
+                    canRedo = redoStack.isNotEmpty(),
+                    onBack = onBack,
+                    onUndo = { handleUndo() },
+                    onRedo = { handleRedo() },
+                    onSave = {
+                        repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
+                        repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, codeText)
+                    },
+                    onMoreClick = {
+                        showSideMenuDrawer = true
+                    },
+                )
 
-                    IdeProjectTab.LOGIC -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                        ) {
-                            IdeLogicCodeEditor(
+                // 2. 3-Tabs Bar (View | Logic | Emulator) with active bottom indicator line
+                IdeSketchTabsBar(
+                    activeTab = activeTab,
+                    onSelectTab = { tab ->
+                        selectedWidgetUid = null
+                        activeTabName = tab.name
+                    },
+                )
+
+                // 3. Main Content Area
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                ) {
+                    when (activeTab) {
+                        IdeProjectTab.VIEW -> {
+                            IdeViewDesigner(
                                 project = project,
                                 xmlPage = selectedXmlPage,
-                                activeFlavor = activeFlavor,
-                                onSelectFlavor = { flavor ->
-                                    activeFlavorName = flavor.name
-                                    codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
-                                },
-                                code = codeText,
-                                onCodeChange = { updated ->
-                                    codeText = updated
-                                    repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
-                                },
+                                widgetNodes = widgetNodes,
+                                selectedWidgetUid = selectedWidgetUid,
+                                onSelectWidgetUid = { selectedWidgetUid = it },
+                                onDraggingStateChange = { isDraggingWidget = it },
+                                onRequestEditTextView = { editingTextViewNode = it },
+                                onUpdateWidgets = { updateWidgetNodes(it) },
                             )
                         }
-                    }
 
-                    IdeProjectTab.EMULATOR -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(14.dp),
-                        ) {
-                            IdeEmptyWorkspaceCanvas()
+                        IdeProjectTab.LOGIC -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                            ) {
+                                IdeLogicCodeEditor(
+                                    project = project,
+                                    xmlPage = selectedXmlPage,
+                                    activeFlavor = activeFlavor,
+                                    onSelectFlavor = { flavor ->
+                                        activeFlavorName = flavor.name
+                                        codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
+                                    },
+                                    code = codeText,
+                                    onCodeChange = { updated ->
+                                        codeText = updated
+                                        repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeProjectTab.EMULATOR -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(14.dp),
+                            ) {
+                                IdeEmptyWorkspaceCanvas()
+                            }
                         }
                     }
                 }
+
+                // 4. Bottom Bar:
+                // When a widget is dropped or selected in View tab (and not actively dragging),
+                // show the Sketchware-style Bottom Widget Property Panel.
+                // Otherwise show the XML/Activity Selector Pill + Split Run Button.
+                if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
+                    IdeWidgetPropertyBottomPanel(
+                        node = selectedNode,
+                        allWidgets = flattenAllNodes(widgetNodes),
+                        onSelectOtherWidget = { selectedWidgetUid = it.uid },
+                        onMoveUp = {
+                            updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
+                        },
+                        onCollapse = { selectedWidgetUid = null },
+                        onDelete = {
+                            updateWidgetNodes(removeNodeByUid(widgetNodes, selectedNode.uid))
+                            selectedWidgetUid = null
+                        },
+                        onSave = {
+                            repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
+                        },
+                        onEditIdOrCustomAttr = { editingIdNode = selectedNode },
+                        onConvertWidget = {
+                            val convertedType = when (selectedNode.type) {
+                                IdeWidgetType.LINEAR_H -> IdeWidgetType.LINEAR_V
+                                IdeWidgetType.LINEAR_V -> IdeWidgetType.LINEAR_H
+                                IdeWidgetType.SCROLL_H -> IdeWidgetType.SCROLL_V
+                                IdeWidgetType.SCROLL_V -> IdeWidgetType.SCROLL_H
+                                IdeWidgetType.TEXT_VIEW -> IdeWidgetType.TEXT_VIEW
+                            }
+                            if (convertedType != selectedNode.type) {
+                                updateWidgetNodes(
+                                    updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(type = convertedType) },
+                                )
+                            } else {
+                                editingTextViewNode = selectedNode
+                            }
+                        },
+                        onEditWidth = { editingSizeNode = selectedNode to true },
+                        onEditHeight = { editingSizeNode = selectedNode to false },
+                        onEditText = { editingTextViewNode = selectedNode },
+                        onCycleTextSize = {
+                            val sizes = listOf(12, 14, 16, 18, 20, 24)
+                            val nextSize = sizes[(sizes.indexOf(selectedNode.textSizeSp) + 1) % sizes.size]
+                            updateWidgetNodes(
+                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(textSizeSp = nextSize) },
+                            )
+                        },
+                        onCyclePadding = {
+                            val pads = listOf(0, 4, 8, 12, 16)
+                            val nextPad = pads[(pads.indexOf(selectedNode.paddingDp) + 1) % pads.size]
+                            updateWidgetNodes(
+                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(paddingDp = nextPad) },
+                            )
+                        },
+                        onOpenLogicEvent = {
+                            selectedWidgetUid = null
+                            activeTabName = IdeProjectTab.LOGIC.name
+                        },
+                        bottomBarPadding = bottomBarPadding,
+                    )
+                } else {
+                    IdeSketchBottomBar(
+                        activeTab = activeTab,
+                        xmlPage = selectedXmlPage,
+                        selectedBuildMethod = selectedBuildMethod,
+                        onOpenPageSelector = { showXmlBottomSheet = true },
+                        onRunClick = { showTempRunScreen = true },
+                        onRunLongClick = { showBuildMethodSheet = true },
+                        bottomBarPadding = bottomBarPadding,
+                    )
+                }
             }
 
-            // 4. Bottom Bar:
-            // When a widget is dropped or selected in View tab (and not actively dragging),
-            // show the Sketchware-style Bottom Widget Property Panel (matching video frames 1.3s-1.7s & 5.4s-6.2s).
-            // Otherwise show the XML/Activity Selector Pill + Split Run Button.
-            if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
-                IdeWidgetPropertyBottomPanel(
-                    node = selectedNode,
-                    allWidgets = flattenAllNodes(widgetNodes),
-                    onSelectOtherWidget = { selectedWidgetUid = it.uid },
-                    onMoveUp = {
-                        updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
-                    },
-                    onCollapse = { selectedWidgetUid = null },
-                    onDelete = {
-                        updateWidgetNodes(removeNodeByUid(widgetNodes, selectedNode.uid))
-                        selectedWidgetUid = null
-                    },
-                    onSave = {
-                        repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
-                    },
-                    onEditIdOrCustomAttr = { editingIdNode = selectedNode },
-                    onConvertWidget = {
-                        val convertedType = when (selectedNode.type) {
-                            IdeWidgetType.LINEAR_H -> IdeWidgetType.LINEAR_V
-                            IdeWidgetType.LINEAR_V -> IdeWidgetType.LINEAR_H
-                            IdeWidgetType.SCROLL_H -> IdeWidgetType.SCROLL_V
-                            IdeWidgetType.SCROLL_V -> IdeWidgetType.SCROLL_H
-                            IdeWidgetType.TEXT_VIEW -> IdeWidgetType.TEXT_VIEW
-                        }
-                        if (convertedType != selectedNode.type) {
-                            updateWidgetNodes(
-                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(type = convertedType) },
-                            )
-                        } else {
-                            editingTextViewNode = selectedNode
-                        }
-                    },
-                    onEditWidth = { editingSizeNode = selectedNode to true },
-                    onEditHeight = { editingSizeNode = selectedNode to false },
-                    onEditText = { editingTextViewNode = selectedNode },
-                    onCycleTextSize = {
-                        val sizes = listOf(12, 14, 16, 18, 20, 24)
-                        val nextSize = sizes[(sizes.indexOf(selectedNode.textSizeSp) + 1) % sizes.size]
-                        updateWidgetNodes(
-                            updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(textSizeSp = nextSize) },
-                        )
-                    },
-                    onCyclePadding = {
-                        val pads = listOf(0, 4, 8, 12, 16)
-                        val nextPad = pads[(pads.indexOf(selectedNode.paddingDp) + 1) % pads.size]
-                        updateWidgetNodes(
-                            updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(paddingDp = nextPad) },
-                        )
-                    },
-                    onOpenLogicEvent = {
-                        selectedWidgetUid = null
-                        activeTabName = IdeProjectTab.LOGIC.name
-                    },
-                    bottomBarPadding = bottomBarPadding,
-                )
-            } else {
-                IdeSketchBottomBar(
-                    activeTab = activeTab,
-                    xmlPage = selectedXmlPage,
-                    onOpenPageSelector = { showXmlBottomSheet = true },
-                    onRunClick = { showTempRunScreen = true },
-                    bottomBarPadding = bottomBarPadding,
-                )
-            }
+            // 5. Side Drawer Menu opened via 3-dots (⋮) button in Top Bar
+            IdeProjectSideDrawer(
+                visible = showSideMenuDrawer,
+                project = project,
+                onDismiss = { showSideMenuDrawer = false },
+                onSelectItem = { item ->
+                    showSideMenuDrawer = false
+                    activeSideMenuItem = item
+                },
+            )
         }
     }
 
@@ -558,6 +730,29 @@ fun IdeProjectScreen(
             },
         )
     }
+
+    // Bottom Sheet for Run button Long-Press: Select Build Method (Gradle, GitHub Actions, Simple)
+    if (showBuildMethodSheet) {
+        BuildMethodBottomSheet(
+            selectedMethod = selectedBuildMethod,
+            onSelectMethod = { chosen ->
+                selectedBuildMethodName = chosen.name
+                repository.setBuildMethodForProject(project.id, chosen.name)
+                showBuildMethodSheet = false
+            },
+            onDismiss = { showBuildMethodSheet = false },
+        )
+    }
+
+    // Dialog / Manager view when a Side Menu item is tapped
+    val currentMenuItem = activeSideMenuItem
+    if (currentMenuItem != null) {
+        IdeSideMenuManagerDialog(
+            project = project,
+            menuItem = currentMenuItem,
+            onDismiss = { activeSideMenuItem = null },
+        )
+    }
 }
 
 // ============================================================================
@@ -573,6 +768,7 @@ private fun IdeSketchTopBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSave: () -> Unit,
+    onMoreClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -708,14 +904,15 @@ private fun IdeSketchTopBar(
             }
         }
 
+        // 3-Dots Icon (MoreVert) -> Opens the Side Menu Drawer
         Icon(
             imageVector = Icons.Filled.MoreVert,
-            contentDescription = null,
-            tint = Ink.copy(alpha = 0.85f),
+            contentDescription = "Side Menu",
+            tint = Ink.copy(alpha = 0.88f),
             modifier = Modifier
-                .size(32.dp)
+                .size(34.dp)
                 .clip(CircleShape)
-                .clickable(onClick = onSave)
+                .clickable(onClick = onMoreClick)
                 .padding(5.dp),
         )
     }
@@ -992,12 +1189,13 @@ private fun IdeViewDesigner(
                     .fillMaxHeight(),
             )
 
-            // Right Phone Frame Area: stays in fixed position (no top bar pushing it down)
-            Column(
+            // Right Phone Frame Area: shortened vertical height (طول الفريم أقصر ومتناسق)
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 14.dp),
+                    .padding(start = 8.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                contentAlignment = Alignment.TopCenter,
             ) {
                 PhoneFrameWhiteCanvas(
                     project = project,
@@ -1042,7 +1240,7 @@ private fun IdeViewDesigner(
                     onTapEmptyWhiteArea = { currentOnSelectWidgetUid(null) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .fillMaxHeight(0.76f),
                 )
             }
         }
@@ -2377,12 +2575,15 @@ private fun SketchPropertySquareCard(
 // 3. Bottom Bar Matching Screenshot Layout (Left XML Pill + Right Run Split Pill)
 // ============================================================================
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun IdeSketchBottomBar(
     activeTab: IdeProjectTab,
     xmlPage: ProjectXmlPage,
+    selectedBuildMethod: IdeBuildMethod,
     onOpenPageSelector: () -> Unit,
     onRunClick: () -> Unit,
+    onRunLongClick: () -> Unit,
     bottomBarPadding: Dp = 0.dp,
 ) {
     Row(
@@ -2449,7 +2650,8 @@ private fun IdeSketchBottomBar(
             )
         }
 
-        // Right Split Run Button (`▷ Run` + `⌄`) matching screenshot proportions
+        // Right Split Run Button (`▷ Run` + `⌄`)
+        // Tap = Run with active build method; Long-press = open Build Method BottomSheet (Gradle / GitHub Actions / Simple)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -2457,7 +2659,7 @@ private fun IdeSketchBottomBar(
             Row(
                 modifier = Modifier
                     .height(40.dp)
-                    .width(108.dp)
+                    .widthIn(min = 114.dp)
                     .clip(
                         RoundedCornerShape(
                             topStart = 20.dp,
@@ -2473,7 +2675,7 @@ private fun IdeSketchBottomBar(
                     )
                     .border(
                         width = 1.dp,
-                        color = Cyan.copy(alpha = 0.40f),
+                        color = Cyan.copy(alpha = 0.45f),
                         shape = RoundedCornerShape(
                             topStart = 20.dp,
                             bottomStart = 20.dp,
@@ -2481,7 +2683,11 @@ private fun IdeSketchBottomBar(
                             bottomEnd = 4.dp,
                         ),
                     )
-                    .clickable(onClick = onRunClick),
+                    .combinedClickable(
+                        onClick = onRunClick,
+                        onLongClick = onRunLongClick,
+                    )
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
@@ -2492,14 +2698,31 @@ private fun IdeSketchBottomBar(
                     modifier = Modifier.size(17.dp),
                 )
                 Spacer(Modifier.width(5.dp))
-                Text(
-                    text = stringResource(R.string.ide_run_button),
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = Color.White,
-                )
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ide_run_button),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 12.5.sp,
+                            lineHeight = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Color.White,
+                    )
+                    Text(
+                        text = selectedBuildMethod.title,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 8.5.sp,
+                            lineHeight = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = Cyan,
+                        maxLines = 1,
+                    )
+                }
             }
 
             Box(
@@ -2525,12 +2748,15 @@ private fun IdeSketchBottomBar(
                             bottomEnd = 10.dp,
                         ),
                     )
-                    .clickable(onClick = onOpenPageSelector),
+                    .combinedClickable(
+                        onClick = onRunLongClick,
+                        onLongClick = onRunLongClick,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
+                    contentDescription = "Build Method",
                     tint = Color.White,
                     modifier = Modifier.size(18.dp),
                 )
@@ -3206,10 +3432,18 @@ private fun TemporaryRunScreen(
     project: WorkspaceItem,
     activeXmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
+    buildMethod: IdeBuildMethod,
+    onChangeBuildMethod: (IdeBuildMethod) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val langAccent = languageColor(project.language)
+    val methodAccent = when (buildMethod) {
+        IdeBuildMethod.GRADLE -> Teal
+        IdeBuildMethod.GITHUB_ACTIONS -> Cyan
+        IdeBuildMethod.SIMPLE -> Amber
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -3243,14 +3477,126 @@ private fun TemporaryRunScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = stringResource(R.string.ide_temp_run_subtitle),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
-                    color = Teal,
+                    text = "Running via ${buildMethod.title} • ${buildMethod.badge}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = methodAccent,
                 )
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // Build Method Status Banner (clearly tells the user which build method is active)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF0E1636))
+                    .border(1.dp, methodAccent.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(methodAccent),
+                        )
+                        Text(
+                            text = "Build Method: ${buildMethod.title}",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(methodAccent.copy(alpha = 0.16f))
+                            .border(1.dp, methodAccent.copy(alpha = 0.45f), RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = buildMethod.badge,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = methodAccent,
+                        )
+                    }
+                }
+
+                Text(
+                    text = buildMethod.subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                    ),
+                    color = Muted,
+                )
+
+                // Quick switcher pills inside Run screen as well
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    IdeBuildMethod.entries.forEach { method ->
+                        val active = method == buildMethod
+                        val chipColor = when (method) {
+                            IdeBuildMethod.GRADLE -> Teal
+                            IdeBuildMethod.GITHUB_ACTIONS -> Cyan
+                            IdeBuildMethod.SIMPLE -> Amber
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) chipColor.copy(alpha = 0.20f) else Color(0x14FFFFFF))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (active) chipColor else Color(0x26FFFFFF),
+                                    shape = RoundedCornerShape(10.dp),
+                                )
+                                .clickable { onChangeBuildMethod(method) }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = method.title,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                ),
+                                color = if (active) chipColor else Ink.copy(alpha = 0.78f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         Box(
             modifier = Modifier
@@ -3267,7 +3613,7 @@ private fun TemporaryRunScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = stringResource(R.string.ide_temp_run_title),
+                        text = "${stringResource(R.string.ide_temp_run_title)} (${buildMethod.title})",
                         style = MaterialTheme.typography.titleMedium,
                         color = Ink,
                         textAlign = TextAlign.Center,
@@ -3282,7 +3628,7 @@ private fun TemporaryRunScreen(
                                 .padding(horizontal = 12.dp, vertical = 5.dp),
                         ) {
                             Text(
-                                text = "${activeXmlPage.activityName}  •  ${activeXmlPage.xmlFileName}",
+                                text = "${activeXmlPage.activityName}  •  ${activeXmlPage.xmlFileName}  •  [${buildMethod.title}]",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 10.5.sp,
@@ -3298,7 +3644,7 @@ private fun TemporaryRunScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 180.dp, max = 320.dp)
+                                .heightIn(min = 180.dp, max = 300.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Color.White)
                                 .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
@@ -3307,7 +3653,7 @@ private fun TemporaryRunScreen(
                         ) {
                             if (widgetNodes.isEmpty()) {
                                 Text(
-                                    text = "${project.name} - ${activeXmlPage.activityName}",
+                                    text = "${project.name} - ${activeXmlPage.activityName} (${buildMethod.title})",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                     ),
@@ -3347,6 +3693,437 @@ private fun TemporaryRunScreen(
             }
         }
     }
+}
+
+// ============================================================================
+// 5. Build Method Bottom Sheet (Opened on Long-Press of Run Button)
+//    Options: Gradle | GitHub Actions | Simple
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BuildMethodBottomSheet(
+    selectedMethod: IdeBuildMethod,
+    onSelectMethod: (IdeBuildMethod) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Select Build Method",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "Choose how Run compiles & builds your Android project",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = Muted,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Cyan.copy(alpha = 0.14f))
+                            .border(1.dp, Cyan.copy(alpha = 0.40f), RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = selectedMethod.title,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                IdeBuildMethod.entries.forEach { method ->
+                    val isSelected = method == selectedMethod
+                    val methodAccent = when (method) {
+                        IdeBuildMethod.GRADLE -> Teal
+                        IdeBuildMethod.GITHUB_ACTIONS -> Cyan
+                        IdeBuildMethod.SIMPLE -> Amber
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (isSelected) methodAccent.copy(alpha = 0.15f) else Color(0xFF131B3A),
+                            )
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) methodAccent else Color(0x26FFFFFF),
+                                shape = RoundedCornerShape(16.dp),
+                            )
+                            .clickable { onSelectMethod(method) }
+                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        // Method Badge Icon
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(methodAccent.copy(alpha = 0.18f))
+                                .border(1.dp, methodAccent.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = methodAccent,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = method.title,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = if (isSelected) methodAccent else Ink,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0x24FFFFFF))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = method.badge,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.sp,
+                                        ),
+                                        color = Ink.copy(alpha = 0.85f),
+                                    )
+                                }
+                            }
+                            Text(
+                                text = method.subtitle,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 11.sp,
+                                ),
+                                color = Muted,
+                            )
+                        }
+
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(methodAccent),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF050816),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 6. Side Menu Drawer (Opened via 3-Dots Icon in Top Bar)
+//    Contains all 16 requested Managers & Tools
+// ============================================================================
+
+@Composable
+private fun IdeProjectSideDrawer(
+    visible: Boolean,
+    project: WorkspaceItem,
+    onDismiss: () -> Unit,
+    onSelectItem: (IdeSideMenuItem) -> Unit,
+) {
+    if (!visible) return
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        // Scrim background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xB803060F))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        )
+
+        // Right-side Drawer Panel
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(304.dp)
+                .shadow(20.dp, RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
+                .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF0E1636), Color(0xFF090E24)),
+                    ),
+                )
+                .border(
+                    width = 1.dp,
+                    color = Cyan.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+                ),
+        ) {
+            // Drawer Header with Project Info
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF131D46))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ProjectIconView(
+                    iconPreset = project.iconPreset,
+                    customIconPath = project.customIconPath,
+                    modifier = Modifier.size(38.dp),
+                    cornerRadius = 11.dp,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = project.name,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "Project Managers & Tools (${IdeSideMenuItem.entries.size})",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                        ),
+                        color = Cyan,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            // Divider
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x26FFFFFF)),
+            )
+
+            // Scrollable List of all 16 Side Menu Managers
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                IdeSideMenuItem.entries.forEachIndexed { index, item ->
+                    val accent = when (index % 4) {
+                        0 -> Cyan
+                        1 -> Teal
+                        2 -> Violet
+                        else -> Amber
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(Color(0xFF141E42))
+                            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(13.dp))
+                            .clickable { onSelectItem(item) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(11.dp),
+                    ) {
+                        // Badge / Icon Box
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(accent.copy(alpha = 0.16f))
+                                .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(9.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = item.badge,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = accent,
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                        ) {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = item.subtitle,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                ),
+                                color = Muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IdeSideMenuManagerDialog(
+    project: WorkspaceItem,
+    menuItem: IdeSideMenuItem,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF0D1230),
+        titleContentColor = Ink,
+        textContentColor = Ink,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Cyan.copy(alpha = 0.18f))
+                        .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = menuItem.badge,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Cyan,
+                    )
+                }
+                Text(
+                    text = menuItem.title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = menuItem.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Ink,
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x14FFFFFF))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                ) {
+                    Text(
+                        text = "Project: ${project.name}\nPackage: ${project.packageName}\nTool: ${menuItem.title}",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.5.sp,
+                        ),
+                        color = Cyan,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ide_temp_run_close), color = Cyan)
+            }
+        },
+    )
 }
 
 // ============================================================================

@@ -140,6 +140,13 @@ class WorkspaceRepository(context: Context) {
 
     fun itemById(id: String): WorkspaceItem? = items.firstOrNull { it.id == id }
 
+    fun getBuildMethodForProject(projectId: String): String =
+        prefs.getString("build_method_$projectId", "SIMPLE") ?: "SIMPLE"
+
+    fun setBuildMethodForProject(projectId: String, methodName: String) {
+        prefs.edit().putString("build_method_$projectId", methodName).apply()
+    }
+
     /**
      * Returns the full `/storage/emulated/0/.IDE Ultimate/...` path for the current breadcrumb trail.
      */
