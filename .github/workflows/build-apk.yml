@@ -57,13 +57,26 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log
 
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build.log
+          if-no-files-found: ignore
+
       - name: Report build failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -f build.log ]; then
-            jq -Rs '{body: "### ❌ Gradle build log\n```\n" + .[-12000:] + "\n```"}' build.log > /tmp/payload.json
+            # Surface the key lines as annotations (readable even without log access).
+            grep -a -E '^(e: |> Task .*FAILED|FAILURE:|What went wrong|Caused by|Execution failed|AAPT|ERROR)' build.log \
+              | tail -10 | while IFS= read -r line; do
+                echo "::error title=Gradle::${line:0:900}"
+              done
+            jq -Rs '{body: ("### ❌ Gradle build log\n```\n" + (.[-12000:]) + "\n```")}' build.log > /tmp/payload.json
             gh api --method POST "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" --input /tmp/payload.json || true
           fi
 
