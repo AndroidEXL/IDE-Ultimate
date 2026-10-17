@@ -3,6 +3,7 @@ package com.androidexl.ideultimate.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,7 +27,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,11 +35,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,15 +67,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -104,11 +111,14 @@ import com.androidexl.ideultimate.ui.components.GradientButton
 import com.androidexl.ideultimate.ui.components.ProjectIconView
 import com.androidexl.ideultimate.ui.components.languageColor
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
+import com.androidexl.ideultimate.ui.theme.NavySurface
 import com.androidexl.ideultimate.ui.theme.Teal
+import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 import kotlin.math.roundToInt
 
@@ -147,7 +157,6 @@ fun IdeProjectScreen(
         runCatching { IdeProjectTab.valueOf(activeTabName) }.getOrDefault(IdeProjectTab.VIEW)
     }
 
-    // Default Code Editor flavor based on project language (user can switch between Java Android, Kotlin Android, xml Android)
     var activeFlavorName by rememberSaveable(project.id) {
         mutableStateOf(
             if (project.language == ProjectLanguage.JAVA) {
@@ -162,12 +171,16 @@ fun IdeProjectScreen(
             .getOrDefault(CodeEditorFlavor.KOTLIN_ANDROID)
     }
 
-    // Visual widget nodes placed inside the white phone frame for the current XML page
     var widgetNodes by remember(project.id, selectedXmlPage.xmlFileName) {
         mutableStateOf(repository.loadWidgetsForXmlPage(project, selectedXmlPage))
     }
+    val undoStack = remember(project.id, selectedXmlPage.xmlFileName) {
+        mutableStateListOf<List<IdeWidgetNode>>()
+    }
+    val redoStack = remember(project.id, selectedXmlPage.xmlFileName) {
+        mutableStateListOf<List<IdeWidgetNode>>()
+    }
 
-    // Code text for the currently selected XML page & editor flavor (Java Android / Kotlin Android / xml Android)
     var codeText by remember(project.id, selectedXmlPage.xmlFileName, activeFlavor) {
         mutableStateOf(repository.readCodeForFlavor(project, selectedXmlPage, activeFlavor))
     }
@@ -177,11 +190,31 @@ fun IdeProjectScreen(
         codeText = repository.readCodeForFlavor(project, selectedXmlPage, activeFlavor)
     }
 
-    fun updateWidgetNodes(newNodes: List<IdeWidgetNode>) {
+    fun updateWidgetNodes(newNodes: List<IdeWidgetNode>, recordHistory: Boolean = true) {
+        if (recordHistory) {
+            undoStack.add(widgetNodes)
+            redoStack.clear()
+        }
         widgetNodes = newNodes
         repository.saveWidgetsForXmlPage(project, selectedXmlPage, newNodes)
         if (activeFlavor == CodeEditorFlavor.XML_ANDROID) {
             codeText = repository.readCodeForFlavor(project, selectedXmlPage, CodeEditorFlavor.XML_ANDROID)
+        }
+    }
+
+    fun handleUndo() {
+        if (undoStack.isNotEmpty()) {
+            val previous = undoStack.removeAt(undoStack.lastIndex)
+            redoStack.add(widgetNodes)
+            updateWidgetNodes(previous, recordHistory = false)
+        }
+    }
+
+    fun handleRedo() {
+        if (redoStack.isNotEmpty()) {
+            val next = redoStack.removeAt(redoStack.lastIndex)
+            undoStack.add(widgetNodes)
+            updateWidgetNodes(next, recordHistory = false)
         }
     }
 
@@ -208,78 +241,92 @@ fun IdeProjectScreen(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .safeDrawingPadding(),
-    ) {
-        // 1. Top Section: Back + Project Icon next to Program Name + Run Button
-        IdeProjectTopBar(
-            project = project,
-            onBack = onBack,
-            onRunClick = { showTempRunScreen = true },
-        )
-
-        // 2. 3 Tabs below Top Section: View | Logic | Emulator
-        IdeProjectTabsBar(
-            activeTab = activeTab,
-            onSelectTab = { tab -> activeTabName = tab.name },
-        )
-
-        // 3. Tab Content Area
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
         ) {
-            when (activeTab) {
-                IdeProjectTab.VIEW -> {
-                    // View tab: Widgets palette on the side + Phone Frame with WHITE screen & drag-and-drop
-                    IdeViewDesigner(
-                        project = project,
-                        xmlPage = selectedXmlPage,
-                        widgetNodes = widgetNodes,
-                        onUpdateWidgets = { updateWidgetNodes(it) },
-                    )
-                }
+            // 1. Top Toolbar: Back Arrow + Project Icon + Project Name/Version + Undo / Redo / Save / More
+            IdeSketchTopBar(
+                project = project,
+                canUndo = undoStack.isNotEmpty(),
+                canRedo = redoStack.isNotEmpty(),
+                onBack = onBack,
+                onUndo = { handleUndo() },
+                onRedo = { handleRedo() },
+                onSave = {
+                    repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
+                    repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, codeText)
+                },
+            )
 
-                IdeProjectTab.LOGIC -> {
-                    // Logic tab: Code Editor supporting Java Android, Kotlin Android, and xml Android
-                    IdeLogicCodeEditor(
-                        project = project,
-                        xmlPage = selectedXmlPage,
-                        activeFlavor = activeFlavor,
-                        onSelectFlavor = { flavor ->
-                            activeFlavorName = flavor.name
-                            codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
-                        },
-                        code = codeText,
-                        onCodeChange = { updated ->
-                            codeText = updated
-                            repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
-                        },
-                    )
-                }
+            // 2. 3-Tabs Bar (View | Logic | Emulator) with active bottom indicator line
+            IdeSketchTabsBar(
+                activeTab = activeTab,
+                onSelectTab = { tab -> activeTabName = tab.name },
+            )
 
-                IdeProjectTab.EMULATOR -> {
-                    // Emulator tab: empty for now
-                    IdeEmptyWorkspaceCanvas()
+            // 3. Main Content Area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                when (activeTab) {
+                    IdeProjectTab.VIEW -> {
+                        IdeViewDesigner(
+                            project = project,
+                            xmlPage = selectedXmlPage,
+                            widgetNodes = widgetNodes,
+                            onUpdateWidgets = { updateWidgetNodes(it) },
+                        )
+                    }
+
+                    IdeProjectTab.LOGIC -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        ) {
+                            IdeLogicCodeEditor(
+                                project = project,
+                                xmlPage = selectedXmlPage,
+                                activeFlavor = activeFlavor,
+                                onSelectFlavor = { flavor ->
+                                    activeFlavorName = flavor.name
+                                    codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
+                                },
+                                code = codeText,
+                                onCodeChange = { updated ->
+                                    codeText = updated
+                                    repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
+                                },
+                            )
+                        }
+                    }
+
+                    IdeProjectTab.EMULATOR -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp),
+                        ) {
+                            IdeEmptyWorkspaceCanvas()
+                        }
+                    }
                 }
             }
-        }
 
-        // 4. Compact Bottom XML / Activity Selector Pill (shown below View & Logic)
-        if (activeTab == IdeProjectTab.VIEW || activeTab == IdeProjectTab.LOGIC) {
-            IdeBottomPageSelectorBar(
+            // 4. Bottom Bar matching screenshot: Left XML/Activity Selector Pill + Right Run Split Button
+            IdeSketchBottomBar(
                 activeTab = activeTab,
                 xmlPage = selectedXmlPage,
-                activeFlavor = activeFlavor,
-                onClick = { showXmlBottomSheet = true },
+                onOpenPageSelector = { showXmlBottomSheet = true },
+                onRunClick = { showTempRunScreen = true },
                 bottomBarPadding = bottomBarPadding,
             )
-        } else {
-            Spacer(Modifier.height(8.dp + bottomBarPadding))
         }
     }
 
@@ -385,36 +432,45 @@ fun IdeProjectScreen(
 }
 
 // ============================================================================
-// 1. Top Bar & 3-Tabs Bar
+// 1. Top Bar & 3-Tabs Bar (Screenshot proportions, IDE Ultimate Dark Colors)
 // ============================================================================
 
 @Composable
-private fun IdeProjectTopBar(
+private fun IdeSketchTopBar(
     project: WorkspaceItem,
+    canUndo: Boolean,
+    canRedo: Boolean,
     onBack: () -> Unit,
-    onRunClick: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onSave: () -> Unit,
 ) {
-    val langAccent = languageColor(project.language)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .background(Color(0xFF0A0F24))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassIconButton(
-            icon = Icons.AutoMirrored.Filled.ArrowBack,
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = stringResource(R.string.workspace_back),
-            onClick = onBack,
-            modifier = Modifier.size(40.dp),
+            tint = Ink,
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onBack)
+                .padding(5.dp),
         )
 
         Spacer(Modifier.width(10.dp))
 
+        // Project Icon next to Program Name
         ProjectIconView(
             iconPreset = project.iconPreset,
             customIconPath = project.customIconPath,
-            modifier = Modifier.size(38.dp),
-            cornerRadius = 12.dp,
+            modifier = Modifier.size(34.dp),
+            cornerRadius = 10.dp,
         )
 
         Spacer(Modifier.width(10.dp))
@@ -422,121 +478,190 @@ private fun IdeProjectTopBar(
         Column(Modifier.weight(1f)) {
             Text(
                 text = project.name,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 15.5.sp,
-                    fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
                 ),
                 color = Ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text(
-                    text = "IDE Project • ${project.language.displayName}",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 9.sp,
-                    ),
-                    color = langAccent,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Brush.horizontalGradient(listOf(Teal, Cyan)))
-                .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(12.dp))
-                .clickable(onClick = onRunClick)
-                .padding(horizontal = 13.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = stringResource(R.string.ide_run_button),
-                tint = Color(0xFF04101E),
-                modifier = Modifier.size(17.dp),
+            Text(
+                text = "${project.versionCode} • v${project.versionName}",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 10.5.sp,
+                ),
+                color = Muted,
+                maxLines = 1,
             )
-            Spacer(Modifier.width(3.dp))
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text(
-                    text = stringResource(R.string.ide_run_button),
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                    ),
-                    color = Color(0xFF04101E),
+        }
+
+        // Undo Icon
+        TopBarVectorAction(
+            enabled = canUndo,
+            onClick = onUndo,
+        ) { tint ->
+            Canvas(Modifier.size(18.dp)) {
+                val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val path = Path().apply {
+                    moveTo(size.width * 0.25f, size.height * 0.42f)
+                    lineTo(size.width * 0.65f, size.height * 0.42f)
+                    cubicTo(
+                        size.width * 0.88f, size.height * 0.42f,
+                        size.width * 0.88f, size.height * 0.80f,
+                        size.width * 0.62f, size.height * 0.80f,
+                    )
+                    lineTo(size.width * 0.35f, size.height * 0.80f)
+                }
+                drawPath(path, color = tint, style = stroke)
+                val arrow = Path().apply {
+                    moveTo(size.width * 0.42f, size.height * 0.24f)
+                    lineTo(size.width * 0.22f, size.height * 0.42f)
+                    lineTo(size.width * 0.42f, size.height * 0.60f)
+                }
+                drawPath(arrow, color = tint, style = stroke)
+            }
+        }
+
+        // Redo Icon
+        TopBarVectorAction(
+            enabled = canRedo,
+            onClick = onRedo,
+        ) { tint ->
+            Canvas(Modifier.size(18.dp)) {
+                val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val path = Path().apply {
+                    moveTo(size.width * 0.75f, size.height * 0.42f)
+                    lineTo(size.width * 0.35f, size.height * 0.42f)
+                    cubicTo(
+                        size.width * 0.12f, size.height * 0.42f,
+                        size.width * 0.12f, size.height * 0.80f,
+                        size.width * 0.38f, size.height * 0.80f,
+                    )
+                    lineTo(size.width * 0.65f, size.height * 0.80f)
+                }
+                drawPath(path, color = tint, style = stroke)
+                val arrow = Path().apply {
+                    moveTo(size.width * 0.58f, size.height * 0.24f)
+                    lineTo(size.width * 0.78f, size.height * 0.42f)
+                    lineTo(size.width * 0.58f, size.height * 0.60f)
+                }
+                drawPath(arrow, color = tint, style = stroke)
+            }
+        }
+
+        // Save Floppy Icon
+        TopBarVectorAction(
+            enabled = true,
+            onClick = onSave,
+        ) { tint ->
+            Canvas(Modifier.size(18.dp)) {
+                val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.14f, size.height * 0.14f),
+                    size = Size(size.width * 0.72f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    style = stroke,
+                )
+                drawRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.28f, size.height * 0.14f),
+                    size = Size(size.width * 0.36f, size.height * 0.24f),
+                    style = stroke,
+                )
+                drawCircle(
+                    color = tint,
+                    radius = size.width * 0.12f,
+                    center = Offset(size.width * 0.50f, size.height * 0.62f),
                 )
             }
         }
+
+        Icon(
+            imageVector = Icons.Filled.MoreVert,
+            contentDescription = null,
+            tint = Ink.copy(alpha = 0.85f),
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onSave)
+                .padding(5.dp),
+        )
     }
 }
 
 @Composable
-private fun IdeProjectTabsBar(
+private fun TopBarVectorAction(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit,
+) {
+    val tint = if (enabled) Ink.copy(alpha = 0.88f) else Muted.copy(alpha = 0.38f)
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        icon(tint)
+    }
+}
+
+@Composable
+private fun IdeSketchTabsBar(
     activeTab: IdeProjectTab,
     onSelectTab: (IdeProjectTab) -> Unit,
 ) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0A0F24)),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0x99070B1E))
-                .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(14.dp))
-                .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             IdeProjectTab.entries.forEach { tab ->
                 val selected = tab == activeTab
-                val tabAccent = when (tab) {
-                    IdeProjectTab.VIEW -> Cyan
-                    IdeProjectTab.LOGIC -> VioletSoft
-                    IdeProjectTab.EMULATOR -> Teal
-                }
-                val bg by animateColorAsState(
-                    targetValue = if (selected) tabAccent.copy(alpha = 0.22f) else Color.Transparent,
-                    animationSpec = tween(200),
-                    label = "ide-tab-bg",
-                )
-                val border by animateColorAsState(
-                    targetValue = if (selected) tabAccent.copy(alpha = 0.65f) else Color.Transparent,
-                    animationSpec = tween(200),
-                    label = "ide-tab-border",
-                )
-                Box(
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(bg)
-                        .border(1.dp, border, RoundedCornerShape(11.dp))
                         .clickable { onSelectTab(tab) }
-                        .padding(vertical = 7.dp),
-                    contentAlignment = Alignment.Center,
+                        .padding(top = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
                         text = tab.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 12.sp,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 13.5.sp,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         ),
-                        color = if (selected) tabAccent else Muted,
+                        color = if (selected) Cyan else Muted,
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(42.dp)
+                            .height(2.5.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(if (selected) Cyan else Color.Transparent),
                     )
                 }
             }
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color(0x24FFFFFF)),
+        )
     }
 }
 
 // ============================================================================
-// 2. VIEW Tab: Widgets Palette + White Phone Frame with Drag & Drop
+// 2. VIEW Tab: Left Compact Widgets Column + Right Rectangular White Phone Frame
 // ============================================================================
 
 @Composable
@@ -555,12 +680,10 @@ private fun IdeViewDesigner(
     var selectedWidgetUid by remember { mutableStateOf<String?>(null) }
     var editingTextViewNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
 
-    // Determine which container (or phone root) the dragged item is currently hovering over
     val hoveredContainerUid: String? = remember(draggingType, dragFingerInRoot, containerBoundsMap.toMap()) {
         if (draggingType == null) {
             null
         } else {
-            // Pick the smallest (deepest nested) container whose bounds contain the finger
             containerBoundsMap.entries
                 .filter { (_, rect) -> !rect.isEmpty && rect.contains(dragFingerInRoot) }
                 .minByOrNull { (_, rect) -> rect.width * rect.height }
@@ -596,131 +719,121 @@ private fun IdeViewDesigner(
         selectedWidgetUid?.let { findNodeByUid(widgetNodes, it) }
     }
 
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { coords ->
-                    rootBounds = coords.boundsInRoot()
-                },
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coords ->
+                rootBounds = coords.boundsInRoot()
+            },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                // Left Panel: Widgets Palette ("widget ... قسم layout ... قسم text")
-                WidgetsPaletteColumn(
-                    onStartDrag = { type, startRootPos ->
-                        draggingType = type
-                        dragFingerInRoot = startRootPos
-                    },
-                    onDragBy = { delta ->
-                        dragFingerInRoot += delta
-                    },
-                    onEndDrag = {
-                        val droppedType = draggingType
-                        if (droppedType != null) {
-                            when {
-                                hoveredContainerUid != null -> {
-                                    addWidgetToTarget(droppedType, hoveredContainerUid)
-                                }
-                                isHoveringPhoneCanvas || dragFingerInRoot.x >= phoneCanvasBounds.left - 24f -> {
-                                    // Dropped onto the phone frame (or into a selected container if it is a container)
-                                    val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
-                                    addWidgetToTarget(droppedType, targetContainer)
-                                }
+            // Left Palette Column: exact width & spacing as screenshot (~120.dp)
+            WidgetsPaletteColumn(
+                onStartDrag = { type, startRootPos ->
+                    draggingType = type
+                    dragFingerInRoot = startRootPos
+                },
+                onDragBy = { delta ->
+                    dragFingerInRoot += delta
+                },
+                onEndDrag = {
+                    val droppedType = draggingType
+                    if (droppedType != null) {
+                        when {
+                            hoveredContainerUid != null -> {
+                                addWidgetToTarget(droppedType, hoveredContainerUid)
+                            }
+                            isHoveringPhoneCanvas || dragFingerInRoot.x >= phoneCanvasBounds.left - 20f -> {
+                                val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
+                                addWidgetToTarget(droppedType, targetContainer)
                             }
                         }
-                        draggingType = null
-                    },
-                    onCancelDrag = {
-                        draggingType = null
-                    },
-                    onTapAdd = { type ->
-                        val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
-                        addWidgetToTarget(type, targetContainer)
-                    },
-                    modifier = Modifier
-                        .width(126.dp)
-                        .fillMaxHeight(),
-                )
-
-                // Right Area: Phone Frame with White Interior ("وحط جانببها فريم هاتف و جوه الفريم ابيض")
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    // Selected widget quick bar (Edit text / Delete widget / Clear)
-                    if (selectedNode != null) {
-                        SelectedWidgetBar(
-                            node = selectedNode,
-                            onEditText = {
-                                if (selectedNode.type == IdeWidgetType.TEXT_VIEW) {
-                                    editingTextViewNode = selectedNode
-                                }
-                            },
-                            onDelete = {
-                                onUpdateWidgets(removeNodeByUid(widgetNodes, selectedNode.uid))
-                                containerBoundsMap.remove(selectedNode.uid)
-                                selectedWidgetUid = null
-                            },
-                            onDeselect = { selectedWidgetUid = null },
-                        )
-                        Spacer(Modifier.height(6.dp))
                     }
+                    draggingType = null
+                },
+                onCancelDrag = {
+                    draggingType = null
+                },
+                onTapAdd = { type ->
+                    val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
+                    addWidgetToTarget(type, targetContainer)
+                },
+                modifier = Modifier
+                    .width(120.dp)
+                    .fillMaxHeight(),
+            )
 
-                    // The Phone Frame ("فريم هاتف و جوه الفريم ابيض")
-                    PhoneFrameWhiteCanvas(
-                        project = project,
-                        xmlPage = xmlPage,
-                        widgetNodes = widgetNodes,
-                        selectedWidgetUid = selectedWidgetUid,
-                        hoveredContainerUid = hoveredContainerUid,
-                        isPhoneHighlighted = isHoveringPhoneCanvas && hoveredContainerUid == null,
-                        onSelectWidget = { node -> selectedWidgetUid = node.uid },
-                        onDoubleTapTextView = { node -> editingTextViewNode = node },
-                        onPhoneCanvasPositioned = { rect -> phoneCanvasBounds = rect },
-                        onContainerPositioned = { uid, rect -> containerBoundsMap[uid] = rect },
-                        onTapEmptyWhiteArea = { selectedWidgetUid = null },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
+            // Right Phone Frame Area: exact padding & frame proportions as screenshot
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 18.dp),
+            ) {
+                if (selectedNode != null) {
+                    SelectedWidgetBar(
+                        node = selectedNode,
+                        onEditText = {
+                            if (selectedNode.type == IdeWidgetType.TEXT_VIEW) {
+                                editingTextViewNode = selectedNode
+                            }
+                        },
+                        onDelete = {
+                            onUpdateWidgets(removeNodeByUid(widgetNodes, selectedNode.uid))
+                            containerBoundsMap.remove(selectedNode.uid)
+                            selectedWidgetUid = null
+                        },
+                        onDeselect = { selectedWidgetUid = null },
                     )
+                    Spacer(Modifier.height(6.dp))
                 }
-            }
 
-            // Floating Drag Preview Badge while dragging a widget from Widgets to Phone Frame
-            val activeDrag = draggingType
-            if (activeDrag != null && !rootBounds.isEmpty) {
-                val localX = (dragFingerInRoot.x - rootBounds.left).roundToInt() - 55
-                val localY = (dragFingerInRoot.y - rootBounds.top).roundToInt() - 22
-                Box(
+                PhoneFrameWhiteCanvas(
+                    project = project,
+                    xmlPage = xmlPage,
+                    widgetNodes = widgetNodes,
+                    selectedWidgetUid = selectedWidgetUid,
+                    hoveredContainerUid = hoveredContainerUid,
+                    isPhoneHighlighted = isHoveringPhoneCanvas && hoveredContainerUid == null,
+                    onSelectWidget = { node -> selectedWidgetUid = node.uid },
+                    onDoubleTapTextView = { node -> editingTextViewNode = node },
+                    onPhoneCanvasPositioned = { rect -> phoneCanvasBounds = rect },
+                    onContainerPositioned = { uid, rect -> containerBoundsMap[uid] = rect },
+                    onTapEmptyWhiteArea = { selectedWidgetUid = null },
                     modifier = Modifier
-                        .offset { IntOffset(localX, localY) }
-                        .shadow(10.dp, RoundedCornerShape(10.dp))
-                        .clip(RoundedCornerShape(10.dp))
-                        .background( Color(0xF20D1536))
-                        .border(1.5.dp, Cyan, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        WidgetTagIcon(type = activeDrag)
-                        Text(
-                            text = activeDrag.displayName,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Color.White,
-                        )
-                    }
-                }
+                        .fillMaxWidth()
+                        .weight(1f),
+                )
+            }
+        }
+
+        // Floating Drag Preview Badge while dragging from Widgets into the White Phone Frame
+        val activeDrag = draggingType
+        if (activeDrag != null && !rootBounds.isEmpty) {
+            val localX = (dragFingerInRoot.x - rootBounds.left).roundToInt() - 48
+            val localY = (dragFingerInRoot.y - rootBounds.top).roundToInt() - 18
+            Row(
+                modifier = Modifier
+                    .offset { IntOffset(localX, localY) }
+                    .shadow(8.dp, RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF151E42))
+                    .border(1.2.dp, Cyan, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SketchWidgetIcon(type = activeDrag, tint = Cyan)
+                Text(
+                    text = sketchWidgetLabel(activeDrag),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = Ink,
+                )
             }
         }
     }
@@ -750,31 +863,80 @@ private fun WidgetsPaletteColumn(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xD9080D24))
-            .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(18.dp))
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
-        // Palette Title: Widgets
+        // Top mini-switcher strip matching screenshot (Palette active tab + Bookmark icon)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(bottomEnd = 8.dp, bottomStart = 4.dp))
+                    .background(Color(0xFF1E2952))
+                    .border(
+                        width = 1.dp,
+                        color = Cyan.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(bottomEnd = 8.dp, bottomStart = 4.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(Modifier.size(14.dp)) {
+                    val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                    drawLine(Cyan, Offset(2f, 3f), Offset(size.width - 2f, 3f), strokeWidth = stroke.width)
+                    drawRoundRect(
+                        color = Cyan,
+                        topLeft = Offset(3f, size.height * 0.36f),
+                        size = Size(size.width - 6f, size.height * 0.50f),
+                        cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                        style = stroke,
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(Modifier.size(13.dp)) {
+                    val stroke = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    val path = Path().apply {
+                        moveTo(size.width * 0.22f, size.height * 0.12f)
+                        lineTo(size.width * 0.78f, size.height * 0.12f)
+                        lineTo(size.width * 0.78f, size.height * 0.88f)
+                        lineTo(size.width * 0.50f, size.height * 0.68f)
+                        lineTo(size.width * 0.22f, size.height * 0.88f)
+                        close()
+                    }
+                    drawPath(path, color = Muted, style = stroke)
+                }
+            }
+        }
+
+        // Section 1: Layouts ("قسم layout")
         Text(
-            text = "Widgets",
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontFamily = JetBrainsMono,
+            text = "Layouts",
+            style = MaterialTheme.typography.labelMedium.copy(
                 fontSize = 11.5.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Medium,
             ),
-            color = Cyan,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            color = Muted,
+            modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 6.dp),
         )
 
-        // Section 1: layout ("قسم layout: Linear Layout H, Linear Layout V, Scroll V, Scroll H")
-        WidgetCategoryHeader(title = "layout", accent = Cyan)
-
-        IdeWidgetType.entries
-            .filter { it.category == IdeWidgetCategory.LAYOUT }
-            .forEach { widgetType ->
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(
+                IdeWidgetType.LINEAR_H,
+                IdeWidgetType.LINEAR_V,
+                IdeWidgetType.SCROLL_H,
+                IdeWidgetType.SCROLL_V,
+            ).forEach { widgetType ->
                 DraggableWidgetPaletteItem(
                     type = widgetType,
                     onStartDrag = onStartDrag,
@@ -784,57 +946,40 @@ private fun WidgetsPaletteColumn(
                     onTap = { onTapAdd(widgetType) },
                 )
             }
+        }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(14.dp))
 
-        // Section 2: text ("قسم text: Text View")
-        WidgetCategoryHeader(title = "text", accent = VioletSoft)
+        // Section 2: Widgets / Text ("قسم text")
+        Text(
+            text = "Widgets",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = Muted,
+            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+        )
 
-        IdeWidgetType.entries
-            .filter { it.category == IdeWidgetCategory.TEXT }
-            .forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onDragBy = onDragBy,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            DraggableWidgetPaletteItem(
+                type = IdeWidgetType.TEXT_VIEW,
+                onStartDrag = onStartDrag,
+                onDragBy = onDragBy,
+                onEndDrag = onEndDrag,
+                onCancelDrag = onCancelDrag,
+                onTap = { onTapAdd(IdeWidgetType.TEXT_VIEW) },
+            )
+        }
     }
 }
 
-@Composable
-private fun WidgetCategoryHeader(
-    title: String,
-    accent: Color,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(accent.copy(alpha = 0.14f))
-            .padding(horizontal = 7.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(accent),
-        )
-        Spacer(Modifier.width(5.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = JetBrainsMono,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-            ),
-            color = accent,
-        )
-    }
+private fun sketchWidgetLabel(type: IdeWidgetType): String = when (type) {
+    IdeWidgetType.LINEAR_H -> "Linear(H)"
+    IdeWidgetType.LINEAR_V -> "Linear(V)"
+    IdeWidgetType.SCROLL_H -> "Scroll(H)"
+    IdeWidgetType.SCROLL_V -> "Scroll(V)"
+    IdeWidgetType.TEXT_VIEW -> "TextView"
 }
 
 @Composable
@@ -847,17 +992,19 @@ private fun DraggableWidgetPaletteItem(
     onTap: () -> Unit,
 ) {
     var itemBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(6.dp)
 
+    // Compact height & spacing matching screenshot (`height = 28.dp`, rounded pill-rect)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(28.dp)
             .onGloballyPositioned { coords ->
                 itemBoundsInRoot = coords.boundsInRoot()
             }
             .clip(shape)
-            .background(Color(0x16FFFFFF))
-            .border(1.dp, Color(0x28FFFFFF), shape)
+            .background(Color(0xFF161E3C))
+            .border(1.dp, Color(0x2EFFFFFF), shape)
             .clickable(onClick = onTap)
             .pointerInput(type) {
                 detectDragGestures(
@@ -876,52 +1023,105 @@ private fun DraggableWidgetPaletteItem(
                     onDragCancel = { onCancelDrag() },
                 )
             }
-            .padding(horizontal = 7.dp, vertical = 7.dp),
+            .padding(horizontal = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        WidgetTagIcon(type = type)
+        SketchWidgetIcon(type = type, tint = Ink.copy(alpha = 0.88f))
         Text(
-            text = type.displayName,
+            text = sketchWidgetLabel(type),
             style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = JetBrainsMono,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 12.sp,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
             ),
             color = Ink,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
 @Composable
-private fun WidgetTagIcon(type: IdeWidgetType) {
-    val accent = when (type) {
-        IdeWidgetType.LINEAR_H -> Cyan
-        IdeWidgetType.LINEAR_V -> Color(0xFF60A5FA)
-        IdeWidgetType.SCROLL_V -> Teal
-        IdeWidgetType.SCROLL_H -> Color(0xFF34D399)
-        IdeWidgetType.TEXT_VIEW -> Fuchsia
-    }
-    Box(
-        modifier = Modifier
-            .size(22.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(accent.copy(alpha = 0.20f))
-            .border(1.dp, accent.copy(alpha = 0.55f), RoundedCornerShape(6.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = type.shortTag,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = JetBrainsMono,
-                fontSize = 8.5.sp,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-            color = accent,
-        )
+private fun SketchWidgetIcon(
+    type: IdeWidgetType,
+    tint: Color,
+) {
+    Canvas(Modifier.size(14.dp)) {
+        val stroke = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        when (type) {
+            IdeWidgetType.LINEAR_H -> {
+                // 3 vertical columns inside a box [|||]
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, 2f),
+                    size = Size(size.width - 2f, size.height - 4f),
+                    cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx()),
+                    style = stroke,
+                )
+                val third = size.width / 3f
+                drawLine(tint, Offset(third, 2f), Offset(third, size.height - 2f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(third * 2f, 2f), Offset(third * 2f, size.height - 2f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.LINEAR_V -> {
+                // 3 horizontal rows inside a box [≡]
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(2f, 1f),
+                    size = Size(size.width - 4f, size.height - 2f),
+                    cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx()),
+                    style = stroke,
+                )
+                val third = size.height / 3f
+                drawLine(tint, Offset(2f, third), Offset(size.width - 2f, third), strokeWidth = stroke.width)
+                drawLine(tint, Offset(2f, third * 2f), Offset(size.width - 2f, third * 2f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.SCROLL_H -> {
+                // Horizontal double arrow + hand indicator
+                val y = size.height * 0.35f
+                drawLine(tint, Offset(1.5f, y), Offset(size.width - 1.5f, y), strokeWidth = stroke.width)
+                drawLine(tint, Offset(1.5f, y), Offset(4.5f, y - 3f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(1.5f, y), Offset(4.5f, y + 3f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width - 1.5f, y), Offset(size.width - 4.5f, y - 3f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width - 1.5f, y), Offset(size.width - 4.5f, y + 3f), strokeWidth = stroke.width)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.28f, size.height * 0.55f),
+                    size = Size(size.width * 0.44f, size.height * 0.36f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+            }
+
+            IdeWidgetType.SCROLL_V -> {
+                // Vertical double arrow + hand indicator
+                val x = size.width * 0.32f
+                drawLine(tint, Offset(x, 1.5f), Offset(x, size.height - 1.5f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(x, 1.5f), Offset(x - 3f, 4.5f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(x, 1.5f), Offset(x + 3f, 4.5f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(x, size.height - 1.5f), Offset(x - 3f, size.height - 4.5f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(x, size.height - 1.5f), Offset(x + 3f, size.height - 4.5f), strokeWidth = stroke.width)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.52f, size.height * 0.35f),
+                    size = Size(size.width * 0.36f, size.height * 0.48f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+            }
+
+            IdeWidgetType.TEXT_VIEW -> {
+                // "TT" icon matching screenshot
+                val sw = 1.5.dp.toPx()
+                // Small T on left
+                drawLine(tint, Offset(1f, size.height * 0.36f), Offset(size.width * 0.46f, size.height * 0.36f), strokeWidth = sw)
+                drawLine(tint, Offset(size.width * 0.23f, size.height * 0.36f), Offset(size.width * 0.23f, size.height * 0.86f), strokeWidth = sw)
+                // Tall T on right
+                drawLine(tint, Offset(size.width * 0.44f, size.height * 0.16f), Offset(size.width - 1f, size.height * 0.16f), strokeWidth = sw)
+                drawLine(tint, Offset(size.width * 0.72f, size.height * 0.16f), Offset(size.width * 0.72f, size.height * 0.86f), strokeWidth = sw)
+            }
+        }
     }
 }
 
@@ -935,10 +1135,10 @@ private fun SelectedWidgetBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xD90B1230))
-            .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF141C3A))
+            .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -947,55 +1147,44 @@ private fun SelectedWidgetBar(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.weight(1f),
         ) {
-            WidgetTagIcon(type = node.type)
-            Column {
-                Text(
-                    text = "@+id/${node.viewId}",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = Cyan,
-                    maxLines = 1,
-                )
-                Text(
-                    text = node.type.displayName,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 8.5.sp,
-                    ),
-                    color = Muted,
-                    maxLines = 1,
-                )
-            }
+            SketchWidgetIcon(type = node.type, tint = Cyan)
+            Text(
+                text = "@+id/${node.viewId}",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Cyan,
+                maxLines = 1,
+            )
         }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             if (node.type == IdeWidgetType.TEXT_VIEW) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(Cyan.copy(alpha = 0.18f))
                         .clickable(onClick = onEditText)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Filled.Create,
                             contentDescription = null,
                             tint = Cyan,
-                            modifier = Modifier.size(12.dp),
+                            modifier = Modifier.size(11.dp),
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
                             text = "Text",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = JetBrainsMono,
-                                fontSize = 9.sp,
+                                fontSize = 8.5.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
                             color = Cyan,
@@ -1006,37 +1195,43 @@ private fun SelectedWidgetBar(
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Color(0x28FF5C5C))
                     .clickable(onClick = onDelete)
-                    .padding(horizontal = 7.dp, vertical = 4.dp),
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = null,
                     tint = Color(0xFFFF8080),
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(13.dp),
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Color(0x1FFFFFFF))
                     .clickable(onClick = onDeselect)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 5.dp, vertical = 3.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = null,
                     tint = Muted,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(13.dp),
                 )
             }
         }
     }
 }
 
+/**
+ * Clean rectangular Phone Screen Frame matching the screenshot's exact proportions:
+ * - Top Status Bar (`xmlPage.xmlFileName` on left, signal bars + battery + `1:37` on right)
+ * - Toolbar strip (`Toolbar`) below status bar
+ * - Pure WHITE (`#FFFFFF`) interior screen below Toolbar
+ */
 @Composable
 private fun PhoneFrameWhiteCanvas(
     project: WorkspaceItem,
@@ -1052,152 +1247,117 @@ private fun PhoneFrameWhiteCanvas(
     onTapEmptyWhiteArea: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bezelShape = RoundedCornerShape(26.dp)
-    val screenShape = RoundedCornerShape(19.dp)
-    val frameBorderColor = if (isPhoneHighlighted) Cyan else Color(0xFF2B3558)
-
-    Box(
+    val frameShape = RoundedCornerShape(3.dp)
+    Column(
         modifier = modifier
-            .padding(horizontal = 2.dp, vertical = 2.dp),
-        contentAlignment = Alignment.Center,
+            .shadow(6.dp, frameShape)
+            .clip(frameShape)
+            .background(Color.White)
+            .border(
+                width = if (isPhoneHighlighted) 2.dp else 1.dp,
+                color = if (isPhoneHighlighted) Cyan else Color(0x33FFFFFF),
+                shape = frameShape,
+            )
+            .onGloballyPositioned { coords ->
+                onPhoneCanvasPositioned(coords.boundsInRoot())
+            }
+            .clickable(onClick = onTapEmptyWhiteArea),
     ) {
-        // Outer Phone Bezel
-        Column(
+        // 1. Phone Status Bar (matches screenshot: xml filename on left, signal + battery + time on right)
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .clip(bezelShape)
-                .background(Color(0xFF0E1328))
-                .border(2.2.dp, frameBorderColor, bezelShape)
-                .padding(7.dp),
+                .fillMaxWidth()
+                .background(Color(0xFF283566))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Top Speaker Notch inside Phone Bezel
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 5.dp),
-                contentAlignment = Alignment.Center,
+            Text(
+                text = xmlPage.xmlFileName,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Normal,
+                ),
+                color = Color.White.copy(alpha = 0.92f),
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(48.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Color(0xFF2D3656)),
+                // Signal bars icon
+                Canvas(Modifier.size(width = 13.dp, height = 10.dp)) {
+                    val barW = size.width / 5.5f
+                    for (i in 0..3) {
+                        val barH = size.height * (0.32f + i * 0.22f)
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset(i * (barW + 1.5f), size.height - barH),
+                            size = Size(barW, barH),
+                        )
+                    }
+                }
+                // Battery icon
+                Canvas(Modifier.size(width = 8.dp, height = 10.dp)) {
+                    drawRect(
+                        color = Color.White,
+                        topLeft = Offset(size.width * 0.28f, 0f),
+                        size = Size(size.width * 0.44f, size.height * 0.16f),
+                    )
+                    drawRect(
+                        color = Color.White,
+                        topLeft = Offset(0f, size.height * 0.16f),
+                        size = Size(size.width, size.height * 0.84f),
+                    )
+                }
+                Text(
+                    text = "1:37",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = Color.White,
                 )
             }
+        }
 
-            // Inner Phone Screen — WHITE BACKGROUND ("جوه الفريم ابيض")
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(screenShape)
-                    .background(Color.White)
-                    .border(
-                        width = if (isPhoneHighlighted) 2.dp else 1.dp,
-                        color = if (isPhoneHighlighted) Cyan else Color(0xFFD1D5DB),
-                        shape = screenShape,
-                    )
-                    .onGloballyPositioned { coords ->
-                        onPhoneCanvasPositioned(coords.boundsInRoot())
-                    }
-                    .clickable(onClick = onTapEmptyWhiteArea),
-            ) {
-                // Phone Status Bar + App Toolbar preview header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF3F4F6))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "9:41",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Color(0xFF374151),
-                    )
-                    Text(
-                        text = xmlPage.xmlFileName,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 8.5.sp,
-                        ),
-                        color = Color(0xFF6B7280),
-                    )
-                    Text(
-                        text = "100%",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Color(0xFF374151),
-                    )
-                }
+        // 2. App Toolbar inside Phone Frame ("Toolbar" strip just like screenshot)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF33437A))
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = "Toolbar",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Color.White,
+            )
+        }
 
-                // Pure WHITE canvas where dragged widgets are placed and rendered
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(Color.White)
-                        .verticalScroll(rememberScrollState())
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (widgetNodes.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.ide_view_drag_hint),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.5.sp,
-                                ),
-                                color = Color(0xFF9CA3AF),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                            )
-                        }
-                    } else {
-                        widgetNodes.forEach { node ->
-                            RenderWidgetNodeOnPhone(
-                                node = node,
-                                selectedWidgetUid = selectedWidgetUid,
-                                hoveredContainerUid = hoveredContainerUid,
-                                onSelectWidget = onSelectWidget,
-                                onDoubleTapTextView = onDoubleTapTextView,
-                                onContainerPositioned = onContainerPositioned,
-                            )
-                        }
-                    }
-                }
-
-                // Bottom Android Home Gesture Bar inside Phone Screen
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White)
-                        .padding(vertical = 5.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(56.dp)
-                            .height(3.5.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Color(0xFFCBD5E1)),
-                    )
-                }
+        // 3. Pure WHITE Screen Interior ("جوه الفريم ابيض")
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.White)
+                .verticalScroll(rememberScrollState())
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            widgetNodes.forEach { node ->
+                RenderWidgetNodeOnPhone(
+                    node = node,
+                    selectedWidgetUid = selectedWidgetUid,
+                    hoveredContainerUid = hoveredContainerUid,
+                    onSelectWidget = onSelectWidget,
+                    onDoubleTapTextView = onDoubleTapTextView,
+                    onContainerPositioned = onContainerPositioned,
+                )
             }
         }
     }
@@ -1230,46 +1390,42 @@ private fun RenderWidgetNodeOnPhone(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .heightIn(min = 48.dp)
                     .onGloballyPositioned { coords ->
                         onContainerPositioned(node.uid, coords.boundsInRoot())
                     }
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(bgColor)
                     .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.8.dp else 1.dp,
+                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
                         color = borderColor,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(4.dp),
                     )
                     .clickable { onSelectWidget(node) }
-                    .padding(6.dp),
+                    .padding(5.dp),
             ) {
                 ContainerBadgeLabel(
-                    label = "LinearLayout H • ${node.viewId}",
+                    label = "Linear(H) • ${node.viewId}",
                     color = Color(0xFF1D4ED8),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(3.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (node.children.isEmpty()) {
-                        EmptyContainerHint("Linear Layout H (أفقي)")
-                    } else {
-                        node.children.forEach { child ->
-                            Box(Modifier.widthIn(min = 64.dp)) {
-                                RenderWidgetNodeOnPhone(
-                                    node = child,
-                                    selectedWidgetUid = selectedWidgetUid,
-                                    hoveredContainerUid = hoveredContainerUid,
-                                    onSelectWidget = onSelectWidget,
-                                    onDoubleTapTextView = onDoubleTapTextView,
-                                    onContainerPositioned = onContainerPositioned,
-                                )
-                            }
+                    node.children.forEach { child ->
+                        Box(Modifier.widthIn(min = 56.dp)) {
+                            RenderWidgetNodeOnPhone(
+                                node = child,
+                                selectedWidgetUid = selectedWidgetUid,
+                                hoveredContainerUid = hoveredContainerUid,
+                                onSelectWidget = onSelectWidget,
+                                onDoubleTapTextView = onDoubleTapTextView,
+                                onContainerPositioned = onContainerPositioned,
+                            )
                         }
                     }
                 }
@@ -1290,38 +1446,34 @@ private fun RenderWidgetNodeOnPhone(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 58.dp)
+                    .heightIn(min = 52.dp)
                     .onGloballyPositioned { coords ->
                         onContainerPositioned(node.uid, coords.boundsInRoot())
                     }
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(bgColor)
                     .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.8.dp else 1.dp,
+                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
                         color = borderColor,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(4.dp),
                     )
                     .clickable { onSelectWidget(node) }
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 ContainerBadgeLabel(
-                    label = "LinearLayout V • ${node.viewId}",
+                    label = "Linear(V) • ${node.viewId}",
                     color = Color(0xFF4338CA),
                 )
-                if (node.children.isEmpty()) {
-                    EmptyContainerHint("Linear Layout V (عمودي)")
-                } else {
-                    node.children.forEach { child ->
-                        RenderWidgetNodeOnPhone(
-                            node = child,
-                            selectedWidgetUid = selectedWidgetUid,
-                            hoveredContainerUid = hoveredContainerUid,
-                            onSelectWidget = onSelectWidget,
-                            onDoubleTapTextView = onDoubleTapTextView,
-                            onContainerPositioned = onContainerPositioned,
-                        )
-                    }
+                node.children.forEach { child ->
+                    RenderWidgetNodeOnPhone(
+                        node = child,
+                        selectedWidgetUid = selectedWidgetUid,
+                        hoveredContainerUid = hoveredContainerUid,
+                        onSelectWidget = onSelectWidget,
+                        onDoubleTapTextView = onDoubleTapTextView,
+                        onContainerPositioned = onContainerPositioned,
+                    )
                 }
             }
         }
@@ -1340,38 +1492,34 @@ private fun RenderWidgetNodeOnPhone(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 64.dp)
+                    .heightIn(min = 54.dp)
                     .onGloballyPositioned { coords ->
                         onContainerPositioned(node.uid, coords.boundsInRoot())
                     }
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(bgColor)
                     .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.8.dp else 1.dp,
+                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
                         color = borderColor,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(4.dp),
                     )
                     .clickable { onSelectWidget(node) }
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 ContainerBadgeLabel(
-                    label = "Scroll V (↕) • ${node.viewId}",
+                    label = "Scroll(V) • ${node.viewId}",
                     color = Color(0xFF0369A1),
                 )
-                if (node.children.isEmpty()) {
-                    EmptyContainerHint("Scroll V (تمرير عمودي)")
-                } else {
-                    node.children.forEach { child ->
-                        RenderWidgetNodeOnPhone(
-                            node = child,
-                            selectedWidgetUid = selectedWidgetUid,
-                            hoveredContainerUid = hoveredContainerUid,
-                            onSelectWidget = onSelectWidget,
-                            onDoubleTapTextView = onDoubleTapTextView,
-                            onContainerPositioned = onContainerPositioned,
-                        )
-                    }
+                node.children.forEach { child ->
+                    RenderWidgetNodeOnPhone(
+                        node = child,
+                        selectedWidgetUid = selectedWidgetUid,
+                        hoveredContainerUid = hoveredContainerUid,
+                        onSelectWidget = onSelectWidget,
+                        onDoubleTapTextView = onDoubleTapTextView,
+                        onContainerPositioned = onContainerPositioned,
+                    )
                 }
             }
         }
@@ -1390,46 +1538,42 @@ private fun RenderWidgetNodeOnPhone(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 56.dp)
+                    .heightIn(min = 50.dp)
                     .onGloballyPositioned { coords ->
                         onContainerPositioned(node.uid, coords.boundsInRoot())
                     }
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(bgColor)
                     .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.8.dp else 1.dp,
+                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
                         color = borderColor,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(4.dp),
                     )
                     .clickable { onSelectWidget(node) }
-                    .padding(6.dp),
+                    .padding(5.dp),
             ) {
                 ContainerBadgeLabel(
-                    label = "Scroll H (↔) • ${node.viewId}",
+                    label = "Scroll(H) • ${node.viewId}",
                     color = Color(0xFF047857),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(3.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (node.children.isEmpty()) {
-                        EmptyContainerHint("Scroll H (تمرير أفقي)")
-                    } else {
-                        node.children.forEach { child ->
-                            Box(Modifier.widthIn(min = 64.dp)) {
-                                RenderWidgetNodeOnPhone(
-                                    node = child,
-                                    selectedWidgetUid = selectedWidgetUid,
-                                    hoveredContainerUid = hoveredContainerUid,
-                                    onSelectWidget = onSelectWidget,
-                                    onDoubleTapTextView = onDoubleTapTextView,
-                                    onContainerPositioned = onContainerPositioned,
-                                )
-                            }
+                    node.children.forEach { child ->
+                        Box(Modifier.widthIn(min = 56.dp)) {
+                            RenderWidgetNodeOnPhone(
+                                node = child,
+                                selectedWidgetUid = selectedWidgetUid,
+                                hoveredContainerUid = hoveredContainerUid,
+                                onSelectWidget = onSelectWidget,
+                                onDoubleTapTextView = onDoubleTapTextView,
+                                onContainerPositioned = onContainerPositioned,
+                            )
                         }
                     }
                 }
@@ -1439,12 +1583,12 @@ private fun RenderWidgetNodeOnPhone(
         IdeWidgetType.TEXT_VIEW -> {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(if (isSelected) Color(0xFFDBEAFE) else Color(0xFFF3F4F6))
                     .border(
-                        width = if (isSelected) 1.5.dp else 1.dp,
+                        width = if (isSelected) 1.4.dp else 1.dp,
                         color = if (isSelected) Color(0xFF2563EB) else Color(0xFFD1D5DB),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(4.dp),
                     )
                     .clickable {
                         if (isSelected) {
@@ -1453,12 +1597,12 @@ private fun RenderWidgetNodeOnPhone(
                             onSelectWidget(node)
                         }
                     }
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = node.text,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                     color = Color(0xFF111827),
@@ -1477,28 +1621,181 @@ private fun ContainerBadgeLabel(
         text = label,
         style = MaterialTheme.typography.labelSmall.copy(
             fontFamily = JetBrainsMono,
-            fontSize = 8.5.sp,
+            fontSize = 8.sp,
             fontWeight = FontWeight.Bold,
         ),
         color = color,
     )
 }
 
+// ============================================================================
+// 3. Bottom Bar Matching Screenshot Layout (Left XML Pill + Right Run Split Pill)
+// ============================================================================
+
 @Composable
-private fun EmptyContainerHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontFamily = JetBrainsMono,
-            fontSize = 9.sp,
-        ),
-        color = Color(0xFF94A3B8),
-        modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-    )
+private fun IdeSketchBottomBar(
+    activeTab: IdeProjectTab,
+    xmlPage: ProjectXmlPage,
+    onOpenPageSelector: () -> Unit,
+    onRunClick: () -> Unit,
+    bottomBarPadding: Dp = 0.dp,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0A0F24))
+            .navigationBarsPadding()
+            .padding(
+                start = 12.dp,
+                end = 12.dp,
+                top = 6.dp,
+                bottom = 8.dp + bottomBarPadding,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // Left Selector Pill (matches screenshot's `[📱] main.xml  ▾` button size & spacing)
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(40.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(Color(0xFF151D3B))
+                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(percent = 50))
+                .clickable(onClick = onOpenPageSelector)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Small phone rectangle icon like screenshot
+            Canvas(Modifier.size(width = 12.dp, height = 15.dp)) {
+                drawRoundRect(
+                    color = Cyan,
+                    topLeft = Offset(1f, 1f),
+                    size = Size(size.width - 2f, size.height - 2f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = Stroke(width = 1.5.dp.toPx()),
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = if (activeTab == IdeProjectTab.LOGIC) {
+                    "${xmlPage.activityName} (${xmlPage.xmlFileName})"
+                } else {
+                    xmlPage.xmlFileName
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                tint = Ink.copy(alpha = 0.85f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        // Right Split Run Button (`▷ Run` + `⌄`) matching screenshot proportions
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(108.dp)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 20.dp,
+                            bottomStart = 20.dp,
+                            topEnd = 4.dp,
+                            bottomEnd = 4.dp,
+                        ),
+                    )
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF283A70), Color(0xFF364F96)),
+                        ),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = Cyan.copy(alpha = 0.40f),
+                        shape = RoundedCornerShape(
+                            topStart = 20.dp,
+                            bottomStart = 20.dp,
+                            topEnd = 4.dp,
+                            bottomEnd = 4.dp,
+                        ),
+                    )
+                    .clickable(onClick = onRunClick),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(R.string.ide_run_button),
+                    tint = Color.White,
+                    modifier = Modifier.size(17.dp),
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = stringResource(R.string.ide_run_button),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Color.White,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(38.dp)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 4.dp,
+                            bottomStart = 4.dp,
+                            topEnd = 10.dp,
+                            bottomEnd = 10.dp,
+                        ),
+                    )
+                    .background(Color(0xFF2B3E78))
+                    .border(
+                        width = 1.dp,
+                        color = Cyan.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(
+                            topStart = 4.dp,
+                            bottomStart = 4.dp,
+                            topEnd = 10.dp,
+                            bottomEnd = 10.dp,
+                        ),
+                    )
+                    .clickable(onClick = onOpenPageSelector),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
 }
 
 // ============================================================================
-// 3. LOGIC Tab: Android Code Editor (Java Android | Kotlin Android | xml Android)
+// 4. LOGIC Tab: Android Code Editor (Java Android | Kotlin Android | xml Android)
 // ============================================================================
 
 @Composable
@@ -1528,134 +1825,129 @@ private fun IdeLogicCodeEditor(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(Color(0xE606091A))
-            .border(1.dp, VioletSoft.copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
+            .border(1.dp, VioletSoft.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
     ) {
         // 1. Code Editor Mode Switcher: Java Android | Kotlin Android | xml Android
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xCC0B1028))
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xCC0B1028))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                CodeEditorFlavor.entries.forEach { flavor ->
+                    val selected = flavor == activeFlavor
+                    val accent = when (flavor) {
+                        CodeEditorFlavor.JAVA_ANDROID -> Color(0xFFFBBF24)
+                        CodeEditorFlavor.KOTLIN_ANDROID -> VioletSoft
+                        CodeEditorFlavor.XML_ANDROID -> Cyan
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) accent.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) accent.copy(alpha = 0.70f) else Color(0x22FFFFFF),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                            .clickable { onSelectFlavor(flavor) }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = flavor.label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 9.5.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            ),
+                            color = if (selected) accent else Muted,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    CodeEditorFlavor.entries.forEach { flavor ->
-                        val selected = flavor == activeFlavor
-                        val accent = when (flavor) {
-                            CodeEditorFlavor.JAVA_ANDROID -> Color(0xFFFBBF24)
-                            CodeEditorFlavor.KOTLIN_ANDROID -> VioletSoft
-                            CodeEditorFlavor.XML_ANDROID -> Cyan
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(if (selected) accent.copy(alpha = 0.22f) else Color(0x14FFFFFF))
-                                .border(
-                                    width = 1.dp,
-                                    color = if (selected) accent.copy(alpha = 0.70f) else Color(0x22FFFFFF),
-                                    shape = RoundedCornerShape(9.dp),
-                                )
-                                .clickable { onSelectFlavor(flavor) }
-                                .padding(vertical = 5.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = flavor.label,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                ),
-                                color = if (selected) accent else Muted,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
-
-                // Active file & linked XML indicator row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(Teal),
-                        )
-                        Text(
-                            text = currentFileLabel,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Ink,
-                        )
-                    }
-
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Teal),
+                    )
                     Text(
-                        text = "${xmlPage.xmlFileName} ➔ ${xmlPage.activityName}",
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        text = currentFileLabel,
+                        style = MaterialTheme.typography.labelMedium.copy(
                             fontFamily = JetBrainsMono,
-                            fontSize = 9.5.sp,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
                         ),
-                        color = Cyan,
+                        color = Ink,
                     )
                 }
+
+                Text(
+                    text = "${xmlPage.xmlFileName} ➔ ${xmlPage.activityName}",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                    ),
+                    color = Cyan,
+                )
             }
         }
 
-        // 2. Quick Symbol Bar for fast Android coding on mobile
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            val symbols = remember(activeFlavor) {
-                when (activeFlavor) {
-                    CodeEditorFlavor.XML_ANDROID ->
-                        listOf("<", ">", "/>", "=", "\"\"", "android:", "@+id/", "match_parent", "wrap_content")
-                    CodeEditorFlavor.JAVA_ANDROID, CodeEditorFlavor.KOTLIN_ANDROID ->
-                        listOf("    ", "{", "}", "(", ")", ";", ".", "=", "\"\"", "R.id.", "R.layout.")
-                }
+        // 2. Quick Symbol Bar
+        val symbols = remember(activeFlavor) {
+            when (activeFlavor) {
+                CodeEditorFlavor.XML_ANDROID ->
+                    listOf("<", ">", "/>", "=", "\"\"", "android:", "@+id/", "match_parent", "wrap_content")
+                CodeEditorFlavor.JAVA_ANDROID, CodeEditorFlavor.KOTLIN_ANDROID ->
+                    listOf("    ", "{", "}", "(", ")", ";", ".", "=", "\"\"", "R.id.", "R.layout.")
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x99080C20))
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                symbols.forEach { sym ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x1FFFFFFF))
-                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(6.dp))
-                            .clickable { onCodeChange(code + sym) }
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = if (sym == "    ") "Tab" else sym,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Cyan,
-                        )
-                    }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0x99080C20))
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            symbols.forEach { sym ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0x1FFFFFFF))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(6.dp))
+                        .clickable { onCodeChange(code + sym) }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = if (sym == "    ") "Tab" else sym,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Cyan,
+                    )
                 }
             }
         }
@@ -1668,54 +1960,52 @@ private fun IdeLogicCodeEditor(
         )
 
         // 3. Syntax-Highlighted Code Area with Line Numbers
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(verticalScroll)
-                    .padding(vertical = 10.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(verticalScroll)
+                .padding(vertical = 10.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 10.dp, end = 8.dp),
+                horizontalAlignment = Alignment.End,
             ) {
-                Column(
-                    modifier = Modifier.padding(start = 10.dp, end = 8.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    for (lineIdx in 1..lineCount) {
-                        Text(
-                            text = lineIdx.toString(),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 11.5.sp,
-                                lineHeight = 19.sp,
-                            ),
-                            color = Muted.copy(alpha = 0.50f),
-                        )
-                    }
+                for (lineIdx in 1..lineCount) {
+                    Text(
+                        text = lineIdx.toString(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.5.sp,
+                            lineHeight = 19.sp,
+                        ),
+                        color = Muted.copy(alpha = 0.50f),
+                    )
                 }
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(Color(0x1FFFFFFF)),
-                )
-
-                BasicTextField(
-                    value = code,
-                    onValueChange = onCodeChange,
-                    visualTransformation = syntaxTransformation,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.5.sp,
-                        lineHeight = 19.sp,
-                        color = Ink,
-                    ),
-                    cursorBrush = SolidColor(Cyan),
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(horizontalScroll)
-                        .padding(horizontal = 10.dp),
-                )
             }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color(0x1FFFFFFF)),
+            )
+
+            BasicTextField(
+                value = code,
+                onValueChange = onCodeChange,
+                visualTransformation = syntaxTransformation,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.5.sp,
+                    lineHeight = 19.sp,
+                    color = Ink,
+                ),
+                cursorBrush = SolidColor(Cyan),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(horizontalScroll)
+                    .padding(horizontal = 10.dp),
+            )
         }
     }
 }
@@ -1737,7 +2027,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
 
     when (flavor) {
         CodeEditorFlavor.XML_ANDROID -> {
-            // XML tags
             Regex("</?[A-Za-z0-9_.:-]+|/?>").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold),
@@ -1745,7 +2034,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // XML attributes (e.g. android:layout_width)
             Regex("\\b[A-Za-z0-9_]+:[A-Za-z0-9_]+").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFFC084FC)),
@@ -1753,7 +2041,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // XML strings
             Regex("\"[^\"\n]*\"").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF34D399)),
@@ -1761,7 +2048,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // XML comments
             Regex("<!--[\\s\\S]*?-->").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF64748B)),
@@ -1784,7 +2070,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // Android classes & R references
             Regex("\\b(AppCompatActivity|Activity|Bundle|TextView|LinearLayout|ScrollView|HorizontalScrollView|View|R|layout|id)\\b").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF38BDF8), fontWeight = FontWeight.SemiBold),
@@ -1792,7 +2077,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // Annotations (@Override, etc.)
             Regex("@[A-Za-z0-9_]+").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFFFBBF24)),
@@ -1800,7 +2084,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // Strings
             Regex("\"[^\"\n]*\"").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF34D399)),
@@ -1808,7 +2091,6 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
                     m.range.last + 1,
                 )
             }
-            // Comments
             Regex("//[^\n]*|/\\*[\\s\\S]*?\\*/").findAll(raw).forEach { m ->
                 builder.addStyle(
                     SpanStyle(color = Color(0xFF64748B)),
@@ -1821,98 +2103,14 @@ private fun highlightAndroidCode(raw: String, flavor: CodeEditorFlavor): Annotat
     return builder.toAnnotatedString()
 }
 
-// ============================================================================
-// 4. Compact Bottom XML / Activity Selector Button
-// ============================================================================
-
-@Composable
-private fun IdeBottomPageSelectorBar(
-    activeTab: IdeProjectTab,
-    xmlPage: ProjectXmlPage,
-    activeFlavor: CodeEditorFlavor,
-    onClick: () -> Unit,
-    bottomBarPadding: Dp = 0.dp,
-) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(
-                    top = 2.dp,
-                    bottom = 8.dp + bottomBarPadding,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Compact, sleek pill selector (not wide, not tall!)
-            Row(
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(Color(0xE60B112C))
-                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(percent = 50))
-                    .clickable(onClick = onClick)
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(
-                            if (activeTab == IdeProjectTab.VIEW) {
-                                Cyan.copy(alpha = 0.20f)
-                            } else {
-                                VioletSoft.copy(alpha = 0.22f)
-                            },
-                        )
-                        .padding(horizontal = 6.dp, vertical = 1.5.dp),
-                ) {
-                    Text(
-                        text = if (activeTab == IdeProjectTab.VIEW) "XML" else activeFlavor.extension.uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = if (activeTab == IdeProjectTab.VIEW) Cyan else VioletSoft,
-                    )
-                }
-
-                Text(
-                    text = if (activeTab == IdeProjectTab.VIEW) {
-                        xmlPage.xmlFileName
-                    } else {
-                        "${xmlPage.activityName} • ${xmlPage.xmlFileName}"
-                    },
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                    color = Ink,
-                    maxLines = 1,
-                )
-
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = null,
-                    tint = Cyan,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun IdeEmptyWorkspaceCanvas() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Color(0x66060A1C))
-            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(22.dp)),
+            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(18.dp)),
     )
 }
 
@@ -2219,15 +2417,14 @@ private fun TemporaryRunScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Live preview of the white phone canvas inside Temporary Run Page
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 180.dp, max = 320.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(Color.White)
-                                .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(16.dp))
+                                .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
                                 .verticalScroll(rememberScrollState())
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
