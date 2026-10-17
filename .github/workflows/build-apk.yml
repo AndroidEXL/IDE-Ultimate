@@ -122,8 +122,10 @@ jobs:
           echo "--- release ---"
           echo "$RELEASE_OUT"
 
-          DEBUG_SHA="$(printf '%s\n' "$DEBUG_OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          RELEASE_SHA="$(printf '%s\n' "$RELEASE_OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          # apksigner prints "Signer #1 certificate SHA-256 digest: …" for v1
+          # and "V2 Signer: certificate SHA-256 digest: …" for v2+, so match both.
+          DEBUG_SHA="$(printf '%s\n' "$DEBUG_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
+          RELEASE_SHA="$(printf '%s\n' "$RELEASE_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
           echo "debug=$DEBUG_SHA"
           echo "release=$RELEASE_SHA"
 
