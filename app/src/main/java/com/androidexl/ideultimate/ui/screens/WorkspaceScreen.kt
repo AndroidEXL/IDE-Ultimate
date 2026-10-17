@@ -927,7 +927,10 @@ private fun SheetHeader(title: String, subtitle: String? = null, badge: String? 
         if (badge != null) {
             Text(
                 text = badge,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 10.sp,
+                    letterSpacing = 0.5.sp,
+                ),
                 color = Cyan,
             )
             Spacer(Modifier.height(6.dp))

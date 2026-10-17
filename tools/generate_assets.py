@@ -11,7 +11,7 @@ Generates every raster asset used by IDE Ultimate:
 The Android vector drawables are the source of truth for the adaptive icon;
 this script mirrors the same geometry for the legacy PNG fallbacks.
 
-Requirements:  pip install pillow numpy arabic-reshaper python-bidi
+Requirements:  pip install -r tools/requirements.txt
 Usage:         python tools/generate_assets.py
 """
 
@@ -21,9 +21,9 @@ import math
 import random
 from pathlib import Path
 
+import freetype
 import numpy as np
-from arabic_reshaper import reshape
-from bidi.algorithm import get_display
+import uharfbuzz as hb
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,11 +51,6 @@ SCALE = 3  # supersampling for crisp shapes
 # --------------------------------------------------------------------------- #
 def font(name: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(FONT_DIR / name), size)
-
-
-def ar(text: str) -> str:
-    """Reshape Arabic and put it in visual order for Pillow (no raqm needed)."""
-    return get_display(reshape(text))
 
 
 def lerp(a, b, t):
@@ -373,11 +368,8 @@ def build_splash_preview():
     base.alpha_composite(glow, (0, 1000))
     base.alpha_composite(gradient, (0, 1000))
 
-    # Tagline
-    tag_font = font("almarai_regular.ttf", 42)
-    tagline = ar("بيئة تطوير متكاملة… في راحة يدك")
-    tw = d.textbbox((0, 0), tagline, font=tag_font)[2]
-    d.text(((w - tw) / 2, 1150), tagline, font=tag_font, fill=MUTED + (255,))
+    # Tagline (shaped with HarfBuzz)
+    paste_text(base, "بيئة تطوير متكاملة… في راحة يدك", "almarai_regular.ttf", 42, w / 2, 1146, MUTED, align="center")
 
     # Progress bar (RTL: fills from the right)
     bar_w, bar_h = 660, 15
@@ -401,20 +393,15 @@ def build_splash_preview():
     status_font = font("almarai_regular.ttf", 30)
     mono_font = font("jetbrains_mono_regular.ttf", 30)
     # RTL layout: the Arabic status sits on the right, the percentage on the left.
-    status = ar("تجهيز المعاينة الفورية")
-    sw2 = d.textbbox((0, 0), status, font=status_font)[2]
-    d.text((bar_x + bar_w - sw2, bar_y + 44), status, font=status_font, fill=MUTED + (255,))
-    pct = "62%"
-    d.text((bar_x, bar_y + 44), pct, font=mono_font, fill=CYAN + (255,))
+    paste_text(base, "تجهيز المعاينة الفورية", "almarai_regular.ttf", 30, bar_x + bar_w, bar_y + 40, MUTED, align="right")
+    paste_text(base, "62%", "jetbrains_mono_regular.ttf", 30, bar_x, bar_y + 44, CYAN, align="left")
 
     # Skip pill (top-left in RTL)
-    skip_font = font("almarai_bold.ttf", 27)
-    skip = ar("تخطي")
-    sw = d.textbbox((0, 0), skip, font=skip_font)[2]
-    pill_w, pill_h = sw + 64, 68
+    skip_image, skip_width = shape_text("تخطي", "almarai_bold.ttf", 27, "rtl", INK)
+    pill_w, pill_h = skip_width + 64, 68
     px, py = 66, 70
     d.rounded_rectangle((px, py, px + pill_w, py + pill_h), radius=pill_h // 2, fill=(255, 255, 255, 20), outline=(255, 255, 255, 45), width=2)
-    d.text((px + (pill_w - sw) / 2, py + 16), skip, font=skip_font, fill=INK + (255,))
+    paste_image(base, skip_image, (px + 32, py + 14))
 
     # Bottom branding
     mono_small = font("jetbrains_mono_medium.ttf", 27)
@@ -425,7 +412,7 @@ def build_splash_preview():
     d.text(((w - pw2) / 2, 1783), powered, font=mono_small, fill=MUTED + (240,))
 
     ver_font = font("jetbrains_mono_regular.ttf", 25)
-    ver = "v1.0.0"
+    ver = "v1.1.0"
     vw = d.textbbox((0, 0), ver, font=ver_font)[2]
     d.text(((w - vw) / 2, 1838), ver, font=ver_font, fill=(154, 163, 199, 150))
 
@@ -471,9 +458,7 @@ def build_banner():
     grad.putalpha(layer.getchannel("A"))
     bg.alpha_composite(grad, (0, 142))
 
-    sub_font = font("almarai_regular.ttf", 44)
-    sub = ar("بيئة تطوير متكاملة في راحة يدك")
-    d.text((96, 318), sub, font=sub_font, fill=MUTED + (255,))
+    paste_text(bg, "بيئة تطوير متكاملة في راحة يدك", "almarai_regular.ttf", 44, 96, 312, MUTED, align="left")
 
     chips = ["Kotlin", "Compose", "Splash", "RTL"]
     chip_font = font("jetbrains_mono_medium.ttf", 26)
@@ -498,7 +483,410 @@ def main():
     build_icons()
     build_splash_preview()
     build_banner()
+    build_workspace_preview()
+    build_workspace_sheet_preview()
+    build_workspace_preview()
+    build_workspace_sheet_preview()
     print("Done.")
+
+
+
+
+# --------------------------------------------------------------------------- #
+# Text rendering (HarfBuzz shaping + FreeType rasterisation)
+# --------------------------------------------------------------------------- #
+def shape_text(text, font_name, size, direction="rtl", color=INK, spacing=0.0):
+    """Shape a run with HarfBuzz and rasterise it; returns (RGBA image, width)."""
+    path = str(FONT_DIR / font_name)
+    blob = hb.Blob.from_file_path(path)
+    face = hb.Face(blob)
+    hb_font = hb.Font(face)
+    buffer = hb.Buffer()
+    buffer.add_str(text)
+    buffer.direction = direction
+    buffer.script = "Arab" if direction == "rtl" else "Latn"
+    buffer.language = "ar" if direction == "rtl" else "en"
+    hb.shape(hb_font, buffer)
+
+    upem = face.upem or 1000
+    scale = size / upem
+    ft = freetype.Face(path)
+    ft.set_pixel_sizes(0, size)
+    ascent = ft.size.ascender / 64.0
+
+    pen_x = 0.0
+    glyphs = []
+    for info, pos in zip(buffer.glyph_infos, buffer.glyph_positions):
+        glyphs.append((info.codepoint, pen_x + pos.x_offset * scale, pos.y_offset * scale))
+        pen_x += pos.x_advance * scale + spacing
+
+    width = max(1, int(math.ceil(pen_x)) + 8)
+    height = max(1, int(math.ceil(ft.size.height / 64.0)) + 10)
+    mask = Image.new("L", (width, height), 0)
+    for gid, gx, gy in glyphs:
+        ft.load_glyph(gid, freetype.FT_LOAD_RENDER)
+        bitmap = ft.glyph.bitmap
+        if bitmap.width == 0 or bitmap.rows == 0:
+            continue
+        pitch = abs(bitmap.pitch)
+        raw = bytes(bitmap.buffer)
+        rows = [raw[r * pitch:r * pitch + bitmap.width] for r in range(bitmap.rows)]
+        glyph_img = Image.frombytes("L", (bitmap.width, bitmap.rows), b"".join(rows))
+        left = int(round(gx + ft.glyph.bitmap_left))
+        top = int(round(ascent - gy - ft.glyph.bitmap_top))
+        mask.paste(255, (left, top, left + bitmap.width, top + bitmap.rows), glyph_img)
+
+    image = Image.new("RGBA", (width, height), color + (0,))
+    image.putalpha(mask)
+    return image, int(round(pen_x))
+
+
+def with_alpha(image, alpha):
+    out = image.copy()
+    out.putalpha(out.getchannel("A").point(lambda v: int(v * alpha)))
+    return out
+
+
+def _is_rtl_char(ch):
+    return "\u0590" <= ch <= "\u08FF" or "\uFB1D" <= ch <= "\uFDFF" or "\uFE70" <= ch <= "\uFEFF"
+
+
+def bidi_runs(text):
+    """Split a paragraph into (run_text, is_rtl) runs, preserving spaces."""
+    runs = []
+    for ch in text:
+        rtl = _is_rtl_char(ch)
+        if runs and runs[-1][1] == rtl:
+            runs[-1][0].append(ch)
+        else:
+            runs.append([[ch], rtl])
+    return [("".join(chars), rtl) for chars, rtl in runs]
+
+
+def layout_paragraph(text, font_name, size, color=INK, max_width=None):
+    """Bidi-aware text layout: shapes each run and orders runs for the base direction."""
+    base_rtl = any(_is_rtl_char(ch) for ch in text)
+    runs = bidi_runs(text.replace("\n", " "))
+
+    def build(font_size):
+        shaped = []
+        for run_text, rtl in runs:
+            image, width = shape_text(
+                run_text, font_name, font_size, "rtl" if rtl else "ltr", color
+            )
+            shaped.append((image, width, rtl))
+        return shaped, sum(item[1] for item in shaped)
+
+    shaped, total = build(size)
+    if max_width is not None and total > max_width:
+        # Shrink a little first, then fall back to an ellipsis.
+        shrunk = size
+        while total > max_width and shrunk > int(size * 0.72):
+            shrunk -= 1
+            shaped, total = build(shrunk)
+        if total > max_width:
+            budget = max_width - int(shrunk * 0.55)
+            clipped, used = [], 0
+            for image, width, rtl in shaped:
+                if used + width <= budget:
+                    clipped.append((image, width, rtl))
+                    used += width
+                elif image is not None:
+                    clipped.append((image, width, rtl))
+                    used += width
+                    break
+            ellipsis, ell_width = shape_text("…", font_name, shrunk,
+                                             "rtl" if base_rtl else "ltr", color)
+            clipped.append((ellipsis, ell_width, base_rtl))
+            shaped, total = clipped, sum(item[1] for item in clipped)
+
+    height = max([img.height for img, _, _ in shaped if img is not None] + [int(size * 1.4)]) + 8
+    canvas = Image.new("RGBA", (max(1, total + 8), height), (0, 0, 0, 0))
+
+    if base_rtl:
+        x = total + 4
+        for image, width, _ in reversed(shaped):
+            x -= width
+            if image is not None:
+                canvas.alpha_composite(image, (int(x), 0))
+    else:
+        x = 4
+        for image, width, _ in shaped:
+            if image is not None:
+                canvas.alpha_composite(image, (int(x), 0))
+            x += width
+    return canvas, total
+
+
+def paste_image(canvas, image, xy, alpha=1.0):
+    if alpha < 1.0:
+        image = with_alpha(image, alpha)
+    canvas.alpha_composite(image, (int(xy[0]), int(xy[1])))
+
+
+def paste_text(canvas, text, font_name, size, x, y, color=INK, align="left",
+               alpha=1.0, max_width=None):
+    """Paste bidi-aware text on a canvas. `align` accepts left/right/center."""
+    image, width = layout_paragraph(text, font_name, size, color, max_width)
+    if align == "right":
+        pos_x = x - width
+    elif align == "center":
+        pos_x = x - width / 2
+    else:
+        pos_x = x
+    paste_image(canvas, image, (pos_x, y), alpha)
+    return width
+
+
+# --------------------------------------------------------------------------- #
+# Workspace screen previews
+# --------------------------------------------------------------------------- #
+def glass_panel(canvas, box, radius, accent=None, fill_top=31, fill_bottom=8):
+    x0, y0, x1, y1 = [int(v) for v in box]
+    w, h = x1 - x0, y1 - y0
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    t = np.linspace(0, 1, h)[:, None].repeat(w, axis=1)
+    arr[..., 0:3] = 255
+    arr[..., 3] = (fill_top + (fill_bottom - fill_top) * t).astype(np.uint8)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    layer.paste(Image.fromarray(arr, "RGBA"), (0, 0), rounded_mask((w, h), radius))
+
+    if accent:
+        gradient = linear_gradient_rgba((w, 2), None, None, [accent, accent])
+        line = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(line).rounded_rectangle((0, 0, w - 1, h - 1), radius=radius,
+                                               outline=accent + (140,), width=2)
+        line = Image.composite(line, Image.new("RGBA", (w, h), (0, 0, 0, 0)), rounded_mask((w, h), radius))
+        layer.alpha_composite(line)
+    else:
+        line = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(line).rounded_rectangle((0, 0, w - 1, h - 1), radius=radius,
+                                               outline=(255, 255, 255, 30), width=2)
+        layer.alpha_composite(line)
+    canvas.alpha_composite(layer, (x0, y0))
+
+
+def draw_folder_glyph(canvas, box, accent):
+    x0, y0, x1, y1 = [int(v) for v in box]
+    w, h = x1 - x0, y1 - y0
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    radius = int(w * 0.11)
+
+    tab = (int(w * 0.07), int(h * 0.12), int(w * 0.47), int(h * 0.42))
+    d.rounded_rectangle(tab, radius=int(w * 0.07), fill=accent + (105,))
+
+    body = (int(w * 0.04), int(h * 0.30), int(w * 0.96), int(h * 0.92))
+    bw, bh = body[2] - body[0], body[3] - body[1]
+    gradient = linear_gradient_rgba((bw, bh), None, None, [accent, tuple(int(c * 0.55) for c in accent)])
+    gradient.putalpha(gradient.getchannel("A").point(lambda v: int(v * 0.72)))
+    body_layer = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+    body_layer.paste(gradient, (0, 0), rounded_mask((bw, bh), radius))
+    layer.alpha_composite(body_layer, (body[0], body[1]))
+
+    outline = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+    ImageDraw.Draw(outline).rounded_rectangle((0, 0, bw - 1, bh - 1), radius=radius,
+                                              outline=accent + (150,), width=max(2, int(w * 0.018)))
+    layer.alpha_composite(outline, (body[0], body[1]))
+
+    shine = (body[0] + int(w * 0.07), body[1] + int(h * 0.08),
+             body[0] + int(w * 0.57), body[1] + int(h * 0.11))
+    d.rounded_rectangle(shine, radius=shine[3] - shine[1], fill=(255, 255, 255, 55))
+    canvas.alpha_composite(layer, (x0, y0))
+
+
+def draw_code_panel(canvas, box, accent_lines):
+    x0, y0, x1, y1 = [int(v) for v in box]
+    w, h = x1 - x0, y1 - y0
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=int(w * 0.09), fill=(7, 11, 28, 205),
+                        outline=(255, 255, 255, 26), width=2)
+    dot_r = max(4, int(w * 0.013))
+    for i, color in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+        cx = int(w * 0.08) + i * int(w * 0.045)
+        d.ellipse((cx - dot_r, int(h * 0.12) - dot_r, cx + dot_r, int(h * 0.12) + dot_r), fill=color + (255,))
+    line_y = int(h * 0.33)
+    for fraction, color in accent_lines:
+        d.rounded_rectangle(
+            (int(w * 0.09), line_y, int(w * 0.09) + int(w * 0.82 * fraction), line_y + max(4, int(h * 0.035))),
+            radius=max(2, int(h * 0.02)),
+            fill=color + (190,),
+        )
+        line_y += int(h * 0.15)
+    canvas.alpha_composite(layer, (x0, y0))
+
+
+def draw_fab(canvas, cx, cy, size):
+    canvas.alpha_composite(radial_rgba(canvas.size, (cx, cy), size * 1.05, VIOLET, 120, 2.0))
+    s = int(size)
+    gradient = linear_gradient_rgba((s, s), None, None, [VIOLET, (139, 92, 246), (217, 70, 239)])
+    fab = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    fab.paste(gradient, (0, 0), rounded_mask((s, s), int(s * 0.35)))
+    fab.alpha_composite(Image.new("RGBA", (s, s), (0, 0, 0, 0)))
+    d = ImageDraw.Draw(fab)
+    d.rounded_rectangle((1, 1, s - 2, s - 2), radius=int(s * 0.35), outline=(255, 255, 255, 80), width=2)
+    plus = int(s * 0.10)
+    d.rounded_rectangle((s / 2 - s * 0.22, s / 2 - plus / 2, s / 2 + s * 0.22, s / 2 + plus / 2),
+                        radius=plus, fill=(255, 255, 255, 255))
+    d.rounded_rectangle((s / 2 - plus / 2, s / 2 - s * 0.22, s / 2 + plus / 2, s / 2 + s * 0.22),
+                        radius=plus, fill=(255, 255, 255, 255))
+    canvas.alpha_composite(fab, (int(cx - s / 2), int(cy - s / 2)))
+
+
+def workspace_base(title, subtitle):
+    w, h = 1080, 1920
+    base = Image.open(RES / "drawable-nodpi" / "splash_nebula.webp").convert("RGBA").resize((w, h), Image.LANCZOS)
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    ys = np.linspace(0, 1, h)
+    stops = [(0.0, 0.62), (0.5, 0.92), (1.0, 1.0)]
+    alphas = np.interp(ys, [s[0] for s in stops], [s[1] for s in stops]) * 255
+    arr[..., 0], arr[..., 1], arr[..., 2] = DEEP_NAVY
+    arr[..., 3] = alphas[:, None].astype(np.uint8)
+    base.alpha_composite(Image.fromarray(arr, "RGBA"))
+
+    d = ImageDraw.Draw(base)
+    add_stars(d, (w, h), count=42, seed=27, scale=1.0)
+
+    # Back button on the right (RTL) + logo on the left.
+    d.ellipse((920, 92, 1020, 192), fill=(255, 255, 255, 22), outline=(255, 255, 255, 40), width=2)
+    d.line([(992, 128), (968, 144), (992, 160)], fill=INK + (255,), width=6, joint="curve")
+    draw_logo(base, 86, 144, 108)
+
+    paste_text(base, title, "almarai_bold.ttf", 46, 892, 76, INK, align="right")
+    paste_text(base, subtitle, "almarai_regular.ttf", 28, 892, 142, MUTED, align="right")
+
+    # Breadcrumbs (drawn on a layer so alpha is composited).
+    x = 1010
+    for label, selected in [("قوالب جاهزة", True), ("الجذر", False)]:
+        image, width = layout_paragraph(label, "almarai_regular.ttf", 26, CYAN if selected else MUTED)
+        chip_w = width + 44
+        fill = (103, 232, 249, 38) if selected else (255, 255, 255, 14)
+        outline = (103, 232, 249, 110) if selected else (255, 255, 255, 36)
+        chip = Image.new("RGBA", (chip_w, 56), (0, 0, 0, 0))
+        ImageDraw.Draw(chip).rounded_rectangle((1, 1, chip_w - 2, 54), radius=28,
+                                               fill=fill, outline=outline, width=2)
+        chip.alpha_composite(image, (22, 12))
+        base.alpha_composite(chip, (int(x - chip_w), 216))
+        x -= chip_w + 10
+
+    return base
+
+
+def build_workspace_preview():
+    base = workspace_base("مساحة العمل", "نظّم مشاريعك في مجلدات")
+    d = ImageDraw.Draw(base)
+
+    card_w, gap, left, top = 476, 28, 50, 310
+    cards = [
+        ("مشاريع Android", "العناصر: 2", CYAN, "folder"),
+        ("قوالب جاهزة", "العناصر: 1", LILAC, "folder"),
+        ("HelloCompose", "مشروع Kotlin", CYAN, "project"),
+        ("Playground", "مشروع Kotlin", VIOLET_SOFT, "project"),
+    ]
+
+    for index, (name, meta, accent, kind) in enumerate(cards):
+        row, col = divmod(index, 2)
+        x0 = left + (1 - col) * (card_w + gap)  # RTL: first column on the right
+        y0 = top + row * (card_w + gap)
+        glass_panel(base, (x0, y0, x0 + card_w, y0 + card_w), 62, accent)
+        if kind == "folder":
+            draw_folder_glyph(base, (x0 + 34, y0 + 40, x0 + card_w - 34, y0 + card_w * 0.62), accent)
+        else:
+            draw_code_panel(
+                base,
+                (x0 + 22, y0 + 22, x0 + card_w - 22, y0 + card_w * 0.66),
+                [(0.78, FUCHSIA), (0.52, CYAN), (0.88, VIOLET_SOFT), (0.38, TEAL)],
+            )
+        paste_text(base, name, "almarai_bold.ttf", 34, x0 + card_w - 28, y0 + card_w - 126, INK,
+                   align="right", max_width=card_w - 56)
+        paste_text(base, meta, "almarai_regular.ttf", 26, x0 + card_w - 28, y0 + card_w - 78, MUTED,
+                   align="right", max_width=card_w - 56)
+
+    draw_fab(base, 148, 1740, 150)
+
+    out = DOCS / "workspace_preview.png"
+    base.convert("RGB").save(out, optimize=True)
+    print(f"  docs/workspace_preview.png  {out.stat().st_size / 1024:.0f} KB")
+
+
+def draw_action_row(canvas, y, title, description, tint, destructive):
+    w = 1080
+    box = (60, y, w - 60, y + 132)
+    fill = (255, 92, 92, 26) if destructive else (255, 255, 255, 6)
+    outline = (255, 92, 92, 60) if destructive else (255, 255, 255, 26)
+    glass_panel(canvas, box, 44, None, fill_top=fill[3], fill_bottom=fill[3])
+    d = ImageDraw.Draw(canvas)
+    d.rounded_rectangle(box, radius=44, outline=outline, width=2)
+
+    icon_box = (w - 60 - 116, y + 26, w - 60 - 26, y + 116)
+    d.rounded_rectangle(icon_box, radius=34, fill=tint + (34,), outline=tint + (70,), width=2)
+    cx = (icon_box[0] + icon_box[2]) / 2
+    cy = (icon_box[1] + icon_box[3]) / 2
+    ink = (255, 138, 138) if destructive else tint
+
+    if destructive:
+        d.rounded_rectangle((cx - 18, cy - 8, cx + 18, cy + 22), radius=5, outline=ink + (255,), width=5)
+        d.line((cx - 25, cy - 18, cx + 25, cy - 18), fill=ink + (255,), width=5)
+        d.line((cx - 9, cy - 27, cx + 9, cy - 27), fill=ink + (255,), width=5)
+    elif title.startswith("تعديل"):
+        d.line((cx + 15, cy - 20, cx - 7, cy + 6), fill=ink + (255,), width=6)
+        d.polygon([(cx - 16, cy + 14), (cx - 3, cy + 9), (cx - 11, cy)], fill=ink + (255,))
+    elif title.startswith("تصدير"):
+        d.line((cx - 16, cy - 18, cx + 16, cy - 18), fill=ink + (255,), width=6)
+        d.line((cx + 16, cy - 18, cx + 16, cy + 18), fill=ink + (255,), width=6)
+        d.line((cx + 16, cy + 18, cx - 16, cy + 18), fill=ink + (255,), width=6)
+        d.line((cx - 16, cy + 18, cx - 16, cy - 18), fill=ink + (255,), width=6)
+        d.line((cx, cy - 4, cx, cy + 16), fill=ink + (255,), width=6)
+        d.line((cx - 12, cy + 4, cx, cy + 18), fill=ink + (255,), width=6)
+        d.line((cx + 12, cy + 4, cx, cy + 18), fill=ink + (255,), width=6)
+    else:
+        d.line((cx - 20, cy, cx + 20, cy), fill=ink + (255,), width=7)
+        d.line((cx, cy - 20, cx, cy + 20), fill=ink + (255,), width=7)
+
+    text_right = icon_box[0] - 28
+    paste_text(canvas, title, "almarai_bold.ttf", 34, text_right, y + 28,
+               (255, 155, 155) if destructive else INK, align="right")
+    paste_text(canvas, description, "almarai_regular.ttf", 26, text_right, y + 80, MUTED, align="right")
+
+
+def build_workspace_sheet_preview():
+    base = workspace_base("مساحة العمل", "نظّم مشاريعك في مجلدات")
+
+    card_w, gap, left, top = 476, 28, 50, 310
+    for index, accent in enumerate([CYAN, LILAC]):
+        x0 = left + (1 - index) * (card_w + gap)
+        glass_panel(base, (x0, top, x0 + card_w, top + card_w), 62, accent)
+        draw_folder_glyph(base, (x0 + 34, top + 40, x0 + card_w - 34, top + card_w * 0.62), accent)
+
+    base.alpha_composite(Image.new("RGBA", (1080, 1920), (3, 6, 15, 205)))
+
+    sheet_top = 966
+    sheet = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    ImageDraw.Draw(sheet).rounded_rectangle((0, sheet_top, 1080, 1960), radius=74, fill=(11, 16, 40, 255))
+    base.alpha_composite(sheet)
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle((480, sheet_top + 26, 600, sheet_top + 36), radius=5, fill=(255, 255, 255, 64))
+
+    paste_text(base, "مشروع Kotlin", "almarai_bold.ttf", 24, 1020, sheet_top + 62, CYAN, align="right")
+    paste_text(base, "NotesApp", "almarai_bold.ttf", 46, 1020, sheet_top + 100, INK, align="right")
+    paste_text(base, "خيارات المشروع", "almarai_regular.ttf", 28, 1020, sheet_top + 174, MUTED, align="right")
+
+    actions = [
+        ("تعديل الاسم", "غيّر اسم العنصر في أي وقت.", CYAN, False),
+        ("تصدير الكود (ZIP)", "نزّل ملف ZIP يحتوي مشروع Gradle جاهزًا.", VIOLET_SOFT, False),
+        ("إنشاء مشروع جديد", "أضف مشروعًا جديدًا في نفس المجلد.", TEAL, False),
+        ("حذف", "حذف المشروع من مساحة العمل.", (255, 107, 107), True),
+    ]
+    y = sheet_top + 246
+    for title, desc, tint, destructive in actions:
+        draw_action_row(base, y, title, desc, tint, destructive)
+        y += 150
+
+    out = DOCS / "workspace_sheet_preview.png"
+    base.convert("RGB").save(out, optimize=True)
+    print(f"  docs/workspace_sheet_preview.png  {out.stat().st_size / 1024:.0f} KB")
 
 
 if __name__ == "__main__":
