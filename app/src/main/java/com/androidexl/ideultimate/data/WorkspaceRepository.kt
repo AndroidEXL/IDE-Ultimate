@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.UUID
 
 enum class WorkspaceItemType { FOLDER, PROJECT }
@@ -34,13 +35,13 @@ data class WorkspaceItem(
 )
 
 /**
- * Persistent workspace model backed by SharedPreferences + org.json.
- * Folders and projects form a tree through [WorkspaceItem.parentId].
+ * Persistent workspace model backed by SharedPreferences + disk synchronization
+ * under `/storage/emulated/0/.IDE Ultimate`.
  */
 class WorkspaceRepository(context: Context) {
 
-    private val prefs = context.applicationContext
-        .getSharedPreferences("ide_ultimate_workspace", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences("ide_ultimate_workspace", Context.MODE_PRIVATE)
 
     val items: SnapshotStateList<WorkspaceItem> = mutableStateListOf()
 
@@ -50,10 +51,23 @@ class WorkspaceRepository(context: Context) {
             seedDemoContent()
         } else {
             items.addAll(runCatching { parseItems(raw) }.getOrDefault(emptyList()))
+            syncToFileSystem()
         }
     }
 
     fun itemById(id: String): WorkspaceItem? = items.firstOrNull { it.id == id }
+
+    /**
+     * Returns the full `/storage/emulated/0/.IDE Ultimate/...` path for the current breadcrumb trail.
+     */
+    fun displayDiskPath(pathIds: List<String>): String {
+        val segments = pathIds.mapNotNull { id -> itemById(id)?.name }
+        return if (segments.isEmpty()) {
+            WORKSPACE_DISK_PATH
+        } else {
+            "$WORKSPACE_DISK_PATH/${segments.joinToString("/")}"
+        }
+    }
 
     /** Folders first, then projects, each group sorted alphabetically. */
     fun childrenOf(parentId: String?): List<WorkspaceItem> = items
@@ -150,7 +164,6 @@ class WorkspaceRepository(context: Context) {
             packageName = newPackageName.trim().ifBlank {
                 ProjectZipExporter.packageName(trimmedName)
             },
-            // Language is locked to the initial selection at creation time
             language = current.language,
             versionCode = newVersionCode.coerceAtLeast(1),
             versionName = newVersionName.trim().ifBlank { "1.0.0" },
@@ -191,6 +204,53 @@ class WorkspaceRepository(context: Context) {
         return ids
     }
 
+    private fun relativeSegmentsOf(item: WorkspaceItem): List<String> {
+        val segments = mutableListOf(item.name)
+        var parentId = item.parentId
+        var guard = 0
+        while (parentId != null && guard < 32) {
+            val parent = itemById(parentId) ?: break
+            segments.add(0, parent.name)
+            parentId = parent.parentId
+            guard += 1
+        }
+        return segments
+    }
+
+    /**
+     * Synchronizes folders and project metadata onto `/storage/emulated/0/.IDE Ultimate`
+     * (and app-scoped `.IDE Ultimate` fallback if raw external storage isn't granted yet).
+     */
+    private fun syncToFileSystem() {
+        val roots = listOfNotNull(
+            File(WORKSPACE_DISK_PATH),
+            appContext.getExternalFilesDir(null)?.let { File(it, ".IDE Ultimate") },
+        )
+        roots.forEach { rootDir ->
+            runCatching {
+                if (!rootDir.exists()) rootDir.mkdirs()
+                items.forEach { item ->
+                    val relPath = relativeSegmentsOf(item).joinToString(File.separator)
+                    val targetDir = File(rootDir, relPath)
+                    if (!targetDir.exists()) targetDir.mkdirs()
+                    if (item.type == WorkspaceItemType.PROJECT) {
+                        val metaFile = File(targetDir, "ide-project.json")
+                        val metaJson = JSONObject().apply {
+                            put("id", item.id)
+                            put("name", item.name)
+                            put("packageName", item.packageName)
+                            put("language", item.language.name)
+                            put("versionCode", item.versionCode)
+                            put("versionName", item.versionName)
+                            put("path", "$WORKSPACE_DISK_PATH/${relativeSegmentsOf(item).joinToString("/")}")
+                        }
+                        metaFile.writeText(metaJson.toString(2), Charsets.UTF_8)
+                    }
+                }
+            }
+        }
+    }
+
     private fun persist() {
         val array = JSONArray()
         items.forEach { item ->
@@ -211,6 +271,7 @@ class WorkspaceRepository(context: Context) {
             array.put(json)
         }
         prefs.edit().putString(KEY_ITEMS, array.toString()).apply()
+        syncToFileSystem()
     }
 
     private fun parseItems(raw: String): List<WorkspaceItem> {
@@ -258,6 +319,19 @@ class WorkspaceRepository(context: Context) {
         val templates = WorkspaceItem(name = "قوالب جاهزة", type = WorkspaceItemType.FOLDER, parentId = null)
 
         items.addAll(listOf(android, flutter, templates))
+        // Root project so the user immediately sees projects can live directly in the root too
+        items.add(
+            WorkspaceItem(
+                name = "IDE Starter",
+                type = WorkspaceItemType.PROJECT,
+                parentId = null,
+                packageName = "com.ideultimate.projects.idestarter",
+                language = ProjectLanguage.KOTLIN,
+                versionCode = 1,
+                versionName = "1.0.0",
+                iconPreset = 0,
+            ),
+        )
         items.add(
             WorkspaceItem(
                 name = "HelloCompose",
@@ -309,7 +383,8 @@ class WorkspaceRepository(context: Context) {
         persist()
     }
 
-    private companion object {
-        const val KEY_ITEMS = "items_v3"
+    companion object {
+        const val WORKSPACE_DISK_PATH = "/storage/emulated/0/.IDE Ultimate"
+        private const val KEY_ITEMS = "items_v4"
     }
 }

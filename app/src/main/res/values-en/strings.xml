@@ -10,7 +10,7 @@
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
     <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
-    <string name="splash_version">v1.6.0</string>
+    <string name="splash_version">v1.7.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.6.0</string>
+    <string name="home_version">Version 1.7.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -38,7 +38,7 @@
 
     <!-- Workspace / Project Manager -->
     <string name="workspace_title">Project Manager</string>
-    <string name="workspace_subtitle">Organise your folders &amp; projects (Flutter • Kotlin • Java)</string>
+    <string name="workspace_subtitle">Organise folders &amp; projects in /storage/emulated/0/.IDE Ultimate</string>
     <string name="workspace_back">Back</string>
     <string name="workspace_root">Root</string>
     <string name="workspace_root_inside">Location: %1$s</string>
@@ -51,9 +51,10 @@
     <string name="stat_folders">Folders</string>
     <string name="stat_projects">Projects</string>
     <string name="filter_all">All</string>
+    <string name="search_placeholder">Search projects, code, or libraries…</string>
 
     <string name="sheet_create_title">What do you want to create?</string>
-    <string name="sheet_create_subtitle">Pick the type of the new item in this folder.</string>
+    <string name="sheet_create_subtitle">Pick the type of the new item in this location (root or folder).</string>
     <string name="sheet_create_folder_only_subtitle">Create a square folder to organise your projects inside it.</string>
     <string name="sheet_new_folder">Create new folder</string>
     <string name="sheet_new_folder_desc">Create a square folder to organise your projects.</string>
@@ -72,11 +73,11 @@
     <string name="action_delete">Delete item</string>
     <string name="action_delete_project">Delete project</string>
     <string name="action_delete_folder_desc">Delete the folder and everything inside it.</string>
-    <string name="action_delete_project_desc">Remove the project from your workspace.</string>
+    <string name="action_delete_project_desc">Remove the project permanently.</string>
     <string name="action_export">Export to ZIP code</string>
     <string name="action_export_desc">Download a ZIP archive with a ready project for the selected language.</string>
     <string name="action_new_project_here">Create new project</string>
-    <string name="action_new_project_here_desc">Add a new project in the same folder.</string>
+    <string name="action_new_project_here_desc">Add a new project in the same location.</string>
 
     <string name="dialog_new_folder">Create new folder</string>
     <string name="dialog_new_project">Create new project</string>
@@ -122,12 +123,63 @@
     <string name="create_project_submit_btn">Create Project Now</string>
     <string name="create_project_save_btn">Save Project Changes</string>
 
-    <!-- Store Code Screen -->
+    <!-- Store Code Screen (3 Sections) -->
     <string name="store_code_title">Store Code</string>
-    <string name="store_code_subtitle">Ready-to-use snippets &amp; templates for Flutter, Kotlin &amp; Java</string>
+    <string name="store_code_subtitle">New Projects · Code Snippets · Custom Libraries</string>
+    <string name="section_new_projects">New Projects</string>
+    <string name="section_new_projects_desc">Latest store projects (tap to view &amp; download)</string>
+    <string name="section_code_snippets">Code Snippets</string>
+    <string name="section_code_snippets_desc">Ready-to-use snippets to copy or import as project</string>
+    <string name="section_custom_libraries">Custom Libraries</string>
+    <string name="section_custom_libraries_desc">Private &amp; custom packages for your projects</string>
     <string name="store_use_as_project">Use as Project</string>
     <string name="store_copy_code">Copy Code</string>
-    <string name="store_copied_msg">Copied %1$s code</string>
+    <string name="store_copied_msg">Copied %1$s</string>
+
+    <!-- User Profile Screen -->
+    <string name="profile_title">User Profile</string>
+    <string name="profile_stat_projects">Projects</string>
+    <string name="profile_stat_likes">Likes</string>
+    <string name="profile_stat_dislikes">Dislikes</string>
+    <string name="profile_stat_subscribers">Subscribers</string>
+    <string name="profile_empty_projects">No projects added yet. Tap + to create a new project.</string>
+    <string name="profile_empty_collection">No projects saved in Collection yet.</string>
+    <string name="profile_action_edit_data">Edit Data</string>
+    <string name="profile_action_edit_data_desc">Update project name, icon, details, links, and screenshots.</string>
+
+    <!-- Store Project Form (Create / Edit) -->
+    <string name="store_form_create_title">Create New Project</string>
+    <string name="store_form_edit_title">Edit Project Data</string>
+    <string name="store_form_subtitle">Icon · Program Name · Details · Links · Screenshots</string>
+    <string name="store_form_pick_icon">Icon from Device</string>
+    <string name="store_form_program_name">Program Name</string>
+    <string name="store_form_program_name_hint">Type the program name…</string>
+    <string name="store_form_details_label">Project Details</string>
+    <string name="store_form_details_hint">Write full details and features of the project…</string>
+    <string name="store_form_links_section">Download Links</string>
+    <string name="store_form_add_link_btn">Add Download Link</string>
+    <string name="store_form_images_section">Project Screenshots</string>
+    <string name="store_form_add_images_btn">Add Project Images</string>
+    <string name="store_form_add_image_url_btn">Image Link</string>
+    <string name="store_form_save_btn">Save Project</string>
+    <string name="store_form_error_details">Please enter the project details first.</string>
+
+    <!-- Store Project View Screen (Read-only) -->
+    <string name="store_save_later">Save for Later</string>
+    <string name="store_saved_in_collection">Saved in Collection</string>
+    <string name="store_btn_like">Like</string>
+    <string name="store_btn_dislike">Dislike</string>
+    <string name="store_view_images_title">Project Screenshots</string>
+    <string name="store_view_images_hint">Tap any image to view full-screen or open its link</string>
+    <string name="store_view_no_images">No screenshots attached to this project.</string>
+    <string name="store_view_open_image_link">Open Image Link</string>
+    <string name="store_fab_download">Download</string>
+    <string name="store_download_sheet_title">Download &quot;%1$s&quot;</string>
+    <string name="store_download_sheet_subtitle">Choose a download link or export as a ready ZIP archive:</string>
+    <string name="store_download_link_item">Download Link #%1$d</string>
+    <string name="store_download_zip_direct">Download as Ready ZIP</string>
+    <string name="msg_saved_to_collection">Saved to Collection</string>
+    <string name="msg_removed_from_collection">Removed from Collection</string>
 
     <string name="delete_folder_title">Delete folder &quot;%1$s&quot;?</string>
     <string name="delete_project_title">Delete project &quot;%1$s&quot;?</string>

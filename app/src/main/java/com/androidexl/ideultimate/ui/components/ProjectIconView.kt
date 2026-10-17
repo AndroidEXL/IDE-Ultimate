@@ -9,9 +9,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,14 +36,19 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.Fuchsia
+import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
+import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
@@ -79,6 +91,153 @@ fun savePickedProjectIcon(context: Context, uri: Uri): String? = runCatching {
     }
     outFile.absolutePath
 }.getOrNull()
+
+fun savePickedProjectScreenshot(context: Context, uri: Uri): String? = runCatching {
+    val rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(stream)
+    } ?: return null
+    val maxDim = 960
+    val w = rawBitmap.width.coerceAtLeast(1)
+    val h = rawBitmap.height.coerceAtLeast(1)
+    val scale = (maxDim.toFloat() / maxOf(w, h)).coerceAtMost(1f)
+    val scaled = if (scale < 1f) {
+        Bitmap.createScaledBitmap(
+            rawBitmap,
+            (w * scale).toInt().coerceAtLeast(1),
+            (h * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+    } else {
+        rawBitmap
+    }
+    val dir = File(context.filesDir, "project_screenshots").apply { mkdirs() }
+    val outFile = File(dir, "shot_${System.currentTimeMillis()}_${(100..999).random()}.png")
+    FileOutputStream(outFile).use { out ->
+        scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
+    }
+    outFile.absolutePath
+}.getOrNull()
+
+@Composable
+fun UserAvatarView(
+    avatarPath: String?,
+    isLoggedIn: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val customBitmap = remember(avatarPath) {
+        avatarPath?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    if (isLoggedIn) {
+                        listOf(Cyan.copy(alpha = 0.35f), Violet.copy(alpha = 0.55f))
+                    } else {
+                        listOf(Color(0x26FFFFFF), Color(0x14FFFFFF))
+                    },
+                ),
+            )
+            .border(
+                width = 1.5.dp,
+                brush = Brush.linearGradient(
+                    if (isLoggedIn) {
+                        listOf(Cyan, Fuchsia)
+                    } else {
+                        listOf(Color(0x40FFFFFF), Color(0x20FFFFFF))
+                    },
+                ),
+                shape = CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (customBitmap != null && isLoggedIn) {
+            Image(
+                bitmap = customBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = if (isLoggedIn) Color.White else Muted,
+                modifier = Modifier.fillMaxSize(0.58f),
+            )
+        }
+    }
+}
+
+@Composable
+fun ProjectScreenshotImage(
+    pathOrUrl: String,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 18.dp,
+) {
+    val localBitmap = remember(pathOrUrl) {
+        if (!pathOrUrl.startsWith("http", ignoreCase = true)) {
+            runCatching { BitmapFactory.decodeFile(pathOrUrl)?.asImageBitmap() }.getOrNull()
+        } else {
+            null
+        }
+    }
+    val shape = RoundedCornerShape(cornerRadius)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(Color(0xFF0A1028))
+            .border(1.dp, Cyan.copy(alpha = 0.35f), shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (localBitmap != null) {
+            Image(
+                bitmap = localBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.splash_nebula),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alpha = 0.55f,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0x40050816), Color(0xCC050816)),
+                        ),
+                    )
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.weight(1f))
+                LogoMark(modifier = Modifier.height(42.dp), animated = false)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = pathOrUrl.substringAfterLast('/'),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                    ),
+                    color = Ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
 
 @Composable
 fun ProjectIconView(

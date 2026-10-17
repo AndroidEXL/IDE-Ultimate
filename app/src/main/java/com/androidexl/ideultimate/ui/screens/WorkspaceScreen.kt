@@ -1,6 +1,11 @@
 package com.androidexl.ideultimate.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -99,12 +104,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
+import com.androidexl.ideultimate.data.CommunityStoreRepository
 import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.ProjectZipExporter
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceItemType
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.components.AppTab
+import com.androidexl.ideultimate.ui.components.FolderNavIcon
 import com.androidexl.ideultimate.ui.components.GlassIconButton
 import com.androidexl.ideultimate.ui.components.LogoMark
 import com.androidexl.ideultimate.ui.components.ProjectIconView
@@ -142,6 +149,11 @@ private sealed interface ProjectPageMode {
     data class Edit(val projectId: String) : ProjectPageMode
 }
 
+private sealed interface StoreFormMode {
+    data object Create : StoreFormMode
+    data class Edit(val projectId: String) : StoreFormMode
+}
+
 private val FolderPalette = listOf(Cyan, VioletSoft, Fuchsia, Teal)
 private val TileEase = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
@@ -156,6 +168,7 @@ fun WorkspaceScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { WorkspaceRepository(context) }
+    val storeRepository = remember { CommunityStoreRepository(context) }
 
     var pathCsv by rememberSaveable { mutableStateOf("") }
     val pathIds = remember(pathCsv) {
@@ -164,42 +177,68 @@ fun WorkspaceScreen(
     val currentParentId = pathIds.lastOrNull()
     val currentFolder = currentParentId?.let { repository.itemById(it) }
 
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var languageFilter by rememberSaveable { mutableStateOf("ALL") }
     val rawChildren = repository.childrenOf(currentParentId)
-    val children = remember(rawChildren, languageFilter, currentFolder) {
-        if (currentFolder == null || languageFilter == "ALL") {
-            rawChildren
-        } else {
-            rawChildren.filter { item ->
-                item.type == WorkspaceItemType.FOLDER || item.language.name == languageFilter
-            }
+    val children = remember(rawChildren, languageFilter, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        rawChildren.filter { item ->
+            val matchesLang = languageFilter == "ALL" ||
+                item.type == WorkspaceItemType.FOLDER ||
+                item.language.name == languageFilter
+            val matchesQuery = q.isEmpty() ||
+                item.name.lowercase().contains(q) ||
+                item.packageName.lowercase().contains(q)
+            matchesLang && matchesQuery
         }
     }
 
     var openProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var projectPageMode by remember { mutableStateOf<ProjectPageMode?>(null) }
+
+    // Community / Store & Profile overlay states
+    var showUserProfile by rememberSaveable { mutableStateOf(false) }
+    var openStoreProjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var storeFormMode by remember { mutableStateOf<StoreFormMode?>(null) }
+
     var sheet by remember { mutableStateOf<WorkspaceSheet?>(null) }
     var folderDialog by remember { mutableStateOf<FolderDialog?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceItem?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var lastMessage by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<WorkspaceItem?>(null) }
+    var pendingStoreZipName by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
         val target = pendingExport
+        val storeName = pendingStoreZipName
         pendingExport = null
-        if (uri != null && target != null) {
-            val success = runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { stream ->
-                    stream.write(ProjectZipExporter.buildZip(target))
-                } ?: error("Unable to open the selected destination")
-            }.isSuccess
-            message = if (success) {
-                context.getString(R.string.export_success, target.name)
-            } else {
-                context.getString(R.string.export_failed)
+        pendingStoreZipName = null
+        if (uri != null) {
+            if (target != null) {
+                val success = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(ProjectZipExporter.buildZip(target))
+                    } ?: error("Unable to open destination")
+                }.isSuccess
+                message = if (success) {
+                    context.getString(R.string.export_success, target.name)
+                } else {
+                    context.getString(R.string.export_failed)
+                }
+            } else if (storeName != null) {
+                val success = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(ProjectZipExporter.buildZip(storeName))
+                    } ?: error("Unable to open destination")
+                }.isSuccess
+                message = if (success) {
+                    context.getString(R.string.export_success, storeName)
+                } else {
+                    context.getString(R.string.export_failed)
+                }
             }
         }
     }
@@ -216,6 +255,9 @@ fun WorkspaceScreen(
 
     fun navigateUp() {
         when {
+            storeFormMode != null -> storeFormMode = null
+            openStoreProjectId != null -> openStoreProjectId = null
+            showUserProfile -> showUserProfile = false
             projectPageMode != null -> projectPageMode = null
             openProjectId != null -> openProjectId = null
             activeTab == AppTab.StoreCode -> onSelectTab(AppTab.ProjectManager)
@@ -227,7 +269,10 @@ fun WorkspaceScreen(
     }
 
     BackHandler(
-        enabled = projectPageMode != null ||
+        enabled = storeFormMode != null ||
+            openStoreProjectId != null ||
+            showUserProfile ||
+            projectPageMode != null ||
             openProjectId != null ||
             activeTab == AppTab.StoreCode ||
             pathIds.isNotEmpty(),
@@ -274,29 +319,104 @@ fun WorkspaceScreen(
             comet = false,
         )
 
+        val currentStoreForm = storeFormMode
+        val activeStoreProject = openStoreProjectId?.let { storeRepository.projectById(it) }
         val currentMode = projectPageMode
         val openProject = openProjectId?.let { id -> repository.itemById(id) }
 
         when {
-            activeTab == AppTab.StoreCode -> {
-                StoreCodeScreen(
-                    onUseTemplate = { template ->
-                        val targetFolderId = currentParentId
-                            ?: repository.allFolders().firstOrNull()?.id
-                        if (targetFolderId != null && pathIds.isEmpty()) {
-                            pathCsv = targetFolderId
+            // 1. Store Project Create / Edit Page (from Profile -> Projects FAB or Edit)
+            currentStoreForm != null -> {
+                val editingTarget = (currentStoreForm as? StoreFormMode.Edit)
+                    ?.let { storeRepository.projectById(it.projectId) }
+                StoreProjectFormScreen(
+                    editingItem = editingTarget,
+                    onBack = { storeFormMode = null },
+                    onSave = { formData ->
+                        if (editingTarget != null) {
+                            storeRepository.updateStoreProject(
+                                id = editingTarget.id,
+                                name = formData.name,
+                                details = formData.details,
+                                customIconPath = formData.customIconPath,
+                                iconPreset = formData.iconPreset,
+                                downloadLinks = formData.downloadLinks,
+                                imagePaths = formData.imagePaths,
+                            )
+                            showMessage(context.getString(R.string.msg_project_updated))
+                        } else {
+                            storeRepository.createStoreProject(
+                                name = formData.name,
+                                details = formData.details,
+                                customIconPath = formData.customIconPath,
+                                iconPreset = formData.iconPreset,
+                                downloadLinks = formData.downloadLinks,
+                                imagePaths = formData.imagePaths,
+                            )
+                            showMessage(context.getString(R.string.msg_project_created))
                         }
-                        onSelectTab(AppTab.ProjectManager)
-                        projectPageMode = ProjectPageMode.Create(
-                            parentId = targetFolderId,
-                            initialName = template.title,
-                            initialLanguage = template.language,
+                        storeFormMode = null
+                    },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
+
+            // 2. Read-only Store Project View Page (opened from Store, Profile Projects, or Collection)
+            activeStoreProject != null -> {
+                StoreProjectViewScreen(
+                    project = activeStoreProject,
+                    onBack = { openStoreProjectId = null },
+                    onToggleSaveLater = {
+                        val saved = storeRepository.toggleSaveInCollection(activeStoreProject.id)
+                        showMessage(
+                            context.getString(
+                                if (saved) R.string.msg_saved_to_collection else R.string.msg_removed_from_collection,
+                            ),
+                        )
+                    },
+                    onLike = { storeRepository.toggleLike(activeStoreProject.id) },
+                    onDislike = { storeRepository.toggleDislike(activeStoreProject.id) },
+                    onDownloadZip = {
+                        pendingStoreZipName = activeStoreProject.name
+                        exportLauncher.launch(
+                            ProjectZipExporter.suggestedFileName(activeStoreProject.name),
                         )
                     },
                     bottomBarPadding = bottomBarPadding,
                 )
             }
 
+            // 3. User Profile Page (opened by tapping the User Avatar next to the Search bar)
+            showUserProfile -> {
+                UserProfileScreen(
+                    storeRepository = storeRepository,
+                    onBack = { showUserProfile = false },
+                    onOpenStoreProject = { item -> openStoreProjectId = item.id },
+                    onCreateStoreProject = { storeFormMode = StoreFormMode.Create },
+                    onEditStoreProject = { item -> storeFormMode = StoreFormMode.Edit(item.id) },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
+
+            // 4. Store Code Tab (New Projects + Code Snippets + Custom Libraries + Search + Avatar)
+            activeTab == AppTab.StoreCode -> {
+                StoreCodeScreen(
+                    storeRepository = storeRepository,
+                    onOpenProfile = { showUserProfile = true },
+                    onOpenStoreProject = { item -> openStoreProjectId = item.id },
+                    onUseSnippetAsProject = { snippet ->
+                        onSelectTab(AppTab.ProjectManager)
+                        projectPageMode = ProjectPageMode.Create(
+                            parentId = currentParentId,
+                            initialName = snippet.title,
+                            initialLanguage = snippet.language,
+                        )
+                    },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
+
+            // 5. Local IDE Project Create / Edit Page
             currentMode != null -> {
                 when (currentMode) {
                     is ProjectPageMode.Create -> {
@@ -377,6 +497,7 @@ fun WorkspaceScreen(
                 }
             }
 
+            // 6. Local Project Detail Page
             openProject != null -> {
                 ProjectDetailScreen(
                     project = openProject,
@@ -396,6 +517,7 @@ fun WorkspaceScreen(
                 )
             }
 
+            // 7. Project Manager Grid View (Root & Folders — supports creating both Folders and Projects in Root!)
             else -> {
                 Column(
                     modifier = Modifier
@@ -415,6 +537,23 @@ fun WorkspaceScreen(
                         showBack = pathIds.isNotEmpty(),
                         onBack = { navigateUp() },
                         onReplaySplash = onReplaySplash,
+                    )
+
+                    // Top Search Bar + User Avatar (opens UserProfileScreen on tap)
+                    Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                        SearchAndUserTopBar(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            avatarPath = storeRepository.userAvatarPath,
+                            isLoggedIn = storeRepository.isLoggedIn,
+                            onAvatarClick = { showUserProfile = true },
+                        )
+                    }
+
+                    // Disk Storage Path Banner: /storage/emulated/0/.IDE Ultimate
+                    DiskStoragePathBanner(
+                        diskPath = repository.displayDiskPath(pathIds),
+                        context = context,
                     )
 
                     WorkspaceStatsStrip(
@@ -443,12 +582,12 @@ fun WorkspaceScreen(
                                 pathCsv = pathIds.take(index + 1).joinToString("|")
                             },
                         )
-
-                        LanguageFilterRow(
-                            selected = languageFilter,
-                            onSelect = { languageFilter = it },
-                        )
                     }
+
+                    LanguageFilterRow(
+                        selected = languageFilter,
+                        onSelect = { languageFilter = it },
+                    )
 
                     Box(
                         Modifier
@@ -464,7 +603,7 @@ fun WorkspaceScreen(
                                 contentPadding = PaddingValues(
                                     start = 20.dp,
                                     end = 20.dp,
-                                    top = 10.dp,
+                                    top = 8.dp,
                                     bottom = 136.dp + bottomBarPadding,
                                 ),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -533,7 +672,8 @@ fun WorkspaceScreen(
                 when (currentSheet) {
                     is WorkspaceSheet.Create -> CreateSheetContent(
                         locationName = currentFolder?.name ?: stringResource(R.string.workspace_root),
-                        allowProject = currentFolder != null,
+                        // User requested: allow creating projects in Root as well as inside folders!
+                        allowProject = true,
                         onNewFolder = {
                             sheet = null
                             folderDialog = FolderDialog.CreateFolder(currentParentId)
@@ -702,6 +842,51 @@ fun WorkspaceScreen(
     }
 }
 
+@Composable
+private fun DiskStoragePathBanner(
+    diskPath: String,
+    context: Context,
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(Color(0x99060919))
+                .border(1.dp, Cyan.copy(alpha = 0.32f), RoundedCornerShape(13.dp))
+                .clickable {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"),
+                                ),
+                            )
+                        }
+                    }
+                }
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FolderNavIcon(modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = diskPath,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 10.sp,
+                ),
+                color = Cyan,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
 private fun validateName(
     context: Context,
     repository: WorkspaceRepository,
@@ -729,7 +914,7 @@ private fun WorkspaceTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 4.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showBack) {
@@ -737,11 +922,11 @@ private fun WorkspaceTopBar(
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.workspace_back),
                 onClick = onBack,
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(42.dp),
             )
         } else {
             LogoMark(
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(40.dp),
                 animated = true,
             )
         }
@@ -754,7 +939,6 @@ private fun WorkspaceTopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
@@ -767,7 +951,7 @@ private fun WorkspaceTopBar(
             icon = Icons.Filled.Refresh,
             contentDescription = stringResource(R.string.home_replay_splash),
             onClick = onReplaySplash,
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(40.dp),
         )
     }
 }
@@ -780,7 +964,7 @@ private fun WorkspaceStatsStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp),
+            .padding(horizontal = 20.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         StatChip(
@@ -805,7 +989,7 @@ private fun StatChip(
     value: String,
     accent: Color,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = modifier
             .clip(shape)
@@ -815,20 +999,20 @@ private fun StatChip(
                 ),
             )
             .border(1.dp, accent.copy(alpha = 0.35f), shape)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = 14.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.5.sp),
             color = Muted,
         )
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium.copy(
                 fontFamily = JetBrainsMono,
-                fontSize = 14.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = accent,
@@ -912,7 +1096,7 @@ private fun Breadcrumbs(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 4.dp),
+            .padding(horizontal = 20.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Crumb(
@@ -946,7 +1130,7 @@ private fun Crumb(text: String, selected: Boolean, onClick: () -> Unit) {
             .background(if (selected) Cyan.copy(alpha = 0.16f) else Color(0x0FFFFFFF))
             .border(1.dp, if (selected) Cyan.copy(alpha = 0.45f) else Color(0x14FFFFFF), shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Text(
             text = text,
@@ -1099,7 +1283,6 @@ private fun ProjectTile(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(13.dp),
     ) {
-        // Top row: Custom Icon + Language & Version pills
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
