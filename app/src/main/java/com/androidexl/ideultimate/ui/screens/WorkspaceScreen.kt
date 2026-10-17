@@ -80,6 +80,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
@@ -123,6 +124,7 @@ private val FolderPalette = listOf(Cyan, VioletSoft, Fuchsia, Teal)
 fun WorkspaceScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    bottomBarPadding: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val repository = remember { WorkspaceRepository(context) }
@@ -230,6 +232,7 @@ fun WorkspaceScreen(
                 onNewProject = {
                     dialog = NameDialog.Create(openProject.parentId, WorkspaceItemType.PROJECT)
                 },
+                bottomBarPadding = bottomBarPadding,
             )
         } else {
             Column(
@@ -271,7 +274,7 @@ fun WorkspaceScreen(
                                 start = 20.dp,
                                 end = 20.dp,
                                 top = 10.dp,
-                                bottom = 130.dp,
+                                bottom = 130.dp + bottomBarPadding,
                             ),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -300,7 +303,7 @@ fun WorkspaceScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
-                    .padding(end = 14.dp, bottom = 16.dp),
+                    .padding(end = 14.dp, bottom = 16.dp + bottomBarPadding),
                 onClick = { sheet = WorkspaceSheet.Create },
             )
         }
@@ -311,7 +314,7 @@ fun WorkspaceScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 104.dp, start = 24.dp, end = 24.dp),
+                .padding(bottom = 104.dp + bottomBarPadding, start = 24.dp, end = 24.dp),
         )
     }
 

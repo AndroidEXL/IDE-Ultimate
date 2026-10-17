@@ -477,23 +477,6 @@ def build_banner():
     print(f"  docs/banner.png  {out.stat().st_size / 1024:.0f} KB")
 
 
-def main():
-    print("Generating IDE Ultimate assets…")
-    build_nebula()
-    build_icons()
-    build_splash_preview()
-    build_banner()
-    build_workspace_preview()
-    build_workspace_sheet_preview()
-    build_project_detail_preview()
-    build_workspace_preview()
-    build_workspace_sheet_preview()
-    build_project_detail_preview()
-    print("Done.")
-
-
-
-
 # --------------------------------------------------------------------------- #
 # Text rendering (HarfBuzz shaping + FreeType rasterisation)
 # --------------------------------------------------------------------------- #
@@ -736,6 +719,52 @@ def draw_fab(canvas, cx, cy, size):
     canvas.alpha_composite(fab, (int(cx - s / 2), int(cy - s / 2)))
 
 
+
+def draw_bottom_bar(canvas, selected="workspace"):
+    """Floating two-tab glass bar mirroring AppBottomBar (RTL order)."""
+    w = canvas.width
+    bar_w, bar_h = w - 100, 128
+    x0 = (w - bar_w) // 2
+    y0 = canvas.height - bar_h - 46
+
+    layer = Image.new("RGBA", (bar_w, bar_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle((0, 0, bar_w - 1, bar_h - 1), radius=48, fill=(12, 18, 48, 242),
+                        outline=(255, 255, 255, 38), width=2)
+
+    item_w = (bar_w - 24 - 12) // 2
+    # RTL layout: the first tab (Home) sits on the right.
+    for index, (label, is_selected) in enumerate([("الرئيسية", selected == "home"),
+                                                  ("مساحة العمل", selected == "workspace")]):
+        ix = bar_w - 12 - item_w - index * (item_w + 12)
+        iy = 12
+        if is_selected:
+            grad = linear_gradient_rgba((item_w, bar_h - 24), None, None, [(90, 42, 170), (124, 58, 237)])
+            pill = Image.new("RGBA", (item_w, bar_h - 24), (0, 0, 0, 0))
+            pill.paste(grad, (0, 0), rounded_mask((item_w, bar_h - 24), 38))
+            pill.putalpha(pill.getchannel("A").point(lambda v: int(v * 0.9)))
+            layer.alpha_composite(pill, (ix, iy))
+            d.rounded_rectangle((ix, iy, ix + item_w - 1, iy + bar_h - 25), radius=38,
+                                outline=(167, 139, 250, 130), width=2)
+
+        center_x = ix + item_w // 2
+        icon_y = iy + 34
+        if index == 0:
+            d.polygon([(center_x - 17, icon_y), (center_x, icon_y - 15), (center_x + 17, icon_y)],
+                      outline=(255, 255, 255, 230), width=4)
+            d.rectangle((center_x - 12, icon_y, center_x + 12, icon_y + 16),
+                        outline=(255, 255, 255, 230), width=4)
+        else:
+            d.rounded_rectangle((center_x - 17, icon_y - 14, center_x - 2, icon_y - 2), radius=4,
+                                fill=(255, 255, 255, 230))
+            d.rounded_rectangle((center_x - 19, icon_y - 4, center_x + 19, icon_y + 15), radius=5,
+                                fill=(255, 255, 255, 230))
+
+        text_color = (255, 255, 255) if is_selected else MUTED
+        paste_text(layer, label, "almarai_bold.ttf", 20, center_x, iy + 62, text_color, align="center")
+
+    canvas.alpha_composite(layer, (x0, y0))
+
 def workspace_base(title, subtitle):
     w, h = 1080, 1920
     base = Image.open(RES / "drawable-nodpi" / "splash_nebula.webp").convert("RGBA").resize((w, h), Image.LANCZOS)
@@ -756,8 +785,8 @@ def workspace_base(title, subtitle):
     d.line([(992, 128), (968, 144), (992, 160)], fill=INK + (255,), width=6, joint="curve")
     draw_logo(base, 86, 144, 108)
 
-    paste_text(base, title, "almarai_bold.ttf", 46, 892, 76, INK, align="right")
-    paste_text(base, subtitle, "almarai_regular.ttf", 28, 892, 142, MUTED, align="right")
+    paste_text(base, title, "almarai_bold.ttf", 44, 892, 66, INK, align="right")
+    paste_text(base, subtitle, "almarai_regular.ttf", 26, 892, 126, MUTED, align="right")
 
     # Breadcrumbs (drawn on a layer so alpha is composited).
     x = 1010
@@ -770,9 +799,10 @@ def workspace_base(title, subtitle):
         ImageDraw.Draw(chip).rounded_rectangle((1, 1, chip_w - 2, 54), radius=28,
                                                fill=fill, outline=outline, width=2)
         chip.alpha_composite(image, (22, 12))
-        base.alpha_composite(chip, (int(x - chip_w), 216))
+        base.alpha_composite(chip, (int(x - chip_w), 196))
         x -= chip_w + 10
 
+    draw_bottom_bar(base, selected="workspace")
     return base
 
 
@@ -780,7 +810,7 @@ def build_workspace_preview():
     base = workspace_base("مساحة العمل", "نظّم مشاريعك في مجلدات")
     d = ImageDraw.Draw(base)
 
-    card_w, gap, left, top = 476, 28, 50, 310
+    card_w, gap, left, top = 476, 28, 50, 280
     cards = [
         ("مشاريع Android", "العناصر: 2", CYAN, "folder"),
         ("قوالب جاهزة", "العناصر: 1", LILAC, "folder"),
@@ -806,7 +836,7 @@ def build_workspace_preview():
         paste_text(base, meta, "almarai_regular.ttf", 26, x0 + card_w - 28, y0 + card_w - 78, MUTED,
                    align="right", max_width=card_w - 56)
 
-    draw_fab(base, 148, 1740, 150)
+    draw_fab(base, 148, 1666, 150)
 
     out = DOCS / "workspace_preview.png"
     base.convert("RGB").save(out, optimize=True)
@@ -856,7 +886,7 @@ def draw_action_row(canvas, y, title, description, tint, destructive):
 def build_workspace_sheet_preview():
     base = workspace_base("مساحة العمل", "نظّم مشاريعك في مجلدات")
 
-    card_w, gap, left, top = 476, 28, 50, 310
+    card_w, gap, left, top = 476, 28, 50, 280
     for index, accent in enumerate([CYAN, LILAC]):
         x0 = left + (1 - index) * (card_w + gap)
         glass_panel(base, (x0, top, x0 + card_w, top + card_w), 62, accent)
@@ -975,6 +1005,17 @@ def build_project_detail_preview():
     out = DOCS / "project_detail_preview.png"
     base.convert("RGB").save(out, optimize=True)
     print(f"  docs/project_detail_preview.png  {out.stat().st_size / 1024:.0f} KB")
+
+def main():
+    print("Generating IDE Ultimate assets…")
+    build_nebula()
+    build_icons()
+    build_splash_preview()
+    build_banner()
+    build_workspace_preview()
+    build_workspace_sheet_preview()
+    build_project_detail_preview()
+    print("Done.")
 
 
 if __name__ == "__main__":

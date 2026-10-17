@@ -29,6 +29,7 @@
 - 🎨 **أيقونة متكيّفة (Adaptive Icon)** — تعمل على Android 8+ مع نسخة **Monochrome** لأندرويد 13+، وبدائل PNG للأجهزة الأقدم.
 - 📱 **دعم كامل للعربية** — خط **Almarai** عربي مضمّن، تخطيط RTL تلقائي، ونصوص عربية/إنجليزية منفصلة.
 - ⚡ **شاشة رئيسية Dashboard** — بطاقات زجاجية، معاينة كود ملوّنة، وزر لإعادة تشغيل الافتتاحية.
+- 🧭 **شريط تنقّل سفلي** — **الرئيسية** و**مساحة العمل** على بعد ضغطة واحدة من أي مكان.
 - 🗂️ **مساحة عمل كاملة** — مجلدات ومشاريع، إنشاء عبر نافذة سفلية، تعديل الاسم/الحذف بالضغط المطوّل، وتصدير المشروع **ZIP** جاهز لـ Android Studio.
 - 🤖 **بناء APK تلقائي** على GitHub Actions مع رفع الناتج كـ Artifact وإصدار GitHub Release عند إنشاء Tag.
 
@@ -40,8 +41,8 @@
 [**Releases**](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest) — بدون تسجيل دخول:
 
 ```
-IDE-Ultimate-1.2.0-release.apk   ← للاستخدام اليومي
-IDE-Ultimate-1.2.0-debug.apk     ← للتصحيح والتجارب
+IDE-Ultimate-1.3.0-release.apk   ← للاستخدام اليومي
+IDE-Ultimate-1.3.0-debug.apk     ← للتصحيح والتجارب
 ```
 
 **أو من خلال Actions:**
@@ -50,8 +51,8 @@ IDE-Ultimate-1.2.0-debug.apk     ← للتصحيح والتجارب
 2. اضغط **Run workflow** (أو انتظر تشغيله تلقائيًا بعد أي Push).
 3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`
    (يتطلب تسجيل الدخول إلى GitHub):
-   - `IDE-Ultimate-1.2.0-debug.apk`
-   - `IDE-Ultimate-1.2.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
+   - `IDE-Ultimate-1.3.0-debug.apk`
+   - `IDE-Ultimate-1.3.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
    - `checksums.txt`
    - تقرير اختبارات الوحدة (`unit-test-report`)
 
@@ -60,8 +61,8 @@ IDE-Ultimate-1.2.0-debug.apk     ← للتصحيح والتجارب
 لإنشاء **Release** تلقائي مع ملفات APK مرفقة:
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 ---
@@ -70,7 +71,7 @@ git push origin v1.2.0
 
 <img align="right" src="docs/workspace_sheet_preview.png" width="300" />
 
-تفتح من زر **ابدأ الآن** في الشاشة الرئيسية، وتعمل بنمط متصفح الملفات:
+تفتح من **شريط التنقّل السفلي** (تبويب مساحة العمل) أو من زر **ابدأ الآن** في الرئيسية، وتعمل بنمط متصفح الملفات:
 
 | الإجراء | النتيجة |
 | --- | --- |
@@ -126,7 +127,7 @@ IDE-Ultimate/
 │  │  │  ├─ WorkspaceRepository.kt      # شجرة المجلدات/المشاريع + حفظ دائم
 │  │  │  └─ ProjectZipExporter.kt       # توليد مشروع Gradle كامل داخل ZIP
 │  │  └─ ui/
-│  │     ├─ components/                 # LogoMark, Starfield, GlassCard, شريط التقدم
+│  │     ├─ components/                 # LogoMark, Starfield, GlassCard, AppBottomBar
 │  │     ├─ screens/SplashScreen.kt     # الافتتاحية المتحركة
 │  │     ├─ screens/HomeScreen.kt       # الواجهة الرئيسية
 │  │     ├─ screens/WorkspaceScreen.kt  # المتصفح + النوافذ السفلية
@@ -221,7 +222,8 @@ experience: a nebula backdrop, a twinkling star field with an occasional shootin
 a slowly rotating code-hexagon logo, staged text reveals, and a gradient loader with a
 live status readout. It ships with a full adaptive launcher icon (including a monochrome
 layer for Android 13+), RTL-first Arabic UI, and a GitHub Actions workflow that builds
-debug + release APKs and uploads them as run artifacts. Version 1.2 adds a Workspace page
+debug + release APKs and uploads them as run artifacts. Version 1.3 adds a bottom navigation bar that puts the Workspace page one tap away from
+the home screen, and a Workspace page
 with a folder/project grid, FAB bottom sheets, long-press rename/delete, a project detail page
 opened on tap, and real ZIP export of a ready-to-open Gradle project (covered by JVM unit tests).
 

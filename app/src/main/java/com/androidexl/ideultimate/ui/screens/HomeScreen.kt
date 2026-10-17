@@ -283,7 +283,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(104.dp))
         }
     }
 
@@ -353,7 +353,7 @@ private fun WorkspaceCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Kotlin • Compose • 1.0.0",
+                    text = "Kotlin • Compose • 1.3.0",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = Muted,
                 )

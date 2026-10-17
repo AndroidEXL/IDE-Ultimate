@@ -97,6 +97,7 @@ fun ProjectDetailScreen(
     onDelete: () -> Unit,
     onNewProject: () -> Unit,
     modifier: Modifier = Modifier,
+    bottomBarPadding: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val packageName = remember(project.name) { ProjectZipExporter.packageName(project.name) }
     val files = remember(packageName) { projectFiles(packageName) }
@@ -319,7 +320,7 @@ fun ProjectDetailScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(26.dp + bottomBarPadding))
     }
 }
 
