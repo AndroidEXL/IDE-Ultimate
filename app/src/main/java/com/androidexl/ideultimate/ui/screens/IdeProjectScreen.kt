@@ -2093,25 +2093,31 @@ private fun AddWidgetModalBottomSheet(
                         Text(stringResource(R.string.dialog_cancel), color = Muted)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            onConfirmAdd(
-                                selectedType,
-                                widgetNameInput.ifBlank { suggestViewIdForType(selectedType) },
-                                selectedParentUid,
-                            )
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Cyan,
-                            contentColor = Color(0xFF050816),
-                        ),
-                        shape = RoundedCornerShape(12.dp),
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Cyan)
+                            .clickable {
+                                onConfirmAdd(
+                                    selectedType,
+                                    widgetNameInput.ifBlank { suggestViewIdForType(selectedType) },
+                                    selectedParentUid,
+                                )
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = Color(0xFF050816),
+                            modifier = Modifier.size(16.dp),
+                        )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "إضافة • Add Widget",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF050816),
                         )
                     }
                 }
@@ -4679,6 +4685,7 @@ private fun RenderWidgetNodeOnPhone(
         IdeWidgetType.DATE_RANGE_PICKER,
         IdeWidgetType.WORLD_CLOCK_VIEW -> {
             val dateShape = if (node.type == IdeWidgetType.ANALOG_CLOCK) CircleShape else RoundedCornerShape(8.dp)
+            val parsedTxtColor = parseHexColorOrNull(node.textColor) ?: Color(0xFF0F172A)
             Box(
                 modifier = Modifier
                     .padding(visualMargin)
@@ -4697,7 +4704,7 @@ private fun RenderWidgetNodeOnPhone(
                         when {
                             node.type == IdeWidgetType.ANALOG_CLOCK -> Modifier
                             customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(32, 260).dp)
-                            else -> Modifier.wrapContentHeight()
+                            else -> Modifier
                         },
                     )
                     .then(transformModifier)
