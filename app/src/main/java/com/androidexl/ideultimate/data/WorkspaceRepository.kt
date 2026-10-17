@@ -119,7 +119,13 @@ data class ProjectImageItem(
     val name: String,
     val filePath: String,
     val addedAt: Long = System.currentTimeMillis(),
-)
+) {
+    val resName: String
+        get() = name
+
+    val sizeBytes: Long
+        get() = runCatching { File(filePath).length() }.getOrDefault(0L)
+}
 
 data class IdeWidgetNode(
     val uid: String = UUID.randomUUID().toString(),
