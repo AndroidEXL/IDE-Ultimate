@@ -63,6 +63,9 @@ enum class IdeWidgetCategory(val title: String) {
     LAYOUT("layout"),
     TEXT("text"),
     IMAGE("image"),
+    BUTTONS("buttons"),
+    CHOOSE("choose"),
+    WEB("web"),
 }
 
 enum class IdeWidgetType(
@@ -202,6 +205,131 @@ enum class IdeWidgetType(
         idPrefix = "imagefilterview",
         category = IdeWidgetCategory.IMAGE,
         isContainer = false,
+    ),
+
+    // 4. Buttons Widgets (Button, MaterialButton + 6 additional Button widgets)
+    BUTTON(
+        displayName = "Button",
+        shortTag = "BTN",
+        idPrefix = "button",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    MATERIAL_BUTTON(
+        displayName = "MaterialButton",
+        shortTag = "MB",
+        idPrefix = "materialbutton",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    OUTLINED_BUTTON(
+        displayName = "OutlinedButton",
+        shortTag = "OB",
+        idPrefix = "outlinedbutton",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    TEXT_BUTTON(
+        displayName = "TextButton",
+        shortTag = "TB",
+        idPrefix = "textbutton",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    FAB_BUTTON(
+        displayName = "FAB",
+        shortTag = "FAB",
+        idPrefix = "fab",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    EXTENDED_FAB(
+        displayName = "ExtendedFAB",
+        shortTag = "EFAB",
+        idPrefix = "extendedfab",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    TOGGLE_BUTTON(
+        displayName = "ToggleButton",
+        shortTag = "TGB",
+        idPrefix = "togglebutton",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+    CHIP_BUTTON(
+        displayName = "ChipButton",
+        shortTag = "CHP",
+        idPrefix = "chipbutton",
+        category = IdeWidgetCategory.BUTTONS,
+        isContainer = false,
+    ),
+
+    // 5. Choose Widgets (CheckBox, RadioButton, Switch, Spinner)
+    CHECK_BOX(
+        displayName = "CheckBox",
+        shortTag = "CB",
+        idPrefix = "checkbox",
+        category = IdeWidgetCategory.CHOOSE,
+        isContainer = false,
+    ),
+    RADIO_BUTTON(
+        displayName = "RadioButton",
+        shortTag = "RB",
+        idPrefix = "radiobutton",
+        category = IdeWidgetCategory.CHOOSE,
+        isContainer = false,
+    ),
+    SWITCH(
+        displayName = "Switch",
+        shortTag = "SW",
+        idPrefix = "switch",
+        category = IdeWidgetCategory.CHOOSE,
+        isContainer = false,
+    ),
+    SPINNER(
+        displayName = "Spinner",
+        shortTag = "SP",
+        idPrefix = "spinner",
+        category = IdeWidgetCategory.CHOOSE,
+        isContainer = false,
+    ),
+
+    // 6. Web Widgets (WebView + 4 specialized Web display widgets)
+    WEB_VIEW(
+        displayName = "WebView",
+        shortTag = "WEB",
+        idPrefix = "webview",
+        category = IdeWidgetCategory.WEB,
+        isContainer = false,
+    ),
+    CUSTOM_TAB_VIEW(
+        displayName = "CustomTabView",
+        shortTag = "CTB",
+        idPrefix = "customtabview",
+        category = IdeWidgetCategory.WEB,
+        isContainer = false,
+    ),
+    GECKO_WEB_VIEW(
+        displayName = "GeckoWebView",
+        shortTag = "GWB",
+        idPrefix = "geckowebview",
+        category = IdeWidgetCategory.WEB,
+        isContainer = false,
+    ),
+    AD_WEB_VIEW(
+        displayName = "AdBlockWebView",
+        shortTag = "AWB",
+        idPrefix = "adwebview",
+        category = IdeWidgetCategory.WEB,
+        isContainer = false,
+    ),
+    SWIPE_WEB_VIEW(
+        displayName = "SwipeWebView",
+        shortTag = "SWB",
+        idPrefix = "swipewebview",
+        category = IdeWidgetCategory.WEB,
+        isContainer = false,
     );
 
     val isTextWidget: Boolean
@@ -209,6 +337,28 @@ enum class IdeWidgetType(
 
     val isImageWidget: Boolean
         get() = category == IdeWidgetCategory.IMAGE
+
+    val isButtonWidget: Boolean
+        get() = category == IdeWidgetCategory.BUTTONS
+
+    val isChooseWidget: Boolean
+        get() = category == IdeWidgetCategory.CHOOSE
+
+    val isWebWidget: Boolean
+        get() = category == IdeWidgetCategory.WEB
+
+    val hasTextLabel: Boolean
+        get() = isTextWidget ||
+            (isButtonWidget && this != FAB_BUTTON) ||
+            (isChooseWidget && this != SPINNER)
+
+    val isCheckableWidget: Boolean
+        get() = this == CHECKED_TEXT_VIEW ||
+            this == CHECK_BOX ||
+            this == RADIO_BUTTON ||
+            this == SWITCH ||
+            this == TOGGLE_BUTTON ||
+            this == CHIP_BUTTON
 
     val isInputTextWidget: Boolean
         get() = this == EDIT_TEXT ||
@@ -260,9 +410,11 @@ data class IdeWidgetNode(
     val uid: String = UUID.randomUUID().toString(),
     val viewId: String,
     val type: IdeWidgetType,
-    val text: String = when (type) {
-        IdeWidgetType.TEXT_VIEW -> "TextView"
-        IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+    val text: String = when {
+        type == IdeWidgetType.TEXT_VIEW -> "TextView"
+        type == IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+        type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON -> type.displayName
+        type.isChooseWidget && type != IdeWidgetType.SPINNER -> type.displayName
         else -> ""
     },
     val hint: String = when {
@@ -278,30 +430,72 @@ data class IdeWidgetNode(
     val singleLine: Boolean = false,
     val checked: Boolean = true,
     val completionThreshold: Int = 1,
-    val layoutWidth: String = if (type.isContainer || type.isInputTextWidget) "match_parent" else "wrap_content",
-    val layoutHeight: String = "wrap_content",
+    val buttonTint: String = "#0284C7",
+    val trackTint: String = "#93C5FD",
+    val textOn: String = "ON",
+    val textOff: String = "OFF",
+    val spinnerMode: String = "dropdown",
+    val spinnerEntries: String = "Item 1, Item 2, Item 3",
+    val spinnerPrompt: String = "Select option",
+    val webUrl: String = "https://google.com",
+    val webJavaScript: Boolean = true,
+    val webDomStorage: Boolean = true,
+    val webSupportZoom: Boolean = true,
+    val webDesktopMode: Boolean = false,
+    val webAllowFileAccess: Boolean = true,
+    val webCacheMode: String = "LOAD_DEFAULT",
+    val webUserAgent: String = "default",
+    val elevationDp: Int = if (type.isButtonWidget) 2 else 0,
+    val rippleColor: String = "#38BDF8",
+    val allCaps: Boolean = false,
+    val enabled: Boolean = true,
+    val layoutWidth: String = if (type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) "match_parent" else "wrap_content",
+    val layoutHeight: String = if (type.isWebWidget) "180dp" else "wrap_content",
     val paddingDp: Int = if (type.isContainer) 8 else 4,
     val marginDp: Int = 0,
-    val gravity: String = "left|top",
+    val gravity: String = if (type.isButtonWidget) "center" else "left|top",
     val layoutGravity: String = "left|top",
     val weight: Int = 0,
     val textSizeSp: Int = 12,
-    val textStyle: String = "normal",
-    val textColor: String = "#000000",
+    val textStyle: String = if (type.isButtonWidget) "bold" else "normal",
+    val textColor: String = when {
+        type == IdeWidgetType.BUTTON ||
+            type == IdeWidgetType.MATERIAL_BUTTON ||
+            type == IdeWidgetType.FAB_BUTTON ||
+            type == IdeWidgetType.EXTENDED_FAB -> "#FFFFFF"
+        type == IdeWidgetType.OUTLINED_BUTTON ||
+            type == IdeWidgetType.TEXT_BUTTON -> "#2563EB"
+        else -> "#000000"
+    },
     val lines: Int = 0,
     val imageResName: String = "default_image",
     val scaleType: String = if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) "CENTER_CROP" else "FIT_CENTER",
     val imageTint: String = "none",
-    val civBorderWidthDp: Int = if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) 2 else 0,
-    val civBorderColor: String = "#38BDF8",
+    val civBorderWidthDp: Int = when (type) {
+        IdeWidgetType.CIRCLE_IMAGE_VIEW -> 2
+        IdeWidgetType.OUTLINED_BUTTON, IdeWidgetType.CHIP_BUTTON -> 1
+        else -> 0
+    },
+    val civBorderColor: String = if (type == IdeWidgetType.OUTLINED_BUTTON) "#2563EB" else "#38BDF8",
     val civCircleBgColor: String = "transparent",
     val cornerRadiusDp: Int = when (type) {
         IdeWidgetType.ROUNDED_IMAGE_VIEW, IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> 14
-        IdeWidgetType.IMAGE_BUTTON -> 8
+        IdeWidgetType.IMAGE_BUTTON, IdeWidgetType.BUTTON -> 8
+        IdeWidgetType.MATERIAL_BUTTON, IdeWidgetType.OUTLINED_BUTTON, IdeWidgetType.TOGGLE_BUTTON -> 12
+        IdeWidgetType.EXTENDED_FAB, IdeWidgetType.CHIP_BUTTON -> 20
+        IdeWidgetType.FAB_BUTTON -> 28
         else -> 0
     },
     val backgroundResource: String = "none",
-    val backgroundColor: String = "transparent",
+    val backgroundColor: String = when (type) {
+        IdeWidgetType.BUTTON,
+        IdeWidgetType.MATERIAL_BUTTON,
+        IdeWidgetType.FAB_BUTTON,
+        IdeWidgetType.EXTENDED_FAB -> "#2563EB"
+        IdeWidgetType.CHIP_BUTTON -> "#E0F2FE"
+        IdeWidgetType.TOGGLE_BUTTON -> "#E2E8F0"
+        else -> "transparent"
+    },
     val rotation: Float = 0f,
     val alpha: Float = 1f,
     val translationX: Float = 0f,
@@ -974,6 +1168,25 @@ class WorkspaceRepository(context: Context) {
                 put("singleLine", node.singleLine)
                 put("checked", node.checked)
                 put("completionThreshold", node.completionThreshold)
+                put("buttonTint", node.buttonTint)
+                put("trackTint", node.trackTint)
+                put("textOn", node.textOn)
+                put("textOff", node.textOff)
+                put("spinnerMode", node.spinnerMode)
+                put("spinnerEntries", node.spinnerEntries)
+                put("spinnerPrompt", node.spinnerPrompt)
+                put("webUrl", node.webUrl)
+                put("webJavaScript", node.webJavaScript)
+                put("webDomStorage", node.webDomStorage)
+                put("webSupportZoom", node.webSupportZoom)
+                put("webDesktopMode", node.webDesktopMode)
+                put("webAllowFileAccess", node.webAllowFileAccess)
+                put("webCacheMode", node.webCacheMode)
+                put("webUserAgent", node.webUserAgent)
+                put("elevationDp", node.elevationDp)
+                put("rippleColor", node.rippleColor)
+                put("allCaps", node.allCaps)
+                put("enabled", node.enabled)
                 put("layoutWidth", node.layoutWidth)
                 put("layoutHeight", node.layoutHeight)
                 put("paddingDp", node.paddingDp)
@@ -1015,11 +1228,14 @@ class WorkspaceRepository(context: Context) {
             val type = runCatching { IdeWidgetType.valueOf(obj.getString("type")) }
                 .getOrDefault(IdeWidgetType.TEXT_VIEW)
             val childrenArr = obj.optJSONArray("children") ?: JSONArray()
-            val defaultW = if (type.isContainer || type.isInputTextWidget) "match_parent" else "wrap_content"
+            val defaultW = if (type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) "match_parent" else "wrap_content"
+            val defaultH = if (type.isWebWidget) "180dp" else "wrap_content"
             val defaultPad = if (type.isContainer) 8 else 4
-            val defaultText = when (type) {
-                IdeWidgetType.TEXT_VIEW -> "TextView"
-                IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+            val defaultText = when {
+                type == IdeWidgetType.TEXT_VIEW -> "TextView"
+                type == IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+                type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON -> type.displayName
+                type.isChooseWidget && type != IdeWidgetType.SPINNER -> type.displayName
                 else -> ""
             }
             val defaultHint = when (type) {
@@ -1042,8 +1258,27 @@ class WorkspaceRepository(context: Context) {
                     singleLine = obj.optBoolean("singleLine", false),
                     checked = obj.optBoolean("checked", true),
                     completionThreshold = obj.optInt("completionThreshold", 1).coerceIn(1, 10),
+                    buttonTint = obj.optString("buttonTint", "#0284C7").ifBlank { "#0284C7" },
+                    trackTint = obj.optString("trackTint", "#93C5FD").ifBlank { "#93C5FD" },
+                    textOn = obj.optString("textOn", "ON").ifBlank { "ON" },
+                    textOff = obj.optString("textOff", "OFF").ifBlank { "OFF" },
+                    spinnerMode = obj.optString("spinnerMode", "dropdown").ifBlank { "dropdown" },
+                    spinnerEntries = obj.optString("spinnerEntries", "Item 1, Item 2, Item 3").ifBlank { "Item 1, Item 2, Item 3" },
+                    spinnerPrompt = obj.optString("spinnerPrompt", "Select option").ifBlank { "Select option" },
+                    webUrl = obj.optString("webUrl", "https://google.com").ifBlank { "https://google.com" },
+                    webJavaScript = obj.optBoolean("webJavaScript", true),
+                    webDomStorage = obj.optBoolean("webDomStorage", true),
+                    webSupportZoom = obj.optBoolean("webSupportZoom", true),
+                    webDesktopMode = obj.optBoolean("webDesktopMode", false),
+                    webAllowFileAccess = obj.optBoolean("webAllowFileAccess", true),
+                    webCacheMode = obj.optString("webCacheMode", "LOAD_DEFAULT").ifBlank { "LOAD_DEFAULT" },
+                    webUserAgent = obj.optString("webUserAgent", "default").ifBlank { "default" },
+                    elevationDp = obj.optInt("elevationDp", if (type.isButtonWidget) 2 else 0),
+                    rippleColor = obj.optString("rippleColor", "#38BDF8").ifBlank { "#38BDF8" },
+                    allCaps = obj.optBoolean("allCaps", false),
+                    enabled = obj.optBoolean("enabled", true),
                     layoutWidth = obj.optString("layoutWidth", defaultW).ifBlank { defaultW },
-                    layoutHeight = obj.optString("layoutHeight", "wrap_content").ifBlank { "wrap_content" },
+                    layoutHeight = obj.optString("layoutHeight", defaultH).ifBlank { defaultH },
                     paddingDp = obj.optInt("paddingDp", defaultPad),
                     marginDp = obj.optInt("marginDp", 0),
                     gravity = obj.optString("gravity", "left|top").ifBlank { "left|top" },
@@ -1308,6 +1543,135 @@ class WorkspaceRepository(context: Context) {
                     sb.appendLine("""$indent    app:round="${node.cornerRadiusDp}dp"""")
                 }
                 sb.appendLine("""$indent    android:scaleType="$xmlScale" />""")
+            }
+
+            IdeWidgetType.BUTTON,
+            IdeWidgetType.MATERIAL_BUTTON,
+            IdeWidgetType.OUTLINED_BUTTON,
+            IdeWidgetType.TEXT_BUTTON,
+            IdeWidgetType.FAB_BUTTON,
+            IdeWidgetType.EXTENDED_FAB,
+            IdeWidgetType.TOGGLE_BUTTON,
+            IdeWidgetType.CHIP_BUTTON -> {
+                val safeText = node.text
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                val tagName = when (node.type) {
+                    IdeWidgetType.BUTTON -> "Button"
+                    IdeWidgetType.MATERIAL_BUTTON,
+                    IdeWidgetType.OUTLINED_BUTTON,
+                    IdeWidgetType.TEXT_BUTTON -> "com.google.android.material.button.MaterialButton"
+                    IdeWidgetType.FAB_BUTTON -> "com.google.android.material.floatingactionbutton.FloatingActionButton"
+                    IdeWidgetType.EXTENDED_FAB -> "com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton"
+                    IdeWidgetType.TOGGLE_BUTTON -> "ToggleButton"
+                    IdeWidgetType.CHIP_BUTTON -> "com.google.android.material.chip.Chip"
+                    else -> "Button"
+                }
+                sb.appendLine("""$indent<$tagName""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
+                if (!node.enabled) {
+                    sb.appendLine("""$indent    android:enabled="false"""")
+                }
+                if (node.elevationDp > 0) {
+                    sb.appendLine("""$indent    android:elevation="${node.elevationDp}dp"""")
+                }
+                if (node.cornerRadiusDp > 0 && node.type != IdeWidgetType.FAB_BUTTON) {
+                    sb.appendLine("""$indent    app:cornerRadius="${node.cornerRadiusDp}dp"""")
+                }
+                if (node.civBorderWidthDp > 0) {
+                    sb.appendLine("""$indent    app:strokeWidth="${node.civBorderWidthDp}dp"""")
+                    sb.appendLine("""$indent    app:strokeColor="${node.civBorderColor}"""")
+                }
+                if (node.rippleColor.isNotBlank() && node.rippleColor != "none") {
+                    sb.appendLine("""$indent    app:rippleColor="${node.rippleColor}"""")
+                }
+                if (node.type == IdeWidgetType.FAB_BUTTON) {
+                    sb.appendLine("""$indent    android:src="@drawable/${node.imageResName}" />""")
+                } else {
+                    if (node.type == IdeWidgetType.TOGGLE_BUTTON) {
+                        sb.appendLine("""$indent    android:checked="${node.checked}"""")
+                        sb.appendLine("""$indent    android:textOn="${node.textOn}"""")
+                        sb.appendLine("""$indent    android:textOff="${node.textOff}"""")
+                    } else if (node.type == IdeWidgetType.CHIP_BUTTON) {
+                        sb.appendLine("""$indent    android:checkable="true"""")
+                        sb.appendLine("""$indent    android:checked="${node.checked}"""")
+                    }
+                    sb.appendLine("""$indent    android:text="$safeText"""")
+                    sb.appendLine("""$indent    android:textAllCaps="${node.allCaps}"""")
+                    sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
+                    sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
+                }
+            }
+
+            IdeWidgetType.CHECK_BOX,
+            IdeWidgetType.RADIO_BUTTON,
+            IdeWidgetType.SWITCH,
+            IdeWidgetType.SPINNER -> {
+                val safeText = node.text
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                val tagName = when (node.type) {
+                    IdeWidgetType.CHECK_BOX -> "CheckBox"
+                    IdeWidgetType.RADIO_BUTTON -> "RadioButton"
+                    IdeWidgetType.SWITCH -> "Switch"
+                    IdeWidgetType.SPINNER -> "Spinner"
+                    else -> "CheckBox"
+                }
+                sb.appendLine("""$indent<$tagName""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
+                if (!node.enabled) {
+                    sb.appendLine("""$indent    android:enabled="false"""")
+                }
+                if (node.type == IdeWidgetType.SPINNER) {
+                    sb.appendLine("""$indent    android:spinnerMode="${node.spinnerMode}"""")
+                    if (node.spinnerPrompt.isNotBlank()) {
+                        sb.appendLine("""$indent    android:prompt="${node.spinnerPrompt}"""")
+                    }
+                    sb.appendLine("""$indent    tools:entries="${node.spinnerEntries}" />""")
+                } else {
+                    sb.appendLine("""$indent    android:checked="${node.checked}"""")
+                    if (node.type == IdeWidgetType.SWITCH) {
+                        sb.appendLine("""$indent    android:thumbTint="${node.buttonTint}"""")
+                        sb.appendLine("""$indent    android:trackTint="${node.trackTint}"""")
+                        sb.appendLine("""$indent    android:textOn="${node.textOn}"""")
+                        sb.appendLine("""$indent    android:textOff="${node.textOff}"""")
+                    } else {
+                        sb.appendLine("""$indent    android:buttonTint="${node.buttonTint}"""")
+                    }
+                    sb.appendLine("""$indent    android:text="$safeText"""")
+                    sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
+                    sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
+                }
+            }
+
+            IdeWidgetType.WEB_VIEW,
+            IdeWidgetType.CUSTOM_TAB_VIEW,
+            IdeWidgetType.GECKO_WEB_VIEW,
+            IdeWidgetType.AD_WEB_VIEW,
+            IdeWidgetType.SWIPE_WEB_VIEW -> {
+                val tagName = when (node.type) {
+                    IdeWidgetType.WEB_VIEW -> "WebView"
+                    IdeWidgetType.CUSTOM_TAB_VIEW -> "android.webkit.WebView"
+                    IdeWidgetType.GECKO_WEB_VIEW -> "org.mozilla.geckoview.GeckoView"
+                    IdeWidgetType.AD_WEB_VIEW -> "android.webkit.WebView"
+                    IdeWidgetType.SWIPE_WEB_VIEW -> "androidx.swiperefreshlayout.widget.SwipeRefreshLayout"
+                    else -> "WebView"
+                }
+                sb.appendLine("""$indent<$tagName""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    tools:url="${node.webUrl}"""")
+                sb.appendLine("""$indent    tools:javaScriptEnabled="${node.webJavaScript}"""")
+                sb.appendLine("""$indent    tools:domStorageEnabled="${node.webDomStorage}"""")
+                sb.appendLine("""$indent    tools:supportZoom="${node.webSupportZoom}"""")
+                sb.appendLine("""$indent    tools:desktopMode="${node.webDesktopMode}"""")
+                sb.appendLine("""$indent    tools:cacheMode="${node.webCacheMode}"""")
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
             }
         }
     }

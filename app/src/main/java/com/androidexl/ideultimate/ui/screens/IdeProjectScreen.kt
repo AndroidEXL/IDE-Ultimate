@@ -556,13 +556,25 @@ fun IdeProjectScreen(
                                     isDraggingWidget = draggingAny
                                     isDraggingExistingWidget = draggingExisting
                                     isHoveringTrashZone = hoveringTrash
+                                    if (draggingAny || draggingExisting) {
+                                        editingPropertyRequest = null
+                                        imagePickerWidgetUid = null
+                                    }
                                 },
                                 onRequestEditWidgetPrimary = { node ->
                                     when {
-                                        node.type.isImageWidget -> openPropertyDialog(node, IdeWidgetProperty.IMAGE)
-                                        node.type.isInputTextWidget -> openPropertyDialog(node, IdeWidgetProperty.HINT)
-                                        node.type.isTextWidget -> openPropertyDialog(node, IdeWidgetProperty.TEXT)
-                                        else -> openPropertyDialog(node, IdeWidgetProperty.ID)
+                                        node.type.isImageWidget || node.type == IdeWidgetType.FAB_BUTTON ->
+                                            openPropertyDialog(node, IdeWidgetProperty.IMAGE)
+                                        node.type.isWebWidget ->
+                                            openPropertyDialog(node, IdeWidgetProperty.WEB_URL)
+                                        node.type == IdeWidgetType.SPINNER ->
+                                            openPropertyDialog(node, IdeWidgetProperty.SPINNER_ENTRIES)
+                                        node.type.isInputTextWidget ->
+                                            openPropertyDialog(node, IdeWidgetProperty.HINT)
+                                        node.type.hasTextLabel ->
+                                            openPropertyDialog(node, IdeWidgetProperty.TEXT)
+                                        else ->
+                                            openPropertyDialog(node, IdeWidgetProperty.ID)
                                     }
                                 },
                                 onUpdateWidgets = { updateWidgetNodes(it) },
@@ -601,24 +613,47 @@ fun IdeProjectScreen(
                     }
                 }
 
-                // 4. Bottom Bar:
-                // - When long-pressing/dragging an existing widget on the canvas (`isDraggingExistingWidget`),
-                //   show the Bottom Trash Drop Zone (`سلة الحذف`) so dropping onto it deletes the widget!
-                // - When a widget is selected in View tab (and not actively dragging),
-                //   show the Bottom Widget Property Panel.
-                // - Otherwise show the XML/Activity Selector Pill + Split Run Button.
-                if (activeTab == IdeProjectTab.VIEW && isDraggingExistingWidget) {
+                // 4. Base Bottom Bar stays at a constant height in the Column so the View Canvas
+                // NEVER resizes or jumps when the Property Panel or Trash Drop Bar appears/disappears!
+                IdeSketchBottomBar(
+                    activeTab = activeTab,
+                    xmlPage = selectedXmlPage,
+                    selectedBuildMethod = selectedBuildMethod,
+                    onOpenPageSelector = { showXmlBottomSheet = true },
+                    onRunClick = { showTempRunScreen = true },
+                    onRunLongClick = { showBuildMethodSheet = true },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
+
+            // 4B. Overlay Bottom Panels (Trash Drop Zone during long-press drag, or Property Panel when selected)
+            // Overlaid at Alignment.BottomCenter so opening/closing NEVER shifts canvas coordinates during long-press!
+            if (activeTab == IdeProjectTab.VIEW && isDraggingExistingWidget) {
+                Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                     IdeBottomTrashDropBar(
                         hovered = isHoveringTrashZone,
                         bottomBarPadding = bottomBarPadding,
                         onTrashBoundsChanged = { rect -> bottomTrashBounds = rect },
                     )
-                } else if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
+                }
+            } else if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
+                val parentContainerNode = remember(widgetNodes, selectedNode.uid) {
+                    findParentNodeOf(widgetNodes, selectedNode.uid)
+                }
+                Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                     IdeWidgetPropertyBottomPanel(
                         node = selectedNode,
+                        parentNode = parentContainerNode,
                         allWidgets = flattenAllNodes(widgetNodes),
                         recentProperties = recentProperties,
                         onSelectOtherWidget = { selectedWidgetUid = it.uid },
+                        onSelectParentLayout = {
+                            if (parentContainerNode != null) {
+                                selectedWidgetUid = parentContainerNode.uid
+                            } else {
+                                updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
+                            }
+                        },
                         onMoveUp = {
                             updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
                         },
@@ -637,16 +672,6 @@ fun IdeProjectScreen(
                             selectedWidgetUid = null
                             activeTabName = IdeProjectTab.LOGIC.name
                         },
-                        bottomBarPadding = bottomBarPadding,
-                    )
-                } else {
-                    IdeSketchBottomBar(
-                        activeTab = activeTab,
-                        xmlPage = selectedXmlPage,
-                        selectedBuildMethod = selectedBuildMethod,
-                        onOpenPageSelector = { showXmlBottomSheet = true },
-                        onRunClick = { showTempRunScreen = true },
-                        onRunLongClick = { showBuildMethodSheet = true },
                         bottomBarPadding = bottomBarPadding,
                     )
                 }
@@ -1153,7 +1178,7 @@ private fun IdeViewDesigner(
                     findNodeByUid(nodes, uid)?.type?.isContainer == true &&
                     (movingUid == null || !containsDescendantUid(findNodeByUid(nodes, movingUid), uid)) &&
                     !rect.isEmpty &&
-                    rect.contains(dragFingerInRoot)
+                    rect.inflate(10f).contains(dragFingerInRoot)
             }
             .minByOrNull { (_, rect) -> rect.width * rect.height }
             ?.key
@@ -1190,6 +1215,38 @@ private fun IdeViewDesigner(
         return "${type.idPrefix}$index"
     }
 
+    fun createDefaultWidgetNode(type: IdeWidgetType): IdeWidgetNode {
+        val defaultText = when (type) {
+            IdeWidgetType.BUTTON -> "Button"
+            IdeWidgetType.MATERIAL_BUTTON -> "MaterialButton"
+            IdeWidgetType.OUTLINED_BUTTON -> "Outlined"
+            IdeWidgetType.TEXT_BUTTON -> "TextButton"
+            IdeWidgetType.FAB_BUTTON -> "+"
+            IdeWidgetType.EXTENDED_FAB -> "+ Action"
+            IdeWidgetType.TOGGLE_BUTTON -> "Toggle"
+            IdeWidgetType.CHIP_BUTTON -> "Chip"
+            IdeWidgetType.CHECK_BOX -> "CheckBox"
+            IdeWidgetType.RADIO_BUTTON -> "RadioButton"
+            IdeWidgetType.SWITCH -> "Switch"
+            IdeWidgetType.SPINNER -> "Spinner"
+            else -> "TextView"
+        }
+        return IdeWidgetNode(
+            viewId = nextViewIdFor(type),
+            type = type,
+            text = defaultText,
+            layoutWidth = when {
+                type.isContainer -> "match_parent"
+                type.isWebWidget -> "match_parent"
+                else -> "wrap_content"
+            },
+            layoutHeight = when {
+                type.isWebWidget -> "120dp"
+                else -> "wrap_content"
+            },
+        )
+    }
+
     fun commitDrop(type: IdeWidgetType) {
         val existingMoving = draggingExistingNode
         val nodes = currentWidgetNodes
@@ -1213,10 +1270,7 @@ private fun IdeViewDesigner(
         val targetContainer = evalHoveredContainerUid()
         val insertIdx = evalDropInsertIndex(targetContainer)
 
-        val nodeToInsert = existingMoving ?: IdeWidgetNode(
-            viewId = nextViewIdFor(type),
-            type = type,
-        )
+        val nodeToInsert = existingMoving ?: createDefaultWidgetNode(type)
 
         val baseTree = if (existingMoving != null) {
             removeNodeByUid(nodes, existingMoving.uid)
@@ -1289,10 +1343,7 @@ private fun IdeViewDesigner(
                     val nodes = currentWidgetNodes
                     val selectedNode = currentSelectedWidgetUid?.let { findNodeByUid(nodes, it) }
                     val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
-                    val newNode = IdeWidgetNode(
-                        viewId = nextViewIdFor(type),
-                        type = type,
-                    )
+                    val newNode = createDefaultWidgetNode(type)
                     val updated = if (targetContainer != null) {
                         insertChildIntoContainer(nodes, targetContainer, newNode)
                     } else {
@@ -1623,6 +1674,103 @@ private fun WidgetsPaletteColumn(
                 )
             }
         }
+        Spacer(Modifier.height(14.dp))
+
+        // Section 4: Buttons ("قسم الازرار" — Button, MaterialButton + 6 additional Button widgets)
+        Text(
+            text = "Buttons",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = Muted,
+            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(
+                IdeWidgetType.BUTTON,
+                IdeWidgetType.MATERIAL_BUTTON,
+                IdeWidgetType.OUTLINED_BUTTON,
+                IdeWidgetType.TEXT_BUTTON,
+                IdeWidgetType.FAB_BUTTON,
+                IdeWidgetType.EXTENDED_FAB,
+                IdeWidgetType.TOGGLE_BUTTON,
+                IdeWidgetType.CHIP_BUTTON,
+            ).forEach { widgetType ->
+                DraggableWidgetPaletteItem(
+                    type = widgetType,
+                    onStartDrag = onStartDrag,
+                    onUpdateDragRootPos = onUpdateDragRootPos,
+                    onEndDrag = onEndDrag,
+                    onCancelDrag = onCancelDrag,
+                    onTap = { onTapAdd(widgetType) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Section 5: Choose ("قسم Choose" — CheckBox, RadioButton, Switch, Spinner)
+        Text(
+            text = "Choose",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = Muted,
+            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(
+                IdeWidgetType.CHECK_BOX,
+                IdeWidgetType.RADIO_BUTTON,
+                IdeWidgetType.SWITCH,
+                IdeWidgetType.SPINNER,
+            ).forEach { widgetType ->
+                DraggableWidgetPaletteItem(
+                    type = widgetType,
+                    onStartDrag = onStartDrag,
+                    onUpdateDragRootPos = onUpdateDragRootPos,
+                    onEndDrag = onEndDrag,
+                    onCancelDrag = onCancelDrag,
+                    onTap = { onTapAdd(widgetType) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Section 6: Web ("قسم Web" — WebView + 4 Web display widgets)
+        Text(
+            text = "Web",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = Muted,
+            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            listOf(
+                IdeWidgetType.WEB_VIEW,
+                IdeWidgetType.CUSTOM_TAB_VIEW,
+                IdeWidgetType.GECKO_WEB_VIEW,
+                IdeWidgetType.AD_WEB_VIEW,
+                IdeWidgetType.SWIPE_WEB_VIEW,
+            ).forEach { widgetType ->
+                DraggableWidgetPaletteItem(
+                    type = widgetType,
+                    onStartDrag = onStartDrag,
+                    onUpdateDragRootPos = onUpdateDragRootPos,
+                    onEndDrag = onEndDrag,
+                    onCancelDrag = onCancelDrag,
+                    onTap = { onTapAdd(widgetType) },
+                )
+            }
+        }
     }
 }
 
@@ -1645,6 +1793,23 @@ private fun sketchWidgetLabel(type: IdeWidgetType): String = when (type) {
     IdeWidgetType.ZOOM_IMAGE_VIEW -> "ZoomImageView"
     IdeWidgetType.ASPECT_IMAGE_VIEW -> "AspectImageView"
     IdeWidgetType.IMAGE_FILTER_VIEW -> "ImageFilterView"
+    IdeWidgetType.BUTTON -> "Button"
+    IdeWidgetType.MATERIAL_BUTTON -> "MaterialButton"
+    IdeWidgetType.OUTLINED_BUTTON -> "OutlinedButton"
+    IdeWidgetType.TEXT_BUTTON -> "TextButton"
+    IdeWidgetType.FAB_BUTTON -> "FAB"
+    IdeWidgetType.EXTENDED_FAB -> "ExtendedFAB"
+    IdeWidgetType.TOGGLE_BUTTON -> "ToggleButton"
+    IdeWidgetType.CHIP_BUTTON -> "ChipButton"
+    IdeWidgetType.CHECK_BOX -> "Check Box"
+    IdeWidgetType.RADIO_BUTTON -> "Radio Button"
+    IdeWidgetType.SWITCH -> "Switch"
+    IdeWidgetType.SPINNER -> "Spinner"
+    IdeWidgetType.WEB_VIEW -> "WebView"
+    IdeWidgetType.CUSTOM_TAB_VIEW -> "CustomTabView"
+    IdeWidgetType.GECKO_WEB_VIEW -> "GeckoWebView"
+    IdeWidgetType.AD_WEB_VIEW -> "AdBlockWeb"
+    IdeWidgetType.SWIPE_WEB_VIEW -> "SwipeWebView"
 }
 
 @Composable
@@ -2090,6 +2255,159 @@ private fun SketchWidgetIcon(
                 drawLine(tint, Offset(size.width * 0.25f, size.height * 0.64f), Offset(size.width * 0.75f, size.height * 0.64f), strokeWidth = stroke.width)
                 drawCircle(tint, radius = 1.4.dp.toPx(), center = Offset(size.width * 0.38f, size.height * 0.64f))
             }
+
+            IdeWidgetType.BUTTON,
+            IdeWidgetType.MATERIAL_BUTTON -> {
+                // Raised button pill with inner label bar
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, size.height * 0.20f),
+                    size = Size(size.width - 2f, size.height * 0.60f),
+                    cornerRadius = CornerRadius(if (type == IdeWidgetType.MATERIAL_BUTTON) 4.dp.toPx() else 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.26f, size.height * 0.50f),
+                    end = Offset(size.width * 0.74f, size.height * 0.50f),
+                    strokeWidth = stroke.width,
+                )
+            }
+
+            IdeWidgetType.OUTLINED_BUTTON -> {
+                val dash = PathEffect.dashPathEffect(floatArrayOf(2.5f, 2f), 0f)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, size.height * 0.20f),
+                    size = Size(size.width - 2f, size.height * 0.60f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    style = Stroke(width = stroke.width, pathEffect = dash),
+                )
+                drawLine(tint, Offset(size.width * 0.28f, size.height * 0.50f), Offset(size.width * 0.72f, size.height * 0.50f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.TEXT_BUTTON -> {
+                drawLine(tint, Offset(size.width * 0.18f, size.height * 0.44f), Offset(size.width * 0.82f, size.height * 0.44f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.28f, size.height * 0.68f), Offset(size.width * 0.72f, size.height * 0.68f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.FAB_BUTTON -> {
+                val c = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(tint, radius = size.minDimension * 0.43f, center = c, style = stroke)
+                drawLine(tint, Offset(c.x - 3f, c.y), Offset(c.x + 3f, c.y), strokeWidth = stroke.width)
+                drawLine(tint, Offset(c.x, c.y - 3f), Offset(c.x, c.y + 3f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.EXTENDED_FAB -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(0.8f, size.height * 0.20f),
+                    size = Size(size.width - 1.6f, size.height * 0.60f),
+                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
+                    style = stroke,
+                )
+                val cx = size.width * 0.30f
+                val cy = size.height * 0.50f
+                drawLine(tint, Offset(cx - 2f, cy), Offset(cx + 2f, cy), strokeWidth = stroke.width)
+                drawLine(tint, Offset(cx, cy - 2f), Offset(cx, cy + 2f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.50f, cy), Offset(size.width * 0.78f, cy), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.TOGGLE_BUTTON -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, size.height * 0.18f),
+                    size = Size(size.width - 2f, size.height * 0.64f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.26f, size.height * 0.64f), Offset(size.width * 0.74f, size.height * 0.64f), strokeWidth = 1.8.dp.toPx())
+            }
+
+            IdeWidgetType.CHIP_BUTTON -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(0.8f, size.height * 0.22f),
+                    size = Size(size.width - 1.6f, size.height * 0.56f),
+                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
+                    style = stroke,
+                )
+                drawCircle(tint, radius = 1.4.dp.toPx(), center = Offset(size.width * 0.28f, size.height * 0.50f))
+                drawLine(tint, Offset(size.width * 0.44f, size.height * 0.50f), Offset(size.width * 0.76f, size.height * 0.50f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.CHECK_BOX -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1.4f, 1.4f),
+                    size = Size(size.width - 2.8f, size.height - 2.8f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                val check = Path().apply {
+                    moveTo(size.width * 0.26f, size.height * 0.52f)
+                    lineTo(size.width * 0.44f, size.height * 0.70f)
+                    lineTo(size.width * 0.76f, size.height * 0.30f)
+                }
+                drawPath(check, color = tint, style = stroke)
+            }
+
+            IdeWidgetType.RADIO_BUTTON -> {
+                val c = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(tint, radius = size.minDimension * 0.42f, center = c, style = stroke)
+                drawCircle(tint, radius = size.minDimension * 0.19f, center = c)
+            }
+
+            IdeWidgetType.SWITCH -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(0.8f, size.height * 0.24f),
+                    size = Size(size.width - 1.6f, size.height * 0.52f),
+                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx()),
+                    style = stroke,
+                )
+                drawCircle(
+                    color = tint,
+                    radius = size.minDimension * 0.16f,
+                    center = Offset(size.width * 0.68f, size.height * 0.50f),
+                )
+            }
+
+            IdeWidgetType.SPINNER -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, size.height * 0.20f),
+                    size = Size(size.width - 2f, size.height * 0.60f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                val tri = Path().apply {
+                    moveTo(size.width * 0.58f, size.height * 0.42f)
+                    lineTo(size.width * 0.78f, size.height * 0.42f)
+                    lineTo(size.width * 0.68f, size.height * 0.60f)
+                    close()
+                }
+                drawPath(tri, color = tint)
+            }
+
+            IdeWidgetType.WEB_VIEW,
+            IdeWidgetType.CUSTOM_TAB_VIEW,
+            IdeWidgetType.GECKO_WEB_VIEW,
+            IdeWidgetType.AD_WEB_VIEW,
+            IdeWidgetType.SWIPE_WEB_VIEW -> {
+                // Globe / Browser icon
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val r = size.minDimension * 0.43f
+                drawCircle(tint, radius = r, center = c, style = stroke)
+                drawLine(tint, Offset(c.x - r, c.y), Offset(c.x + r, c.y), strokeWidth = stroke.width * 0.85f)
+                drawLine(tint, Offset(c.x, c.y - r), Offset(c.x, c.y + r), strokeWidth = stroke.width * 0.85f)
+                drawOval(
+                    color = tint,
+                    topLeft = Offset(c.x - r * 0.52f, c.y - r),
+                    size = Size(r * 1.04f, r * 2f),
+                    style = stroke,
+                )
+            }
         }
     }
 }
@@ -2103,20 +2421,20 @@ private fun SketchDropPlaceholder(
     type: IdeWidgetType,
     inHorizontalParent: Boolean,
 ) {
-    val placeholderModifier = if ((type.isContainer || type.isInputTextWidget) && !inHorizontalParent) {
+    val placeholderModifier = if ((type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) && !inHorizontalParent) {
         Modifier
             .fillMaxWidth()
-            .height(24.dp)
+            .height(if (type.isWebWidget) 48.dp else 24.dp)
             .background(Color(0xFFD6D6D6))
-    } else if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) {
+    } else if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW || type == IdeWidgetType.FAB_BUTTON) {
         Modifier
             .size(36.dp)
             .clip(CircleShape)
             .background(Color(0xFFD6D6D6))
     } else {
         Modifier
-            .width(44.dp)
-            .height(22.dp)
+            .width(52.dp)
+            .height(24.dp)
             .background(Color(0xFFD6D6D6))
     }
     Box(modifier = placeholderModifier)
@@ -2354,13 +2672,13 @@ private fun RenderWidgetNodeOnPhone(
     val customHeightDp = node.layoutHeight.removeSuffix("dp").trim().toIntOrNull()
 
     val widthModifier = when {
-        isBeingMoved -> Modifier.width(0.dp).height(0.dp).graphicsLayer(alpha = 0f)
         customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(16, 320).dp)
         node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
         else -> Modifier.wrapContentWidth()
     }
 
     val visualPad = (node.paddingDp / 2).coerceIn(2, 16).dp
+    val containerVisualPad = (node.paddingDp / 2).coerceAtLeast(if (node.children.isNotEmpty()) 8 else 3).coerceAtMost(18).dp
     val visualMargin = (node.marginDp / 2).coerceIn(0, 16).dp
     val parsedBgColor = remember(node.backgroundColor) {
         parseHexColorOrNull(node.backgroundColor)
@@ -2390,18 +2708,15 @@ private fun RenderWidgetNodeOnPhone(
         requestedTyPx
     }
 
-    val transformModifier = if (isBeingMoved) {
-        Modifier
-    } else {
-        Modifier.graphicsLayer(
-            rotationZ = node.rotation,
-            alpha = node.alpha.coerceIn(0.08f, 1f),
-            translationX = clampedTxPx,
-            translationY = clampedTyPx,
-            scaleX = node.scaleX.coerceIn(0.25f, 2.5f),
-            scaleY = node.scaleY.coerceIn(0.25f, 2.5f),
-        )
-    }
+    // Keep real layout dimensions while dragging (`isBeingMoved`) so `pointerInput` coordinates NEVER shift!
+    val transformModifier = Modifier.graphicsLayer(
+        rotationZ = if (isBeingMoved) 0f else node.rotation,
+        alpha = if (isBeingMoved) 0.28f else (if (node.enabled) node.alpha.coerceIn(0.08f, 1f) else 0.45f),
+        translationX = if (isBeingMoved) 0f else clampedTxPx,
+        translationY = if (isBeingMoved) 0f else clampedTyPx,
+        scaleX = if (isBeingMoved) 1f else node.scaleX.coerceIn(0.25f, 2.5f),
+        scaleY = if (isBeingMoved) 1f else node.scaleY.coerceIn(0.25f, 2.5f),
+    )
 
     val horizontalAlign = when {
         node.gravity.contains("right") -> Alignment.End
@@ -2434,30 +2749,29 @@ private fun RenderWidgetNodeOnPhone(
             } else {
                 Modifier
             }
-            Row(
+            Column(
                 modifier = Modifier
-                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .padding(visualMargin)
                     .then(widthModifier)
                     .then(
                         when {
-                            isBeingMoved -> Modifier.height(0.dp)
-                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(20, 260).dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
                             isEmpty -> Modifier.height(28.dp)
-                            else -> Modifier.heightIn(min = 28.dp)
+                            else -> Modifier.heightIn(min = 32.dp)
                         },
                     )
                     .then(transformModifier)
                     .clipToBounds()
                     .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
                         if (!isBeingMoved) {
-                            val rect = coords.boundsInRoot()
-                            nodeBoundsInRoot = rect
                             onContainerPositioned(node.uid, rect)
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
                     .background(baseFill)
-                    .border(if (isBeingMoved) 0.dp else 0.8.dp, layoutOutlineColor, RectangleShape)
+                    .border(if (isSelected) 1.3.dp else 0.8.dp, if (isSelected) Color(0xFF0284C7) else layoutOutlineColor, RectangleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -2485,48 +2799,81 @@ private fun RenderWidgetNodeOnPhone(
                             onDragEnd = { currentOnEndMove() },
                             onDragCancel = { currentOnCancelMove() },
                         )
-                    }
-                    .then(scrollMod)
-                    .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
-                verticalAlignment = verticalAlign,
-                horizontalArrangement = horizontalArr,
+                    },
             ) {
-                var childSlot = 0
-                node.children.forEach { child ->
-                    val childMoving = child.uid == draggingExistingUid
-                    if (!childMoving && isHoveredDropTarget && childSlot == safeChildInsertIndex && draggingType != null) {
+                // Dedicated clickable Layout Header Strip when the layout contains children,
+                // so the user can ALWAYS reach/select/drag even a tiny layout filled with match_parent children!
+                if (node.children.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (isSelected) Color(0xFF0284C7).copy(alpha = 0.22f) else Color(0xFFE2E8F0).copy(alpha = 0.85f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onSelectWidget(node) }
+                            .padding(horizontal = 5.dp, vertical = 1.5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "[${node.type.shortTag}] ${node.viewId}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF475569),
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(scrollMod)
+                        .padding(if (isEmpty) 0.dp else containerVisualPad),
+                    verticalAlignment = verticalAlign,
+                    horizontalArrangement = horizontalArr,
+                ) {
+                    var childSlot = 0
+                    node.children.forEach { child ->
+                        val childMoving = child.uid == draggingExistingUid
+                        if (!childMoving && isHoveredDropTarget && childSlot == safeChildInsertIndex && draggingType != null) {
+                            SketchDropPlaceholder(
+                                type = draggingType,
+                                inHorizontalParent = true,
+                            )
+                        }
+                        RenderWidgetNodeOnPhone(
+                            node = child,
+                            projectImages = projectImages,
+                            parentBounds = nodeBoundsInRoot,
+                            selectedWidgetUid = selectedWidgetUid,
+                            draggingType = draggingType,
+                            draggingExistingUid = draggingExistingUid,
+                            hoveredContainerUid = hoveredContainerUid,
+                            dropInsertIndex = dropInsertIndex,
+                            onSelectWidget = onSelectWidget,
+                            onDoubleTapWidget = onDoubleTapWidget,
+                            onStartMoveExistingWidget = onStartMoveExistingWidget,
+                            onUpdateMoveDragPos = onUpdateMoveDragPos,
+                            onEndMoveExistingWidget = onEndMoveExistingWidget,
+                            onCancelMoveExistingWidget = onCancelMoveExistingWidget,
+                            onContainerPositioned = onContainerPositioned,
+                            onWidgetPositioned = onWidgetPositioned,
+                        )
+                        if (!childMoving) {
+                            childSlot++
+                        }
+                    }
+                    if (isHoveredDropTarget && safeChildInsertIndex == nonMovingChildCount && draggingType != null) {
                         SketchDropPlaceholder(
                             type = draggingType,
                             inHorizontalParent = true,
                         )
                     }
-                    RenderWidgetNodeOnPhone(
-                        node = child,
-                        projectImages = projectImages,
-                        parentBounds = nodeBoundsInRoot,
-                        selectedWidgetUid = selectedWidgetUid,
-                        draggingType = draggingType,
-                        draggingExistingUid = draggingExistingUid,
-                        hoveredContainerUid = hoveredContainerUid,
-                        dropInsertIndex = dropInsertIndex,
-                        onSelectWidget = onSelectWidget,
-                        onDoubleTapWidget = onDoubleTapWidget,
-                        onStartMoveExistingWidget = onStartMoveExistingWidget,
-                        onUpdateMoveDragPos = onUpdateMoveDragPos,
-                        onEndMoveExistingWidget = onEndMoveExistingWidget,
-                        onCancelMoveExistingWidget = onCancelMoveExistingWidget,
-                        onContainerPositioned = onContainerPositioned,
-                        onWidgetPositioned = onWidgetPositioned,
-                    )
-                    if (!childMoving) {
-                        childSlot++
-                    }
-                }
-                if (isHoveredDropTarget && safeChildInsertIndex == nonMovingChildCount && draggingType != null) {
-                    SketchDropPlaceholder(
-                        type = draggingType,
-                        inHorizontalParent = true,
-                    )
                 }
             }
         }
@@ -2542,29 +2889,28 @@ private fun RenderWidgetNodeOnPhone(
             }
             Column(
                 modifier = Modifier
-                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .padding(visualMargin)
                     .then(widthModifier)
                     .then(
                         when {
-                            isBeingMoved -> Modifier.height(0.dp)
-                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(20, 260).dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
                             isEmpty -> Modifier.height(28.dp)
-                            node.type == IdeWidgetType.SCROLL_H -> Modifier.heightIn(min = 36.dp, max = 180.dp)
-                            else -> Modifier.heightIn(min = 28.dp)
+                            node.type == IdeWidgetType.SCROLL_H -> Modifier.heightIn(min = 38.dp, max = 180.dp)
+                            else -> Modifier.heightIn(min = 32.dp)
                         },
                     )
                     .then(transformModifier)
                     .clipToBounds()
                     .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
                         if (!isBeingMoved) {
-                            val rect = coords.boundsInRoot()
-                            nodeBoundsInRoot = rect
                             onContainerPositioned(node.uid, rect)
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
                     .background(baseFill)
-                    .border(if (isBeingMoved) 0.dp else 0.8.dp, layoutOutlineColor, RectangleShape)
+                    .border(if (isSelected) 1.3.dp else 0.8.dp, if (isSelected) Color(0xFF0284C7) else layoutOutlineColor, RectangleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -2593,47 +2939,82 @@ private fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
-                    .then(scrollMod)
-                    .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
+                    .then(scrollMod),
                 verticalArrangement = verticalArr,
                 horizontalAlignment = horizontalAlign,
             ) {
-                var childSlot = 0
-                node.children.forEach { child ->
-                    val childMoving = child.uid == draggingExistingUid
-                    if (!childMoving && isHoveredDropTarget && childSlot == safeChildInsertIndex && draggingType != null) {
+                // Dedicated clickable Layout Header Strip when the layout contains children,
+                // so the user can ALWAYS reach/select/drag even a tiny layout filled with match_parent children!
+                if (node.children.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (isSelected) Color(0xFF0284C7).copy(alpha = 0.22f) else Color(0xFFE2E8F0).copy(alpha = 0.85f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onSelectWidget(node) }
+                            .padding(horizontal = 5.dp, vertical = 1.5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "[${node.type.shortTag}] ${node.viewId}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF475569),
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(if (isEmpty) 0.dp else containerVisualPad),
+                    verticalArrangement = verticalArr,
+                    horizontalAlignment = horizontalAlign,
+                ) {
+                    var childSlot = 0
+                    node.children.forEach { child ->
+                        val childMoving = child.uid == draggingExistingUid
+                        if (!childMoving && isHoveredDropTarget && childSlot == safeChildInsertIndex && draggingType != null) {
+                            SketchDropPlaceholder(
+                                type = draggingType,
+                                inHorizontalParent = false,
+                            )
+                        }
+                        RenderWidgetNodeOnPhone(
+                            node = child,
+                            projectImages = projectImages,
+                            parentBounds = nodeBoundsInRoot,
+                            selectedWidgetUid = selectedWidgetUid,
+                            draggingType = draggingType,
+                            draggingExistingUid = draggingExistingUid,
+                            hoveredContainerUid = hoveredContainerUid,
+                            dropInsertIndex = dropInsertIndex,
+                            onSelectWidget = onSelectWidget,
+                            onDoubleTapWidget = onDoubleTapWidget,
+                            onStartMoveExistingWidget = onStartMoveExistingWidget,
+                            onUpdateMoveDragPos = onUpdateMoveDragPos,
+                            onEndMoveExistingWidget = onEndMoveExistingWidget,
+                            onCancelMoveExistingWidget = onCancelMoveExistingWidget,
+                            onContainerPositioned = onContainerPositioned,
+                            onWidgetPositioned = onWidgetPositioned,
+                        )
+                        if (!childMoving) {
+                            childSlot++
+                        }
+                    }
+                    if (isHoveredDropTarget && safeChildInsertIndex == nonMovingChildCount && draggingType != null) {
                         SketchDropPlaceholder(
                             type = draggingType,
                             inHorizontalParent = false,
                         )
                     }
-                    RenderWidgetNodeOnPhone(
-                        node = child,
-                        projectImages = projectImages,
-                        parentBounds = nodeBoundsInRoot,
-                        selectedWidgetUid = selectedWidgetUid,
-                        draggingType = draggingType,
-                        draggingExistingUid = draggingExistingUid,
-                        hoveredContainerUid = hoveredContainerUid,
-                        dropInsertIndex = dropInsertIndex,
-                        onSelectWidget = onSelectWidget,
-                        onDoubleTapWidget = onDoubleTapWidget,
-                        onStartMoveExistingWidget = onStartMoveExistingWidget,
-                        onUpdateMoveDragPos = onUpdateMoveDragPos,
-                        onEndMoveExistingWidget = onEndMoveExistingWidget,
-                        onCancelMoveExistingWidget = onCancelMoveExistingWidget,
-                        onContainerPositioned = onContainerPositioned,
-                        onWidgetPositioned = onWidgetPositioned,
-                    )
-                    if (!childMoving) {
-                        childSlot++
-                    }
-                }
-                if (isHoveredDropTarget && safeChildInsertIndex == nonMovingChildCount && draggingType != null) {
-                    SketchDropPlaceholder(
-                        type = draggingType,
-                        inHorizontalParent = false,
-                    )
                 }
             }
         }
@@ -2676,10 +3057,10 @@ private fun RenderWidgetNodeOnPhone(
 
             Box(
                 modifier = Modifier
-                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .padding(visualMargin)
                     .then(widthModifier)
                     .then(
-                        if (!isBeingMoved && customHeightDp != null && customHeightDp > 0) {
+                        if (customHeightDp != null && customHeightDp > 0) {
                             Modifier.height(customHeightDp.coerceIn(18, 220).dp)
                         } else {
                             Modifier
@@ -2687,15 +3068,15 @@ private fun RenderWidgetNodeOnPhone(
                     )
                     .then(transformModifier)
                     .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
                         if (!isBeingMoved) {
-                            val rect = coords.boundsInRoot()
-                            nodeBoundsInRoot = rect
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
                     .background(baseFill)
                     .then(
-                        if (!isBeingMoved && node.type == IdeWidgetType.TEXT_INPUT_EDIT_TEXT) {
+                        if (node.type == IdeWidgetType.TEXT_INPUT_EDIT_TEXT) {
                             Modifier.border(
                                 width = 1.dp,
                                 color = if (isSelected) Color(0xFF0284C7) else Color(0xFF94A3B8),
@@ -2740,116 +3121,114 @@ private fun RenderWidgetNodeOnPhone(
                         )
                     }
                     .padding(
-                        horizontal = if (isBeingMoved) 0.dp else (node.paddingDp.coerceIn(4, 24)).dp,
-                        vertical = if (isBeingMoved) 0.dp else (node.paddingDp / 2).coerceIn(3, 16).dp,
+                        horizontal = (node.paddingDp.coerceIn(4, 24)).dp,
+                        vertical = (node.paddingDp / 2).coerceIn(3, 16).dp,
                     ),
                 contentAlignment = boxAlignment,
             ) {
-                if (!isBeingMoved) {
-                    Column(
-                        modifier = if (node.layoutWidth == "match_parent") Modifier.fillMaxWidth() else Modifier.wrapContentWidth(),
+                Column(
+                    modifier = if (node.layoutWidth == "match_parent") Modifier.fillMaxWidth() else Modifier.wrapContentWidth(),
+                ) {
+                    if (node.type == IdeWidgetType.TEXT_INPUT_EDIT_TEXT) {
+                        Text(
+                            text = node.hint.ifBlank { "Label" },
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = Color(0xFF0284C7),
+                            maxLines = 1,
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (node.type == IdeWidgetType.TEXT_INPUT_EDIT_TEXT) {
-                            Text(
-                                text = node.hint.ifBlank { "Label" },
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                                color = Color(0xFF0284C7),
-                                maxLines = 1,
-                            )
-                        }
+                        Text(
+                            text = displayedText,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 28).sp,
+                                fontWeight = fontWeight,
+                                fontStyle = fontStyle,
+                            ),
+                            color = if (showingHint) parsedHintColor else parsedTxtColor,
+                            maxLines = maxLinesCount,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = if (node.layoutWidth == "match_parent") Modifier.weight(1f, fill = true) else Modifier,
+                        )
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = displayedText,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = (node.textSizeSp - 1).coerceIn(9, 28).sp,
-                                    fontWeight = fontWeight,
-                                    fontStyle = fontStyle,
-                                ),
-                                color = if (showingHint) parsedHintColor else parsedTxtColor,
-                                maxLines = maxLinesCount,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = if (node.layoutWidth == "match_parent") Modifier.weight(1f, fill = true) else Modifier,
-                            )
+                        when (node.type) {
+                            IdeWidgetType.AUTO_COMPLETE_TEXT -> {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
 
-                            when (node.type) {
-                                IdeWidgetType.AUTO_COMPLETE_TEXT -> {
-                                    Icon(
-                                        imageVector = Icons.Filled.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = Color(0xFF64748B),
-                                        modifier = Modifier.size(16.dp),
+                            IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFFE2E8F0))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                ) {
+                                    Text(
+                                        text = ",▾",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Color(0xFF475569),
                                     )
                                 }
+                            }
 
-                                IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(Color(0xFFE2E8F0))
-                                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                                    ) {
-                                        Text(
-                                            text = ",▾",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontFamily = JetBrainsMono,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                            ),
-                                            color = Color(0xFF475569),
+                            IdeWidgetType.CHECKED_TEXT_VIEW -> {
+                                Box(
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(if (node.checked) Color(0xFF0284C7) else Color.Transparent)
+                                        .border(
+                                            width = 1.3.dp,
+                                            color = if (node.checked) Color(0xFF0284C7) else Color(0xFF64748B),
+                                            shape = RoundedCornerShape(3.dp),
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (node.checked) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(11.dp),
                                         )
                                     }
                                 }
-
-                                IdeWidgetType.CHECKED_TEXT_VIEW -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(15.dp)
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(if (node.checked) Color(0xFF0284C7) else Color.Transparent)
-                                            .border(
-                                                width = 1.3.dp,
-                                                color = if (node.checked) Color(0xFF0284C7) else Color(0xFF64748B),
-                                                shape = RoundedCornerShape(3.dp),
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (node.checked) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Check,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(11.dp),
-                                            )
-                                        }
-                                    }
-                                }
-
-                                else -> {}
                             }
-                        }
 
-                        // Standard Android EditText / AutoComplete bottom underline bar
-                        if (node.type == IdeWidgetType.EDIT_TEXT ||
-                            node.type == IdeWidgetType.AUTO_COMPLETE_TEXT ||
-                            node.type == IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT
-                        ) {
-                            Spacer(Modifier.height(3.dp))
-                            Box(
-                                modifier = Modifier
-                                    .then(
-                                        if (node.layoutWidth == "match_parent") Modifier.fillMaxWidth() else Modifier.width(88.dp),
-                                    )
-                                    .height(1.4.dp)
-                                    .background(if (isSelected) Color(0xFF0284C7) else Color(0xFF64748B)),
-                            )
+                            else -> {}
                         }
+                    }
+
+                    // Standard Android EditText / AutoComplete bottom underline bar
+                    if (node.type == IdeWidgetType.EDIT_TEXT ||
+                        node.type == IdeWidgetType.AUTO_COMPLETE_TEXT ||
+                        node.type == IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT
+                    ) {
+                        Spacer(Modifier.height(3.dp))
+                        Box(
+                            modifier = Modifier
+                                .then(
+                                    if (node.layoutWidth == "match_parent") Modifier.fillMaxWidth() else Modifier.width(88.dp),
+                                )
+                                .height(1.4.dp)
+                                .background(if (isSelected) Color(0xFF0284C7) else Color(0xFF64748B)),
+                        )
                     }
                 }
             }
@@ -2895,13 +3274,11 @@ private fun RenderWidgetNodeOnPhone(
             val defaultH = if (isAspect) 48.dp else 56.dp
 
             val imgWidthMod = when {
-                isBeingMoved -> Modifier.width(0.dp).height(0.dp).graphicsLayer(alpha = 0f)
                 customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(24, 300).dp)
                 node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
                 else -> Modifier.width(defaultW)
             }
             val imgHeightMod = when {
-                isBeingMoved -> Modifier.height(0.dp)
                 customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
                 node.layoutHeight == "match_parent" -> Modifier.height(140.dp)
                 else -> Modifier.height(defaultH)
@@ -2924,7 +3301,6 @@ private fun RenderWidgetNodeOnPhone(
             }
 
             val borderWidth = when {
-                isBeingMoved -> 0.dp
                 node.civBorderWidthDp > 0 && (isCircle || node.type == IdeWidgetType.ROUNDED_IMAGE_VIEW || node.type == IdeWidgetType.SHAPEABLE_IMAGE_VIEW) ->
                     node.civBorderWidthDp.coerceIn(1, 12).dp
                 isSelected -> 1.2.dp
@@ -2939,15 +3315,15 @@ private fun RenderWidgetNodeOnPhone(
 
             Box(
                 modifier = Modifier
-                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .padding(visualMargin)
                     .then(imgWidthMod)
                     .then(imgHeightMod)
                     .then(transformModifier)
                     .clip(widgetShape)
                     .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
                         if (!isBeingMoved) {
-                            val rect = coords.boundsInRoot()
-                            nodeBoundsInRoot = rect
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
@@ -2991,75 +3367,585 @@ private fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
-                    .padding(if (isBeingMoved) 0.dp else (node.paddingDp / 2).coerceIn(2, 12).dp),
+                    .padding((node.paddingDp / 2).coerceIn(2, 12).dp),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!isBeingMoved) {
-                    if (decodedBitmap != null) {
-                        Image(
-                            bitmap = decodedBitmap.asImageBitmap(),
-                            contentDescription = node.viewId,
-                            contentScale = contentScale,
-                            colorFilter = parsedTint?.let { ColorFilter.tint(it) },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(widgetShape),
-                        )
-                    } else {
-                        // Distinct placeholder icon for CircleImageView vs ImageView / specialized image views
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            val iconTint = parsedTint ?: Color(0xFF475569)
-                            Canvas(Modifier.size(26.dp)) {
-                                val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                                if (isCircle) {
-                                    val c = Offset(size.width / 2f, size.height / 2f)
-                                    drawCircle(
-                                        color = iconTint,
-                                        radius = size.minDimension * 0.44f,
-                                        center = c,
-                                        style = stroke,
-                                    )
-                                    drawCircle(
-                                        color = iconTint,
-                                        radius = size.minDimension * 0.16f,
-                                        center = Offset(c.x, size.height * 0.38f),
-                                    )
-                                    drawArc(
-                                        color = iconTint,
-                                        startAngle = 200f,
-                                        sweepAngle = 140f,
-                                        useCenter = false,
-                                        topLeft = Offset(size.width * 0.22f, size.height * 0.54f),
-                                        size = Size(size.width * 0.56f, size.height * 0.40f),
-                                        style = stroke,
-                                    )
-                                } else {
-                                    drawRoundRect(
-                                        color = iconTint,
-                                        topLeft = Offset(2f, 2f),
-                                        size = Size(size.width - 4f, size.height - 4f),
-                                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
-                                        style = stroke,
-                                    )
-                                    drawCircle(
-                                        color = iconTint,
-                                        radius = 2.4.dp.toPx(),
-                                        center = Offset(size.width * 0.34f, size.height * 0.36f),
-                                    )
-                                    val mountain = Path().apply {
-                                        moveTo(size.width * 0.16f, size.height * 0.78f)
-                                        lineTo(size.width * 0.45f, size.height * 0.46f)
-                                        lineTo(size.width * 0.64f, size.height * 0.66f)
-                                        lineTo(size.width * 0.76f, size.height * 0.54f)
-                                        lineTo(size.width * 0.86f, size.height * 0.78f)
-                                    }
-                                    drawPath(mountain, color = iconTint, style = stroke)
+                if (decodedBitmap != null) {
+                    Image(
+                        bitmap = decodedBitmap.asImageBitmap(),
+                        contentDescription = node.viewId,
+                        contentScale = contentScale,
+                        colorFilter = parsedTint?.let { ColorFilter.tint(it) },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(widgetShape),
+                    )
+                } else {
+                    // Distinct placeholder icon for CircleImageView vs ImageView / specialized image views
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        val iconTint = parsedTint ?: Color(0xFF475569)
+                        Canvas(Modifier.size(26.dp)) {
+                            val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                            if (isCircle) {
+                                val c = Offset(size.width / 2f, size.height / 2f)
+                                drawCircle(
+                                    color = iconTint,
+                                    radius = size.minDimension * 0.44f,
+                                    center = c,
+                                    style = stroke,
+                                )
+                                drawCircle(
+                                    color = iconTint,
+                                    radius = size.minDimension * 0.16f,
+                                    center = Offset(c.x, size.height * 0.38f),
+                                )
+                                drawArc(
+                                    color = iconTint,
+                                    startAngle = 200f,
+                                    sweepAngle = 140f,
+                                    useCenter = false,
+                                    topLeft = Offset(size.width * 0.22f, size.height * 0.54f),
+                                    size = Size(size.width * 0.56f, size.height * 0.40f),
+                                    style = stroke,
+                                )
+                            } else {
+                                drawRoundRect(
+                                    color = iconTint,
+                                    topLeft = Offset(2f, 2f),
+                                    size = Size(size.width - 4f, size.height - 4f),
+                                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                                    style = stroke,
+                                )
+                                drawCircle(
+                                    color = iconTint,
+                                    radius = 2.4.dp.toPx(),
+                                    center = Offset(size.width * 0.34f, size.height * 0.36f),
+                                )
+                                val mountain = Path().apply {
+                                    moveTo(size.width * 0.16f, size.height * 0.78f)
+                                    lineTo(size.width * 0.45f, size.height * 0.46f)
+                                    lineTo(size.width * 0.64f, size.height * 0.66f)
+                                    lineTo(size.width * 0.76f, size.height * 0.54f)
+                                    lineTo(size.width * 0.86f, size.height * 0.78f)
                                 }
+                                drawPath(mountain, color = iconTint, style = stroke)
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // 4. Buttons Widgets (Button, MaterialButton, OutlinedButton, TextButton, FAB, ExtendedFAB, ToggleButton, ChipButton)
+        IdeWidgetType.BUTTON,
+        IdeWidgetType.MATERIAL_BUTTON,
+        IdeWidgetType.OUTLINED_BUTTON,
+        IdeWidgetType.TEXT_BUTTON,
+        IdeWidgetType.FAB_BUTTON,
+        IdeWidgetType.EXTENDED_FAB,
+        IdeWidgetType.TOGGLE_BUTTON,
+        IdeWidgetType.CHIP_BUTTON -> {
+            val isFab = node.type == IdeWidgetType.FAB_BUTTON
+            val btnShape = when (node.type) {
+                IdeWidgetType.FAB_BUTTON -> CircleShape
+                IdeWidgetType.EXTENDED_FAB, IdeWidgetType.CHIP_BUTTON -> RoundedCornerShape(node.cornerRadiusDp.coerceAtLeast(18).dp)
+                IdeWidgetType.TEXT_BUTTON -> RoundedCornerShape(6.dp)
+                else -> RoundedCornerShape(node.cornerRadiusDp.coerceAtLeast(6).dp)
+            }
+            val defaultBtnBg = when (node.type) {
+                IdeWidgetType.OUTLINED_BUTTON, IdeWidgetType.TEXT_BUTTON -> Color.Transparent
+                IdeWidgetType.TOGGLE_BUTTON -> if (node.checked) Color(0xFFDBEAFE) else Color(0xFFE2E8F0)
+                IdeWidgetType.CHIP_BUTTON -> if (node.checked) Color(0xFFBAE6FD) else Color(0xFFF1F5F9)
+                else -> Color(0xFF2563EB)
+            }
+            val btnFill = when {
+                isSelected -> selectedFill
+                parsedBgColor != null -> parsedBgColor
+                else -> defaultBtnBg
+            }
+            val parsedTxtColor = remember(node.textColor, node.type, node.checked) {
+                parseHexColorOrNull(node.textColor) ?: when (node.type) {
+                    IdeWidgetType.OUTLINED_BUTTON, IdeWidgetType.TEXT_BUTTON -> Color(0xFF2563EB)
+                    IdeWidgetType.TOGGLE_BUTTON, IdeWidgetType.CHIP_BUTTON -> Color(0xFF0F172A)
+                    else -> Color.White
+                }
+            }
+            val parsedStrokeColor = remember(node.civBorderColor) {
+                parseHexColorOrNull(node.civBorderColor) ?: Color(0xFF2563EB)
+            }
+            val strokeW = when {
+                isSelected -> 1.4.dp
+                node.civBorderWidthDp > 0 -> node.civBorderWidthDp.coerceIn(1, 8).dp
+                node.type == IdeWidgetType.OUTLINED_BUTTON -> 1.2.dp
+                else -> 0.dp
+            }
+            val rawBtnText = when (node.type) {
+                IdeWidgetType.TOGGLE_BUTTON -> if (node.checked) node.textOn.ifBlank { "ON" } else node.textOff.ifBlank { "OFF" }
+                else -> node.text.ifBlank { node.type.displayName }
+            }
+            val displayBtnText = if (node.allCaps) rawBtnText.uppercase() else rawBtnText
+
+            Box(
+                modifier = Modifier
+                    .padding(visualMargin)
+                    .then(
+                        if (isFab) {
+                            Modifier.size((customWidthDp ?: 44).coerceIn(32, 96).dp)
+                        } else {
+                            widthModifier.then(
+                                if (customHeightDp != null && customHeightDp > 0) {
+                                    Modifier.height(customHeightDp.coerceIn(24, 160).dp)
+                                } else {
+                                    Modifier.heightIn(min = 32.dp)
+                                },
+                            )
+                        },
+                    )
+                    .then(transformModifier)
+                    .shadow(if (node.type == IdeWidgetType.TEXT_BUTTON || node.type == IdeWidgetType.OUTLINED_BUTTON) 0.dp else node.elevationDp.coerceIn(0, 12).dp, btnShape)
+                    .clip(btnShape)
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        if (!isBeingMoved) {
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(btnFill, btnShape)
+                    .then(
+                        if (strokeW > 0.dp) {
+                            Modifier.border(
+                                width = strokeW,
+                                color = if (isSelected) Color(0xFF0284C7) else parsedStrokeColor,
+                                shape = btnShape,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    }
+                    .padding(horizontal = if (isFab) 0.dp else 12.dp, vertical = if (isFab) 0.dp else 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isFab) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = node.viewId,
+                        tint = if (isSelected) Color(0xFF0369A1) else parsedTxtColor,
+                        modifier = Modifier.size(20.dp),
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        if (node.type == IdeWidgetType.EXTENDED_FAB) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = if (isSelected) Color(0xFF0369A1) else parsedTxtColor,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        } else if (node.type == IdeWidgetType.CHIP_BUTTON && node.checked) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF0284C7),
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                        Text(
+                            text = displayBtnText,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 24).sp,
+                                fontWeight = if (node.textStyle.contains("bold")) FontWeight.Bold else FontWeight.Medium,
+                                fontStyle = if (node.textStyle.contains("italic")) FontStyle.Italic else FontStyle.Normal,
+                            ),
+                            color = if (isSelected) Color(0xFF0F172A) else parsedTxtColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Choose Widgets (CheckBox, RadioButton, Switch, Spinner)
+        IdeWidgetType.CHECK_BOX,
+        IdeWidgetType.RADIO_BUTTON,
+        IdeWidgetType.SWITCH,
+        IdeWidgetType.SPINNER -> {
+            val parsedTxtColor = remember(node.textColor) {
+                parseHexColorOrNull(node.textColor) ?: Color(0xFF1E293B)
+            }
+            val parsedBtnTint = remember(node.buttonTint) {
+                parseHexColorOrNull(node.buttonTint) ?: Color(0xFF0284C7)
+            }
+            val parsedTrackTint = remember(node.trackTint) {
+                parseHexColorOrNull(node.trackTint) ?: Color(0xFF93C5FD)
+            }
+
+            Row(
+                modifier = Modifier
+                    .padding(visualMargin)
+                    .then(widthModifier)
+                    .then(
+                        if (customHeightDp != null && customHeightDp > 0) {
+                            Modifier.height(customHeightDp.coerceIn(22, 160).dp)
+                        } else {
+                            Modifier.heightIn(min = 28.dp)
+                        },
+                    )
+                    .then(transformModifier)
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        if (!isBeingMoved) {
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(baseFill, RoundedCornerShape(4.dp))
+                    .then(
+                        if (node.type == IdeWidgetType.SPINNER) {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = if (isSelected) Color(0xFF0284C7) else Color(0xFFCBD5E1),
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                        } else if (isSelected) {
+                            Modifier.border(1.dp, Color(0xFF0284C7), RoundedCornerShape(4.dp))
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                when (node.type) {
+                    IdeWidgetType.CHECK_BOX -> {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (node.checked) parsedBtnTint else Color.Transparent)
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (node.checked) parsedBtnTint else Color(0xFF64748B),
+                                    shape = RoundedCornerShape(3.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (node.checked) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(11.dp),
+                                )
+                            }
+                        }
+                        Text(
+                            text = node.text.ifBlank { "CheckBox" },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 24).sp,
+                                fontWeight = if (node.textStyle.contains("bold")) FontWeight.Bold else FontWeight.Normal,
+                            ),
+                            color = parsedTxtColor,
+                            maxLines = 1,
+                        )
+                    }
+
+                    IdeWidgetType.RADIO_BUTTON -> {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .border(
+                                    width = 1.6.dp,
+                                    color = if (node.checked) parsedBtnTint else Color(0xFF64748B),
+                                    shape = CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (node.checked) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(parsedBtnTint),
+                                )
+                            }
+                        }
+                        Text(
+                            text = node.text.ifBlank { "RadioButton" },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 24).sp,
+                                fontWeight = if (node.textStyle.contains("bold")) FontWeight.Bold else FontWeight.Normal,
+                            ),
+                            color = parsedTxtColor,
+                            maxLines = 1,
+                        )
+                    }
+
+                    IdeWidgetType.SWITCH -> {
+                        Text(
+                            text = node.text.ifBlank { "Switch" },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 24).sp,
+                                fontWeight = if (node.textStyle.contains("bold")) FontWeight.Bold else FontWeight.Normal,
+                            ),
+                            color = parsedTxtColor,
+                            maxLines = 1,
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(32.dp)
+                                .height(17.dp)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(if (node.checked) parsedTrackTint else Color(0xFFCBD5E1))
+                                .padding(2.dp),
+                            contentAlignment = if (node.checked) Alignment.CenterEnd else Alignment.CenterStart,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(13.dp)
+                                    .clip(CircleShape)
+                                    .background(if (node.checked) parsedBtnTint else Color.White),
+                            )
+                        }
+                    }
+
+                    IdeWidgetType.SPINNER -> {
+                        val firstEntry = remember(node.spinnerEntries) {
+                            node.spinnerEntries.split(",").map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: "Select item"
+                        }
+                        Text(
+                            text = firstEntry,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = (node.textSizeSp - 1).coerceIn(9, 22).sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = parsedTxtColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = if (node.layoutWidth == "match_parent") Modifier.weight(1f) else Modifier,
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            tint = Color(0xFF475569),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    else -> {}
+                }
+            }
+        }
+
+        // 6. Web Widgets (WebView + 4 Web display widgets: CustomTabView, GeckoWebView, AdBlockWebView, SwipeWebView)
+        IdeWidgetType.WEB_VIEW,
+        IdeWidgetType.CUSTOM_TAB_VIEW,
+        IdeWidgetType.GECKO_WEB_VIEW,
+        IdeWidgetType.AD_WEB_VIEW,
+        IdeWidgetType.SWIPE_WEB_VIEW -> {
+            val webHeightDp = customHeightDp?.coerceIn(48, 280)?.dp ?: 110.dp
+            val webShape = RoundedCornerShape(6.dp)
+            Column(
+                modifier = Modifier
+                    .padding(visualMargin)
+                    .then(
+                        when {
+                            customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(60, 320).dp)
+                            node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
+                            else -> Modifier.width(180.dp)
+                        },
+                    )
+                    .height(webHeightDp)
+                    .then(transformModifier)
+                    .clip(webShape)
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        if (!isBeingMoved) {
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(if (isSelected) selectedFill else Color(0xFFF8FAFC), webShape)
+                    .border(
+                        width = if (isSelected) 1.4.dp else 1.dp,
+                        color = if (isSelected) Color(0xFF0284C7) else Color(0xFF94A3B8),
+                        shape = webShape,
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    },
+            ) {
+                // Browser URL address bar header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE2E8F0))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    SketchWidgetIcon(type = node.type, tint = Color(0xFF0284C7))
+                    Text(
+                        text = node.webUrl.ifBlank { "https://google.com" },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 8.5.sp,
+                        ),
+                        color = Color(0xFF334155),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (node.webJavaScript) {
+                        Text(
+                            text = "JS",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color(0xFF0284C7),
+                        )
+                    }
+                }
+
+                // Web content body preview
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        SketchWidgetIcon(type = node.type, tint = Color(0xFF475569))
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "${node.type.displayName} (${node.viewId})",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color(0xFF334155),
+                        )
+                        Text(
+                            text = node.webUrl,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp),
+                            color = Color(0xFF64748B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -3099,10 +3985,29 @@ private enum class IdeWidgetProperty(
     IMAGE(title = "Image", cardLabel = "Image"),
     SCALE_TYPE(title = "Scale type", cardLabel = "Scale type"),
     TINT(title = "Tint", cardLabel = "Tint"),
-    BORDER_WIDTH(title = "Border width", cardLabel = "Border\nwidth"),
-    BORDER_COLOR(title = "Border color", cardLabel = "Border\ncolor"),
+    BORDER_WIDTH(title = "Border / Stroke width", cardLabel = "Border\nwidth"),
+    BORDER_COLOR(title = "Border / Stroke color", cardLabel = "Border\ncolor"),
     CIRCLE_BG_COLOR(title = "Circle background", cardLabel = "Circle\nbackground"),
     CORNER_RADIUS(title = "Corner radius", cardLabel = "Corner\nradius"),
+    ELEVATION(title = "Elevation", cardLabel = "Elevation"),
+    RIPPLE_COLOR(title = "Ripple color", cardLabel = "Ripple\ncolor"),
+    ALL_CAPS(title = "All caps", cardLabel = "All caps"),
+    ENABLED(title = "Enabled", cardLabel = "Enabled"),
+    BUTTON_TINT(title = "Button / Thumb tint", cardLabel = "Button\ntint"),
+    TRACK_TINT(title = "Track tint", cardLabel = "Track\ntint"),
+    TEXT_ON(title = "Text On", cardLabel = "Text On"),
+    TEXT_OFF(title = "Text Off", cardLabel = "Text Off"),
+    SPINNER_ENTRIES(title = "Spinner entries", cardLabel = "Entries"),
+    SPINNER_MODE(title = "Spinner mode", cardLabel = "Spinner\nmode"),
+    SPINNER_PROMPT(title = "Spinner prompt", cardLabel = "Prompt"),
+    WEB_URL(title = "Web URL", cardLabel = "Web URL"),
+    WEB_JAVASCRIPT(title = "JavaScript", cardLabel = "JavaScript"),
+    WEB_DOM_STORAGE(title = "DOM storage", cardLabel = "DOM\nstorage"),
+    WEB_ZOOM(title = "Support zoom", cardLabel = "Zoom\ncontrols"),
+    WEB_DESKTOP_MODE(title = "Desktop mode", cardLabel = "Desktop\nmode"),
+    WEB_FILE_ACCESS(title = "File access", cardLabel = "File\naccess"),
+    WEB_CACHE_MODE(title = "Cache mode", cardLabel = "Cache\nmode"),
+    WEB_USER_AGENT(title = "User agent", cardLabel = "User\nagent"),
     CUSTOM_ATTRIBUTES(title = "Custom attributes", cardLabel = "Custom\nattributes"),
     CONVERT(title = "Convert", cardLabel = "Convert"),
     WIDTH(title = "Width", cardLabel = "Width"),
@@ -3136,7 +4041,7 @@ private enum class IdeWidgetProperty(
 }
 
 private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidgetType): Boolean = when (prop) {
-    IdeWidgetProperty.IMAGE,
+    IdeWidgetProperty.IMAGE -> type.isImageWidget || type == IdeWidgetType.FAB_BUTTON
     IdeWidgetProperty.SCALE_TYPE,
     IdeWidgetProperty.TINT -> type.isImageWidget
 
@@ -3144,7 +4049,8 @@ private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidge
     IdeWidgetProperty.BORDER_COLOR ->
         type == IdeWidgetType.CIRCLE_IMAGE_VIEW ||
             type == IdeWidgetType.ROUNDED_IMAGE_VIEW ||
-            type == IdeWidgetType.SHAPEABLE_IMAGE_VIEW
+            type == IdeWidgetType.SHAPEABLE_IMAGE_VIEW ||
+            type.isButtonWidget
 
     IdeWidgetProperty.CIRCLE_BG_COLOR -> type == IdeWidgetType.CIRCLE_IMAGE_VIEW
 
@@ -3152,12 +4058,46 @@ private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidge
         type == IdeWidgetType.ROUNDED_IMAGE_VIEW ||
             type == IdeWidgetType.SHAPEABLE_IMAGE_VIEW ||
             type == IdeWidgetType.IMAGE_BUTTON ||
-            type == IdeWidgetType.IMAGE_FILTER_VIEW
+            type == IdeWidgetType.IMAGE_FILTER_VIEW ||
+            (type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON)
+
+    IdeWidgetProperty.ELEVATION,
+    IdeWidgetProperty.RIPPLE_COLOR -> type.isButtonWidget
+
+    IdeWidgetProperty.ALL_CAPS -> type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON
+
+    IdeWidgetProperty.ENABLED -> type.isButtonWidget || type.isChooseWidget || type.isInputTextWidget
+
+    IdeWidgetProperty.BUTTON_TINT ->
+        type == IdeWidgetType.CHECK_BOX ||
+            type == IdeWidgetType.RADIO_BUTTON ||
+            type == IdeWidgetType.SWITCH
+
+    IdeWidgetProperty.TRACK_TINT -> type == IdeWidgetType.SWITCH
+
+    IdeWidgetProperty.TEXT_ON,
+    IdeWidgetProperty.TEXT_OFF ->
+        type == IdeWidgetType.SWITCH ||
+            type == IdeWidgetType.TOGGLE_BUTTON
+
+    IdeWidgetProperty.SPINNER_ENTRIES,
+    IdeWidgetProperty.SPINNER_MODE,
+    IdeWidgetProperty.SPINNER_PROMPT -> type == IdeWidgetType.SPINNER
+
+    IdeWidgetProperty.WEB_URL,
+    IdeWidgetProperty.WEB_JAVASCRIPT,
+    IdeWidgetProperty.WEB_DOM_STORAGE,
+    IdeWidgetProperty.WEB_ZOOM,
+    IdeWidgetProperty.WEB_DESKTOP_MODE,
+    IdeWidgetProperty.WEB_FILE_ACCESS,
+    IdeWidgetProperty.WEB_CACHE_MODE,
+    IdeWidgetProperty.WEB_USER_AGENT -> type.isWebWidget
 
     IdeWidgetProperty.TEXT,
     IdeWidgetProperty.TEXT_SIZE,
     IdeWidgetProperty.TEXT_STYLE,
-    IdeWidgetProperty.TEXT_COLOR,
+    IdeWidgetProperty.TEXT_COLOR -> type.hasTextLabel
+
     IdeWidgetProperty.LINES,
     IdeWidgetProperty.SINGLE_LINE -> type.isTextWidget
 
@@ -3166,7 +4106,7 @@ private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidge
     IdeWidgetProperty.INPUT_TYPE,
     IdeWidgetProperty.IME_OPTIONS -> type.isInputTextWidget
 
-    IdeWidgetProperty.CHECKED -> type == IdeWidgetType.CHECKED_TEXT_VIEW
+    IdeWidgetProperty.CHECKED -> type.isCheckableWidget
 
     IdeWidgetProperty.COMPLETION_THRESHOLD ->
         type == IdeWidgetType.AUTO_COMPLETE_TEXT ||
@@ -3178,9 +4118,11 @@ private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidge
 @Composable
 private fun IdeWidgetPropertyBottomPanel(
     node: IdeWidgetNode,
+    parentNode: IdeWidgetNode? = null,
     allWidgets: List<IdeWidgetNode>,
     recentProperties: List<IdeWidgetProperty>,
     onSelectOtherWidget: (IdeWidgetNode) -> Unit,
+    onSelectParentLayout: () -> Unit = {},
     onMoveUp: () -> Unit,
     onCollapse: () -> Unit,
     onDelete: () -> Unit,
@@ -3192,7 +4134,7 @@ private fun IdeWidgetPropertyBottomPanel(
     var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
     var showWidgetPickerMenu by remember { mutableStateOf(false) }
 
-    // Filter properties based on selected widget type (Layouts vs Text widgets vs Image widgets)
+    // Filter properties based on selected widget type (Layouts vs Text vs Image vs Buttons vs Choose vs Web)
     val availableProperties = remember(node.type) {
         IdeWidgetProperty.entries.filter { prop ->
             isPropertyAvailableForWidget(prop, node.type)
@@ -3219,7 +4161,7 @@ private fun IdeWidgetPropertyBottomPanel(
             .navigationBarsPadding()
             .padding(bottom = 8.dp + bottomBarPadding),
     ) {
-        // 1. Header Row: [Icon] viewId ▼   ...   ^   v   Trash   Save
+        // 1. Header Row: [Icon] viewId ▼   [↑ Parent] ...   ^   v   Trash   Save
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3228,50 +4170,83 @@ private fun IdeWidgetPropertyBottomPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable {
-                        if (allWidgets.size > 1) {
-                            showWidgetPickerMenu = !showWidgetPickerMenu
-                        } else {
-                            onClickProperty(IdeWidgetProperty.ID)
-                        }
-                    }
-                    .padding(vertical = 4.dp, horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f, fill = false),
             ) {
-                SketchWidgetIcon(type = node.type, tint = Ink)
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = node.viewId,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
-                    color = Ink,
-                )
-                Spacer(Modifier.width(24.dp))
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = Ink,
-                    modifier = Modifier.size(20.dp),
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            if (allWidgets.size > 1) {
+                                showWidgetPickerMenu = !showWidgetPickerMenu
+                            } else {
+                                onClickProperty(IdeWidgetProperty.ID)
+                            }
+                        }
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SketchWidgetIcon(type = node.type, tint = Ink)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = node.viewId,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = Ink,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Ink,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Direct 1-tap Parent Layout selector pill whenever the selected widget is inside a Layout!
+                if (parentNode != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Cyan.copy(alpha = 0.16f))
+                            .border(1.dp, Cyan.copy(alpha = 0.50f), RoundedCornerShape(50))
+                            .clickable(onClick = onSelectParentLayout)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        SketchWidgetIcon(type = parentNode.type, tint = Cyan)
+                        Text(
+                            text = "↑ ${parentNode.viewId}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Cyan,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // Up chevron (Move widget up)
+                // Up chevron (Select Parent Layout if inside a container, or move widget up)
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowUp,
                     contentDescription = null,
-                    tint = Muted,
+                    tint = if (parentNode != null) Cyan else Muted,
                     modifier = Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .clickable(onClick = onMoveUp)
+                        .clickable(onClick = onSelectParentLayout)
                         .padding(2.dp),
                 )
 
@@ -3507,7 +4482,10 @@ private fun SketchPropertyVectorIcon(
 
         IdeWidgetProperty.BORDER_COLOR,
         IdeWidgetProperty.CIRCLE_BG_COLOR,
-        IdeWidgetProperty.HINT_COLOR -> {
+        IdeWidgetProperty.HINT_COLOR,
+        IdeWidgetProperty.RIPPLE_COLOR,
+        IdeWidgetProperty.BUTTON_TINT,
+        IdeWidgetProperty.TRACK_TINT -> {
             Canvas(Modifier.size(20.dp)) {
                 val c = Offset(size.width * 0.50f, size.height * 0.50f)
                 drawCircle(
@@ -3535,6 +4513,76 @@ private fun SketchPropertyVectorIcon(
                     style = stroke,
                 )
             }
+        }
+
+        IdeWidgetProperty.ELEVATION -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.14f, size.height * 0.18f),
+                    size = Size(size.width * 0.62f, size.height * 0.46f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.24f, size.height * 0.78f), Offset(size.width * 0.84f, size.height * 0.78f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.ALL_CAPS -> {
+            Text(
+                text = "AA",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = tint,
+            )
+        }
+
+        IdeWidgetProperty.ENABLED,
+        IdeWidgetProperty.WEB_JAVASCRIPT,
+        IdeWidgetProperty.WEB_DOM_STORAGE,
+        IdeWidgetProperty.WEB_ZOOM,
+        IdeWidgetProperty.WEB_DESKTOP_MODE,
+        IdeWidgetProperty.WEB_FILE_ACCESS -> {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+
+        IdeWidgetProperty.TEXT_ON,
+        IdeWidgetProperty.TEXT_OFF,
+        IdeWidgetProperty.SPINNER_PROMPT,
+        IdeWidgetProperty.WEB_USER_AGENT -> {
+            Text(
+                text = "Ab",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = tint,
+            )
+        }
+
+        IdeWidgetProperty.SPINNER_ENTRIES,
+        IdeWidgetProperty.SPINNER_MODE,
+        IdeWidgetProperty.WEB_CACHE_MODE -> {
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        IdeWidgetProperty.WEB_URL -> {
+            SketchWidgetIcon(type = IdeWidgetType.WEB_VIEW, tint = tint)
         }
 
         IdeWidgetProperty.HINT -> {
@@ -6606,6 +7654,25 @@ private fun IdeWidgetPropertyEditDialog(
                 IdeWidgetProperty.BORDER_COLOR -> node.civBorderColor
                 IdeWidgetProperty.CIRCLE_BG_COLOR -> node.civCircleBgColor
                 IdeWidgetProperty.CORNER_RADIUS -> node.cornerRadiusDp.toString()
+                IdeWidgetProperty.ELEVATION -> node.elevationDp.toString()
+                IdeWidgetProperty.RIPPLE_COLOR -> node.rippleColor
+                IdeWidgetProperty.ALL_CAPS -> node.allCaps.toString()
+                IdeWidgetProperty.ENABLED -> node.enabled.toString()
+                IdeWidgetProperty.BUTTON_TINT -> node.buttonTint
+                IdeWidgetProperty.TRACK_TINT -> node.trackTint
+                IdeWidgetProperty.TEXT_ON -> node.textOn
+                IdeWidgetProperty.TEXT_OFF -> node.textOff
+                IdeWidgetProperty.SPINNER_ENTRIES -> node.spinnerEntries
+                IdeWidgetProperty.SPINNER_MODE -> node.spinnerMode
+                IdeWidgetProperty.SPINNER_PROMPT -> node.spinnerPrompt
+                IdeWidgetProperty.WEB_URL -> node.webUrl
+                IdeWidgetProperty.WEB_JAVASCRIPT -> node.webJavaScript.toString()
+                IdeWidgetProperty.WEB_DOM_STORAGE -> node.webDomStorage.toString()
+                IdeWidgetProperty.WEB_ZOOM -> node.webSupportZoom.toString()
+                IdeWidgetProperty.WEB_DESKTOP_MODE -> node.webDesktopMode.toString()
+                IdeWidgetProperty.WEB_FILE_ACCESS -> node.webAllowFileAccess.toString()
+                IdeWidgetProperty.WEB_CACHE_MODE -> node.webCacheMode
+                IdeWidgetProperty.WEB_USER_AGENT -> node.webUserAgent
                 IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.customAttributes
                 IdeWidgetProperty.CONVERT -> node.type.name
                 IdeWidgetProperty.WIDTH -> node.layoutWidth
@@ -6675,6 +7742,37 @@ private fun IdeWidgetPropertyEditDialog(
                 val cr = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 64) ?: node.cornerRadiusDp
                 node.copy(cornerRadiusDp = cr)
             }
+            IdeWidgetProperty.ELEVATION -> {
+                val el = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 24) ?: node.elevationDp
+                node.copy(elevationDp = el)
+            }
+            IdeWidgetProperty.RIPPLE_COLOR -> {
+                val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                node.copy(rippleColor = if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.rippleColor)
+            }
+            IdeWidgetProperty.ALL_CAPS -> node.copy(allCaps = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.ENABLED -> node.copy(enabled = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.BUTTON_TINT -> {
+                val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                node.copy(buttonTint = if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.buttonTint)
+            }
+            IdeWidgetProperty.TRACK_TINT -> {
+                val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                node.copy(trackTint = if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.trackTint)
+            }
+            IdeWidgetProperty.TEXT_ON -> node.copy(textOn = raw.ifBlank { "ON" })
+            IdeWidgetProperty.TEXT_OFF -> node.copy(textOff = raw.ifBlank { "OFF" })
+            IdeWidgetProperty.SPINNER_ENTRIES -> node.copy(spinnerEntries = raw.ifBlank { "Item 1, Item 2, Item 3" })
+            IdeWidgetProperty.SPINNER_MODE -> node.copy(spinnerMode = trimmed.ifBlank { "dropdown" })
+            IdeWidgetProperty.SPINNER_PROMPT -> node.copy(spinnerPrompt = raw)
+            IdeWidgetProperty.WEB_URL -> node.copy(webUrl = trimmed.ifBlank { "https://google.com" })
+            IdeWidgetProperty.WEB_JAVASCRIPT -> node.copy(webJavaScript = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.WEB_DOM_STORAGE -> node.copy(webDomStorage = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.WEB_ZOOM -> node.copy(webSupportZoom = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.WEB_DESKTOP_MODE -> node.copy(webDesktopMode = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.WEB_FILE_ACCESS -> node.copy(webAllowFileAccess = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.WEB_CACHE_MODE -> node.copy(webCacheMode = trimmed.ifBlank { "LOAD_DEFAULT" })
+            IdeWidgetProperty.WEB_USER_AGENT -> node.copy(webUserAgent = raw.ifBlank { "default" })
             IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.copy(customAttributes = trimmed)
             IdeWidgetProperty.CONVERT -> {
                 val chosenType = runCatching { IdeWidgetType.valueOf(trimmed) }.getOrDefault(node.type)
@@ -6978,6 +8076,156 @@ private fun IdeWidgetPropertyEditDialog(
                             )
                         }
 
+                        IdeWidgetProperty.ELEVATION -> {
+                            val presets = listOf("0", "2", "4", "6", "8", "12")
+                            DialogPresetChipsGrid(
+                                presets = presets,
+                                selectedValue = textInput,
+                                suffix = "dp",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:elevation (dp)",
+                            )
+                        }
+
+                        IdeWidgetProperty.RIPPLE_COLOR,
+                        IdeWidgetProperty.BUTTON_TINT,
+                        IdeWidgetProperty.TRACK_TINT -> {
+                            val swatchColors = listOf(
+                                "#0284C7",
+                                "#38BDF8",
+                                "#93C5FD",
+                                "#2563EB",
+                                "#7C3AED",
+                                "#E11D48",
+                                "#16A34A",
+                                "#D97706",
+                                "#000000",
+                            )
+                            DialogColorSwatches(
+                                colors = swatchColors,
+                                selectedHex = textInput,
+                                onSelectHex = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "${property.title} (#RRGGBB)",
+                            )
+                        }
+
+                        IdeWidgetProperty.TEXT_ON,
+                        IdeWidgetProperty.TEXT_OFF,
+                        IdeWidgetProperty.SPINNER_PROMPT -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = property.title,
+                            )
+                        }
+
+                        IdeWidgetProperty.SPINNER_ENTRIES -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Spinner entries (comma-separated, e.g. Item 1, Item 2, Item 3)",
+                                singleLine = false,
+                            )
+                        }
+
+                        IdeWidgetProperty.SPINNER_MODE -> {
+                            listOf(
+                                "dropdown" to "Dropdown Menu (Default)",
+                                "dialog" to "Modal Dialog List",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.WEB_URL -> {
+                            val urlPresets = listOf(
+                                "https://google.com",
+                                "https://github.com",
+                                "https://developer.android.com",
+                                "file:///android_asset/index.html",
+                            )
+                            urlPresets.forEach { presetUrl ->
+                                DialogOptionRow(
+                                    label = presetUrl,
+                                    selected = textInput.equals(presetUrl, ignoreCase = true),
+                                    onClick = {
+                                        textInput = presetUrl
+                                        applyAndSave(presetUrl)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Web URL (https://... or file:///...)",
+                            )
+                        }
+
+                        IdeWidgetProperty.WEB_CACHE_MODE -> {
+                            listOf(
+                                "LOAD_DEFAULT" to "Default Cache Policy",
+                                "LOAD_NO_CACHE" to "Always Load from Network (No Cache)",
+                                "LOAD_CACHE_ELSE_NETWORK" to "Use Cache Whenever Available",
+                                "LOAD_CACHE_ONLY" to "Offline Cache Only",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.WEB_USER_AGENT -> {
+                            listOf(
+                                "default" to "System WebView Default User-Agent",
+                                "Chrome Desktop" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0",
+                                "Mobile Android" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome Mobile",
+                                "Mobile Safari" to "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile/15E148 Safari",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Custom User-Agent String",
+                            )
+                        }
+
                         IdeWidgetProperty.CONVERT -> {
                             val candidateTypes = when {
                                 node.type.isContainer -> listOf(
@@ -6996,6 +8244,29 @@ private fun IdeWidgetPropertyEditDialog(
                                     IdeWidgetType.ASPECT_IMAGE_VIEW,
                                     IdeWidgetType.IMAGE_FILTER_VIEW,
                                 )
+                                node.type.isButtonWidget -> listOf(
+                                    IdeWidgetType.BUTTON,
+                                    IdeWidgetType.MATERIAL_BUTTON,
+                                    IdeWidgetType.OUTLINED_BUTTON,
+                                    IdeWidgetType.TEXT_BUTTON,
+                                    IdeWidgetType.FAB_BUTTON,
+                                    IdeWidgetType.EXTENDED_FAB,
+                                    IdeWidgetType.TOGGLE_BUTTON,
+                                    IdeWidgetType.CHIP_BUTTON,
+                                )
+                                node.type.isChooseWidget -> listOf(
+                                    IdeWidgetType.CHECK_BOX,
+                                    IdeWidgetType.RADIO_BUTTON,
+                                    IdeWidgetType.SWITCH,
+                                    IdeWidgetType.SPINNER,
+                                )
+                                node.type.isWebWidget -> listOf(
+                                    IdeWidgetType.WEB_VIEW,
+                                    IdeWidgetType.CUSTOM_TAB_VIEW,
+                                    IdeWidgetType.GECKO_WEB_VIEW,
+                                    IdeWidgetType.AD_WEB_VIEW,
+                                    IdeWidgetType.SWIPE_WEB_VIEW,
+                                )
                                 else -> listOf(
                                     IdeWidgetType.TEXT_VIEW,
                                     IdeWidgetType.EDIT_TEXT,
@@ -7012,6 +8283,9 @@ private fun IdeWidgetPropertyEditDialog(
                                     subtitle = when {
                                         t.isContainer -> "Layout Container"
                                         t.isImageWidget -> "Image Widget"
+                                        t.isButtonWidget -> "Button Widget"
+                                        t.isChooseWidget -> "Choose Widget"
+                                        t.isWebWidget -> "Web Widget"
                                         else -> "Text Widget"
                                     },
                                     selected = selected,
@@ -7194,7 +8468,14 @@ private fun IdeWidgetPropertyEditDialog(
                         }
 
                         IdeWidgetProperty.SINGLE_LINE,
-                        IdeWidgetProperty.CHECKED -> {
+                        IdeWidgetProperty.CHECKED,
+                        IdeWidgetProperty.ALL_CAPS,
+                        IdeWidgetProperty.ENABLED,
+                        IdeWidgetProperty.WEB_JAVASCRIPT,
+                        IdeWidgetProperty.WEB_DOM_STORAGE,
+                        IdeWidgetProperty.WEB_ZOOM,
+                        IdeWidgetProperty.WEB_DESKTOP_MODE,
+                        IdeWidgetProperty.WEB_FILE_ACCESS -> {
                             listOf("true" to "Enabled (True)", "false" to "Disabled (False)").forEach { (valStr, sub) ->
                                 DialogOptionRow(
                                     label = valStr,
@@ -8384,6 +9665,15 @@ private fun findNodeByUid(nodes: List<IdeWidgetNode>, uid: String): IdeWidgetNod
     for (node in nodes) {
         if (node.uid == uid) return node
         val found = findNodeByUid(node.children, uid)
+        if (found != null) return found
+    }
+    return null
+}
+
+private fun findParentNodeOf(nodes: List<IdeWidgetNode>, childUid: String): IdeWidgetNode? {
+    for (node in nodes) {
+        if (node.children.any { it.uid == childUid }) return node
+        val found = findParentNodeOf(node.children, childUid)
         if (found != null) return found
     }
     return null
