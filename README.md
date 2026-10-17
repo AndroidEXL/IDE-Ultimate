@@ -41,8 +41,8 @@
 [**Releases**](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest) — بدون تسجيل دخول:
 
 ```
-IDE-Ultimate-1.3.0-release.apk   ← للاستخدام اليومي
-IDE-Ultimate-1.3.0-debug.apk     ← للتصحيح والتجارب
+IDE-Ultimate-1.4.0-release.apk   ← للاستخدام اليومي
+IDE-Ultimate-1.4.0-debug.apk     ← للتصحيح والتجارب
 ```
 
 **أو من خلال Actions:**
@@ -51,17 +51,24 @@ IDE-Ultimate-1.3.0-debug.apk     ← للتصحيح والتجارب
 2. اضغط **Run workflow** (أو انتظر تشغيله تلقائيًا بعد أي Push).
 3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`
    (يتطلب تسجيل الدخول إلى GitHub):
-   - `IDE-Ultimate-1.3.0-debug.apk`
-   - `IDE-Ultimate-1.3.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
+   - `IDE-Ultimate-1.4.0-debug.apk`
+   - `IDE-Ultimate-1.4.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح العرض الثابت)
    - `checksums.txt`
    - تقرير اختبارات الوحدة (`unit-test-report`)
 
-> ⚠️ نسخة الـ release هنا موقّعة بمفتاح **debug** حتى يمكن تثبيتها مباشرة. للنشر على Google Play أنشئ Keystore خاصًا وضع بياناته في GitHub Secrets.
+> ⚠️ كل النسخ (debug و release) موقّعة بمفتاح العرض الثابت `keystore/ide-ultimate.p12`،
+> لذا يمكن تثبيت أي إصدار جديد فوق القديم مباشرة.
+>
+> **إن كنت ثبّت نسخة أقدم من v1.4.0:** احذف التطبيق مرة واحدة ثم ثبّت الجديد، لأن النسخ
+> السابقة كانت تُوقّع بمفتاح debug مؤقت مختلف في كل بناء من GitHub Actions.
+>
+> للنشر على Google Play أنشئ Keystore خاصًا ومرّره عبر `IEU_STORE_FILE` وأخواتها
+> (انظر [`keystore/README.md`](keystore/README.md)).
 
 لإنشاء **Release** تلقائي مع ملفات APK مرفقة:
 
 ```bash
-git tag v1.3.0
+git tag v1.4.0
 git push origin v1.3.0
 ```
 
@@ -141,6 +148,7 @@ IDE-Ultimate/
 │  │  └─ values*/                     # الثيمات والنصوص (ar/en)
 │  └─ AndroidManifest.xml
 ├─ app/src/test/                      # اختبارات وحدة لتصدير ZIP
+├─ keystore/ide-ultimate.p12          # مفتاح العرض الثابت (debug + release)
 ├─ design/nebula_source.png           # الخلفية الأصلية بدقة عالية
 ├─ docs/                              # صور المعاينة والبانر
 ├─ tools/generate_assets.py           # توليد كل الأصول النقطية آليًا
@@ -210,6 +218,7 @@ python tools/generate_assets.py
 | نصوص الافتتاحية | `res/values/strings.xml` و `res/values-en/strings.xml` |
 | الشعار | `drawable/ic_splash_logo.xml` + `drawable/ic_launcher_foreground.xml` |
 | شاشة النظام (Android 12+) | `res/values-v31/themes.xml` |
+| مفتاح التوقيع | `keystore/ide-ultimate.p12` (انظر `keystore/README.md`) |
 | محتوى البذرة الأولي | `WorkspaceRepository.seedDemoContent()` |
 | محتوى مشروع ZIP | `ProjectZipExporter` |
 
@@ -222,7 +231,9 @@ experience: a nebula backdrop, a twinkling star field with an occasional shootin
 a slowly rotating code-hexagon logo, staged text reveals, and a gradient loader with a
 live status readout. It ships with a full adaptive launcher icon (including a monochrome
 layer for Android 13+), RTL-first Arabic UI, and a GitHub Actions workflow that builds
-debug + release APKs and uploads them as run artifacts. Version 1.3 adds a bottom navigation bar that puts the Workspace page one tap away from
+debug + release APKs and uploads them as run artifacts. Version 1.4 pins a single committed signing key so every APK can be installed over the
+previous one, adds a Workspace shortcut in the home header, and verifies in CI that the
+debug and release builds share one certificate. Version 1.3 adds a bottom navigation bar that puts the Workspace page one tap away from
 the home screen, and a Workspace page
 with a folder/project grid, FAB bottom sheets, long-press rename/delete, a project detail page
 opened on tap, and real ZIP export of a ready-to-open Gradle project (covered by JVM unit tests).

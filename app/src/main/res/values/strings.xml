@@ -10,7 +10,7 @@
     <string name="splash_status_ready">جاهز للبرمجة</string>
     <string name="splash_skip">تخطي</string>
     <string name="splash_powered">KOTLIN  •  JETPACK COMPOSE</string>
-    <string name="splash_version">v1.3.0</string>
+    <string name="splash_version">v1.4.0</string>
 
     <!-- Home -->
     <string name="home_greeting">أهلًا بك من جديد</string>
@@ -21,7 +21,7 @@
     <string name="home_start">ابدأ الآن</string>
     <string name="home_tools">أدواتك</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">الإصدار 1.3.0</string>
+    <string name="home_version">الإصدار 1.4.0</string>
     <string name="home_replay_splash">إعادة الافتتاحية</string>
     <string name="home_footer">صُنع بشغف باستخدام Kotlin و Jetpack Compose</string>
     <string name="home_soon">قادمة قريبًا في هذا العرض</string>

@@ -100,6 +100,32 @@ jobs:
           sha256sum *.apk | tee checksums.txt
           ls -lh
 
+      - name: Verify APK signatures
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          echo "apksigner: $APKSIGNER"
+          DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
+          RELEASE_APK=app/build/outputs/apk/release/app-release.apk
+
+          for apk in "$DEBUG_APK" "$RELEASE_APK"; do
+            echo "== $apk"
+            "$APKSIGNER" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+          done
+
+          DEBUG_SHA=$("$APKSIGNER" verify --print-certs "$DEBUG_APK" | grep 'SHA-256 digest' | head -1 | awk '{print $NF}')
+          RELEASE_SHA=$("$APKSIGNER" verify --print-certs "$RELEASE_APK" | grep 'SHA-256 digest' | head -1 | awk '{print $NF}')
+          echo "debug=$DEBUG_SHA"
+          echo "release=$RELEASE_SHA"
+          if [ "$DEBUG_SHA" != "$RELEASE_SHA" ]; then
+            echo "::error title=Signing::Debug and release APKs are signed with different keys"
+            exit 1
+          fi
+          {
+            echo ""
+            echo "Signing certificate SHA-256: \`$DEBUG_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify APK contents
         run: |
           python3 - <<'PY'

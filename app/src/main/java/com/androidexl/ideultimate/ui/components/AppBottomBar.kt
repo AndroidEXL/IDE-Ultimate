@@ -144,9 +144,9 @@ private fun BottomBarItem(
     }
 }
 
-/** Compact folder glyph used for the Workspace tab (material-icons-core has no folder). */
+/** Compact folder glyph used for Workspace entries (material-icons-core has no folder). */
 @Composable
-private fun FolderNavIcon(modifier: Modifier = Modifier) {
+fun FolderNavIcon(modifier: Modifier = Modifier) {
     val tint = LocalContentColor.current
     Canvas(modifier) {
         val w = size.width

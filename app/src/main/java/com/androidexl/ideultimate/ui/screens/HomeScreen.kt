@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.ui.components.GlassCard
+import com.androidexl.ideultimate.ui.components.FolderNavIcon
 import com.androidexl.ideultimate.ui.components.GlassIconButton
 import com.androidexl.ideultimate.ui.components.GradientButton
 import com.androidexl.ideultimate.ui.components.LogoMark
@@ -140,6 +142,7 @@ fun HomeScreen(
 
             Header(
                 onSettings = { toast(context, R.string.home_soon) },
+                onOpenWorkspace = onOpenWorkspace,
             )
 
             Spacer(Modifier.height(28.dp))
@@ -290,7 +293,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Header(onSettings: () -> Unit) {
+private fun Header(
+    onSettings: () -> Unit,
+    onOpenWorkspace: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,11 +320,31 @@ private fun Header(onSettings: () -> Unit) {
                 color = Muted,
             )
         }
+        WorkspaceShortcut(onClick = onOpenWorkspace)
+        Spacer(Modifier.width(8.dp))
         GlassIconButton(
             icon = Icons.Filled.Settings,
             contentDescription = stringResource(R.string.home_settings),
             onClick = onSettings,
             modifier = Modifier.size(44.dp),
+        )
+    }
+}
+
+@Composable
+private fun WorkspaceShortcut(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(shape)
+            .background(Cyan.copy(alpha = 0.12f))
+            .border(1.dp, Cyan.copy(alpha = 0.32f), shape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        FolderNavIcon(
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -353,7 +379,7 @@ private fun WorkspaceCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Kotlin • Compose • 1.3.0",
+                    text = "Kotlin • Compose • 1.4.0",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = Muted,
                 )
