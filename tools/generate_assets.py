@@ -400,11 +400,12 @@ def build_splash_preview():
     # Status + percent
     status_font = font("almarai_regular.ttf", 30)
     mono_font = font("jetbrains_mono_regular.ttf", 30)
+    # RTL layout: the Arabic status sits on the right, the percentage on the left.
     status = ar("تجهيز المعاينة الفورية")
-    d.text((bar_x, bar_y + 44), status, font=status_font, fill=MUTED + (255,))
+    sw2 = d.textbbox((0, 0), status, font=status_font)[2]
+    d.text((bar_x + bar_w - sw2, bar_y + 44), status, font=status_font, fill=MUTED + (255,))
     pct = "62%"
-    pw = d.textbbox((0, 0), pct, font=mono_font)[2]
-    d.text((bar_x + bar_w - pw, bar_y + 44), pct, font=mono_font, fill=CYAN + (255,))
+    d.text((bar_x, bar_y + 44), pct, font=mono_font, fill=CYAN + (255,))
 
     # Skip pill (top-left in RTL)
     skip_font = font("almarai_bold.ttf", 27)

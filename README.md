@@ -7,6 +7,7 @@
 **بيئة تطوير متكاملة أنيقة لنظام Android — مبنية بالكامل بـ Kotlin و Jetpack Compose.**
 
 [![Build APK](https://github.com/AndroidEXL/IDE-Ultimate/actions/workflows/build-apk.yml/badge.svg)](https://github.com/AndroidEXL/IDE-Ultimate/actions/workflows/build-apk.yml)
+[![Latest APK](https://img.shields.io/github/v/release/AndroidEXL/IDE-Ultimate?label=APK&color=7C3AED)](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.20-7F52FF?logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202025.04-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-24-3DDC84?logo=android&logoColor=white)
@@ -34,9 +35,20 @@
 
 ## 📲 كيف أحصل على ملف APK؟
 
+**أسرع طريقة:** حمّل أحدث إصدار جاهز من صفحة
+[**Releases**](https://github.com/AndroidEXL/IDE-Ultimate/releases/latest) — بدون تسجيل دخول:
+
+```
+IDE-Ultimate-1.0.0-release.apk   ← للاستخدام اليومي
+IDE-Ultimate-1.0.0-debug.apk     ← للتصحيح والتجارب
+```
+
+**أو من خلال Actions:**
+
 1. افتح تبويب **Actions** في المستودع واختر **Build APK**.
 2. اضغط **Run workflow** (أو انتظر تشغيله تلقائيًا بعد أي Push).
-3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`:
+3. بعد نجاح المهمة، حمّل الملف من قسم **Artifacts** باسم `IDE-Ultimate-APK`
+   (يتطلب تسجيل الدخول إلى GitHub):
    - `IDE-Ultimate-1.0.0-debug.apk`
    - `IDE-Ultimate-1.0.0-release.apk` (مُصغّر بـ R8 ومُوقّع بمفتاح debug للعرض)
    - `checksums.txt`
@@ -49,6 +61,22 @@
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+---
+
+## 🎞️ تسلسل الحركة في الافتتاحية
+
+| الزمن | الحدث |
+| --- | --- |
+| 0.00s | ظهور الخلفية مع تكبير بطيء للسديم (Ken Burns) خلال 7 ثوانٍ |
+| 0.16s | ظهور اسم التطبيق بتدرّج لوني وانزلاق ناعم |
+| 0.29s | ظهور العبارة التعريفية |
+| 0.42s | ظهور شريط التقدّم + حالة التحميل المتغيّرة (تهيئة → Kotlin → معاينة) |
+| 0.42–2.72s | امتلاء الشريط من اليمين إلى اليسار (RTL) بنسبة متزايدة |
+| 3.06s | تلاشٍ + تكبير طفيف للمحتوى، ثم الانتقال إلى الواجهة الرئيسية |
+
+كل الحركة تُنفَّذ على الـ UI thread دون أي مكتبات أنيميشن خارجية، ويمكن تخطّيها
+بالضغط على زر **تخطي** أو زر الرجوع.
 
 ---
 
