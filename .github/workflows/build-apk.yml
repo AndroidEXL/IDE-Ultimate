@@ -1,0 +1,94 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+      - "arena/**"
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Assemble debug & release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          sdkmanager --list_installed | head -30
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/IDE-Ultimate-1.0.0-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/IDE-Ultimate-1.0.0-release.apk
+          cd dist
+          sha256sum *.apk | tee checksums.txt
+          ls -lh
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDE-Ultimate-APK
+          path: |
+            dist/*.apk
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write build summary
+        run: |
+          {
+            echo "## 📱 IDE Ultimate — APK ready"
+            echo ""
+            echo "| File | Size |"
+            echo "| --- | --- |"
+            for f in dist/*.apk; do
+              echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) |"
+            done
+            echo ""
+            echo "Download the APK from the **Artifacts** section of this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt \
+            --title "IDE Ultimate $GITHUB_REF_NAME" \
+            --generate-notes
