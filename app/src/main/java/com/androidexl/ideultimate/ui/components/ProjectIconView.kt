@@ -8,12 +8,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,6 +74,8 @@ val ProjectIconPresets = listOf(
     IconPresetStyle(5, "Core", Fuchsia, Color(0xFF7C3AED), "IDE"),
 )
 
+val PROJECT_ICON_PRESETS = ProjectIconPresets
+
 fun languageColor(language: ProjectLanguage): Color = when (language) {
     ProjectLanguage.FLUTTER -> Color(0xFF38BDF8)
     ProjectLanguage.KOTLIN -> VioletSoft
@@ -121,7 +125,9 @@ fun savePickedProjectScreenshot(context: Context, uri: Uri): String? = runCatchi
 @Composable
 fun UserAvatarView(
     avatarPath: String?,
-    isLoggedIn: Boolean,
+    isLoggedIn: Boolean = true,
+    size: Dp = 48.dp,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val customBitmap = remember(avatarPath) {
@@ -130,8 +136,11 @@ fun UserAvatarView(
         }
     }
 
+    val clickMod = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+
     Box(
         modifier = modifier
+            .size(size)
             .clip(CircleShape)
             .background(
                 Brush.linearGradient(
@@ -152,10 +161,11 @@ fun UserAvatarView(
                     },
                 ),
                 shape = CircleShape,
-            ),
+            )
+            .then(clickMod),
         contentAlignment = Alignment.Center,
     ) {
-        if (customBitmap != null && isLoggedIn) {
+        if (customBitmap != null) {
             Image(
                 bitmap = customBitmap,
                 contentDescription = null,
