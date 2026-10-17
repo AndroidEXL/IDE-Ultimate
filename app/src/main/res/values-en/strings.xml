@@ -10,7 +10,7 @@
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
     <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
-    <string name="splash_version">v1.10.0</string>
+    <string name="splash_version">v1.11.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.10.0</string>
+    <string name="home_version">Version 1.11.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -208,7 +208,7 @@
     <string name="store_btn_like">Like</string>
     <string name="store_btn_dislike">Dislike</string>
     <string name="store_view_images_title">Project Screenshots</string>
-    <string name="store_view_images_hint">Tap any image to view full-screen or open its link</string>
+    <string name="store_view_images_hint">Tap any image to view it full-screen inside the app</string>
     <string name="store_view_no_images">No screenshots attached to this project.</string>
     <string name="store_view_open_image_link">Open Image Link</string>
     <string name="store_fab_download">Download</string>

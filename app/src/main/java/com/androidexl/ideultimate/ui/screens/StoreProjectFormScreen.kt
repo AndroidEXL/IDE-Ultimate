@@ -74,6 +74,7 @@ import com.androidexl.ideultimate.ui.components.PROJECT_ICON_PRESETS
 import com.androidexl.ideultimate.ui.components.ProjectIconView
 import com.androidexl.ideultimate.ui.components.ProjectScreenshotImage
 import com.androidexl.ideultimate.ui.components.languageColor
+import com.androidexl.ideultimate.ui.components.normalizeImageUrl
 import com.androidexl.ideultimate.ui.components.savePickedProjectIcon
 import com.androidexl.ideultimate.ui.components.savePickedProjectScreenshot
 import com.androidexl.ideultimate.ui.theme.Cyan
@@ -813,9 +814,10 @@ fun StoreProjectFormScreen(
         UrlInputDialog(
             title = stringResource(R.string.store_form_add_image_url_btn),
             hint = "https://example.com/screenshot.png",
+            showImagePreview = true,
             onDismiss = { showAddImageUrlDialog = false },
             onConfirm = { url ->
-                imagePaths.add(url)
+                imagePaths.add(normalizeImageUrl(url))
                 showAddImageUrlDialog = false
             },
         )
@@ -866,6 +868,7 @@ private fun StoreTypeOptionButton(
 private fun UrlInputDialog(
     title: String,
     hint: String,
+    showImagePreview: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -877,19 +880,30 @@ private fun UrlInputDialog(
         textContentColor = Ink,
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
         text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it },
-                placeholder = { Text(hint) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = JetBrainsMono,
-                    color = Ink,
-                ),
-                colors = storeFormFieldColors(),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    placeholder = { Text(hint) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        color = Ink,
+                    ),
+                    colors = storeFormFieldColors(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (showImagePreview && value.trim().length > 6) {
+                    ProjectScreenshotImage(
+                        pathOrUrl = normalizeImageUrl(value.trim()),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                        cornerRadius = 14.dp,
+                    )
+                }
+            }
         },
         confirmButton = {
             TextButton(

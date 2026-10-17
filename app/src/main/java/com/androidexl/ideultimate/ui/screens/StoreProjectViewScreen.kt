@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -274,7 +275,7 @@ fun StoreProjectViewScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // 4. Below Details: Image Display Elements (tap opens full-screen + link opener)
+            // 4. Below Details: Image Display Elements (displays actual images; tap opens full-screen)
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(16.dp),
@@ -306,47 +307,15 @@ fun StoreProjectViewScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         project.imagePaths.forEach { imgPath ->
-                            Column(
-                                modifier = Modifier.width(160.dp),
-                            ) {
-                                ProjectScreenshotImage(
-                                    pathOrUrl = imgPath,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(210.dp)
-                                        .clickable { fullScreenImage = imgPath },
-                                    cornerRadius = 18.dp,
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Cyan.copy(alpha = 0.14f))
-                                        .border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            if (imgPath.startsWith("http", ignoreCase = true)) {
-                                                runCatching {
-                                                    context.startActivity(
-                                                        Intent(Intent.ACTION_VIEW, Uri.parse(imgPath)),
-                                                    )
-                                                }
-                                            } else {
-                                                fullScreenImage = imgPath
-                                            }
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.store_view_open_image_link),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                        color = Cyan,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
+                            ProjectScreenshotImage(
+                                pathOrUrl = imgPath,
+                                modifier = Modifier
+                                    .width(168.dp)
+                                    .height(220.dp)
+                                    .clickable { fullScreenImage = imgPath },
+                                cornerRadius = 18.dp,
+                                contentScale = ContentScale.Crop,
+                            )
                         }
                     }
                 }
@@ -384,13 +353,14 @@ fun StoreProjectViewScreen(
                         .fillMaxSize()
                         .padding(vertical = 48.dp),
                     cornerRadius = 24.dp,
+                    contentScale = ContentScale.Fit,
                 )
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.TopCenter),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     GlassIconButton(
@@ -399,28 +369,6 @@ fun StoreProjectViewScreen(
                         onClick = { fullScreenImage = null },
                         modifier = Modifier.size(44.dp),
                     )
-                    if (activeImage.startsWith("http", ignoreCase = true)) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(Cyan.copy(alpha = 0.20f))
-                                .border(1.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(percent = 50))
-                                .clickable {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(activeImage)),
-                                        )
-                                    }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.store_view_open_image_link),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White,
-                            )
-                        }
-                    }
                 }
             }
         }
