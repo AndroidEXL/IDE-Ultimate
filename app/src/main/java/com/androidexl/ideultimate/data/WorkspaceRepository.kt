@@ -66,6 +66,8 @@ enum class IdeWidgetCategory(val title: String) {
     BUTTONS("buttons"),
     CHOOSE("choose"),
     WEB("web"),
+    LIST("list"),
+    DATE("date"),
 }
 
 enum class IdeWidgetType(
@@ -330,6 +332,157 @@ enum class IdeWidgetType(
         idPrefix = "swipewebview",
         category = IdeWidgetCategory.WEB,
         isContainer = false,
+    ),
+
+    // 7. List Widgets (GridView, ListView, TreeView, RecyclerView, ViewPager + 5 specialized List widgets)
+    GRID_VIEW(
+        displayName = "GridView",
+        shortTag = "GRD",
+        idPrefix = "gridview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    LIST_VIEW(
+        displayName = "ListView",
+        shortTag = "LST",
+        idPrefix = "listview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    TREE_VIEW(
+        displayName = "TreeView",
+        shortTag = "TRE",
+        idPrefix = "treeview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    RECYCLER_VIEW(
+        displayName = "RecyclerView",
+        shortTag = "RCV",
+        idPrefix = "recyclerview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    VIEW_PAGER(
+        displayName = "ViewPager",
+        shortTag = "VP",
+        idPrefix = "viewpager",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    EXPANDABLE_LIST_VIEW(
+        displayName = "ExpandableList",
+        shortTag = "EXL",
+        idPrefix = "expandablelistview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    STAGGERED_GRID_VIEW(
+        displayName = "StaggeredGrid",
+        shortTag = "STG",
+        idPrefix = "staggeredgrid",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    HORIZONTAL_LIST_VIEW(
+        displayName = "HorizontalList",
+        shortTag = "HLS",
+        idPrefix = "hlistview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    CAROUSEL_VIEW(
+        displayName = "CarouselView",
+        shortTag = "CRS",
+        idPrefix = "carouselview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+    SWIPE_LIST_VIEW(
+        displayName = "SwipeListView",
+        shortTag = "SWL",
+        idPrefix = "swipelistview",
+        category = IdeWidgetCategory.LIST,
+        isContainer = false,
+    ),
+
+    // 8. Date & Time Widgets (AnalogClock, DigitalClock, TimePicker, DatePicker, CalendarView + 6 Date/Time widgets)
+    ANALOG_CLOCK(
+        displayName = "AnalogClock",
+        shortTag = "ACL",
+        idPrefix = "analogclock",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    DIGITAL_CLOCK(
+        displayName = "DigitalClock",
+        shortTag = "DCL",
+        idPrefix = "digitalclock",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    TIME_PICKER(
+        displayName = "TimePicker",
+        shortTag = "TPK",
+        idPrefix = "timepicker",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    DATE_PICKER(
+        displayName = "DatePicker",
+        shortTag = "DPK",
+        idPrefix = "datepicker",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    CALENDAR_VIEW(
+        displayName = "CalendarView",
+        shortTag = "CAL",
+        idPrefix = "calendarview",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    TEXT_CLOCK(
+        displayName = "TextClock",
+        shortTag = "TCL",
+        idPrefix = "textclock",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    CHRONOMETER(
+        displayName = "Chronometer",
+        shortTag = "CHR",
+        idPrefix = "chronometer",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    COUNTDOWN_VIEW(
+        displayName = "CountDownView",
+        shortTag = "CDN",
+        idPrefix = "countdownview",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    STOPWATCH_VIEW(
+        displayName = "StopwatchView",
+        shortTag = "STW",
+        idPrefix = "stopwatchview",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    DATE_RANGE_PICKER(
+        displayName = "DateRangePicker",
+        shortTag = "DRP",
+        idPrefix = "daterangepicker",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
+    ),
+    WORLD_CLOCK_VIEW(
+        displayName = "WorldClockView",
+        shortTag = "WCL",
+        idPrefix = "worldclock",
+        category = IdeWidgetCategory.DATE,
+        isContainer = false,
     );
 
     val isTextWidget: Boolean
@@ -347,10 +500,25 @@ enum class IdeWidgetType(
     val isWebWidget: Boolean
         get() = category == IdeWidgetCategory.WEB
 
+    val isListWidget: Boolean
+        get() = category == IdeWidgetCategory.LIST
+
+    val isDateWidget: Boolean
+        get() = category == IdeWidgetCategory.DATE
+
+    val isClockTextWidget: Boolean
+        get() = this == DIGITAL_CLOCK ||
+            this == TEXT_CLOCK ||
+            this == CHRONOMETER ||
+            this == COUNTDOWN_VIEW ||
+            this == STOPWATCH_VIEW ||
+            this == WORLD_CLOCK_VIEW
+
     val hasTextLabel: Boolean
         get() = isTextWidget ||
             (isButtonWidget && this != FAB_BUTTON) ||
-            (isChooseWidget && this != SPINNER)
+            (isChooseWidget && this != SPINNER) ||
+            isClockTextWidget
 
     val isCheckableWidget: Boolean
         get() = this == CHECKED_TEXT_VIEW ||
@@ -449,8 +617,55 @@ data class IdeWidgetNode(
     val rippleColor: String = "#38BDF8",
     val allCaps: Boolean = false,
     val enabled: Boolean = true,
-    val layoutWidth: String = if (type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) "match_parent" else "wrap_content",
-    val layoutHeight: String = if (type.isWebWidget) "180dp" else "wrap_content",
+    val orientation: String = when (type) {
+        IdeWidgetType.LINEAR_H,
+        IdeWidgetType.SCROLL_V,
+        IdeWidgetType.VIEW_PAGER,
+        IdeWidgetType.HORIZONTAL_LIST_VIEW,
+        IdeWidgetType.CAROUSEL_VIEW -> "horizontal"
+        else -> "vertical"
+    },
+    val customView: String = "none",
+    val dividerHeightDp: Int = 1,
+    val numColumns: Int = if (type == IdeWidgetType.GRID_VIEW || type == IdeWidgetType.STAGGERED_GRID_VIEW) 2 else 1,
+    val horizontalSpacingDp: Int = 4,
+    val verticalSpacingDp: Int = 4,
+    val choiceMode: String = "none",
+    val layoutManager: String = when (type) {
+        IdeWidgetType.GRID_VIEW -> "Grid"
+        IdeWidgetType.STAGGERED_GRID_VIEW -> "StaggeredGrid"
+        IdeWidgetType.HORIZONTAL_LIST_VIEW, IdeWidgetType.CAROUSEL_VIEW -> "LinearHorizontal"
+        else -> "LinearVertical"
+    },
+    val stackFromBottom: Boolean = false,
+    val fastScroll: Boolean = true,
+    val pageLimit: Int = 2,
+    val format12Hour: String = "hh:mm:ss a",
+    val format24Hour: String = "HH:mm:ss",
+    val is24HourView: Boolean = false,
+    val pickerMode: String = if (type == IdeWidgetType.DATE_PICKER || type == IdeWidgetType.DATE_RANGE_PICKER) "calendar" else "clock",
+    val firstDayOfWeek: Int = 1,
+    val minDate: String = "01/01/2000",
+    val maxDate: String = "12/31/2035",
+    val showWeekNumber: Boolean = false,
+    val timeZone: String = "Default",
+    val countDown: Boolean = type == IdeWidgetType.COUNTDOWN_VIEW,
+    val layoutWidth: String = if (
+        type.isContainer ||
+        type.isInputTextWidget ||
+        type.isWebWidget ||
+        type.isListWidget ||
+        type == IdeWidgetType.SPINNER ||
+        type == IdeWidgetType.CALENDAR_VIEW ||
+        type == IdeWidgetType.DATE_PICKER ||
+        type == IdeWidgetType.TIME_PICKER ||
+        type == IdeWidgetType.DATE_RANGE_PICKER
+    ) "match_parent" else "wrap_content",
+    val layoutHeight: String = when {
+        type.isWebWidget -> "180dp"
+        type.isListWidget -> "140dp"
+        else -> "wrap_content"
+    },
     val paddingDp: Int = if (type.isContainer) 8 else 4,
     val marginDp: Int = 0,
     val gravity: String = if (type.isButtonWidget) "center" else "left|top",
@@ -1187,6 +1402,27 @@ class WorkspaceRepository(context: Context) {
                 put("rippleColor", node.rippleColor)
                 put("allCaps", node.allCaps)
                 put("enabled", node.enabled)
+                put("orientation", node.orientation)
+                put("customView", node.customView)
+                put("dividerHeightDp", node.dividerHeightDp)
+                put("numColumns", node.numColumns)
+                put("horizontalSpacingDp", node.horizontalSpacingDp)
+                put("verticalSpacingDp", node.verticalSpacingDp)
+                put("choiceMode", node.choiceMode)
+                put("layoutManager", node.layoutManager)
+                put("stackFromBottom", node.stackFromBottom)
+                put("fastScroll", node.fastScroll)
+                put("pageLimit", node.pageLimit)
+                put("format12Hour", node.format12Hour)
+                put("format24Hour", node.format24Hour)
+                put("is24HourView", node.is24HourView)
+                put("pickerMode", node.pickerMode)
+                put("firstDayOfWeek", node.firstDayOfWeek)
+                put("minDate", node.minDate)
+                put("maxDate", node.maxDate)
+                put("showWeekNumber", node.showWeekNumber)
+                put("timeZone", node.timeZone)
+                put("countDown", node.countDown)
                 put("layoutWidth", node.layoutWidth)
                 put("layoutHeight", node.layoutHeight)
                 put("paddingDp", node.paddingDp)
@@ -1228,14 +1464,43 @@ class WorkspaceRepository(context: Context) {
             val type = runCatching { IdeWidgetType.valueOf(obj.getString("type")) }
                 .getOrDefault(IdeWidgetType.TEXT_VIEW)
             val childrenArr = obj.optJSONArray("children") ?: JSONArray()
-            val defaultW = if (type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) "match_parent" else "wrap_content"
-            val defaultH = if (type.isWebWidget) "180dp" else "wrap_content"
+            val defaultW = if (
+                type.isContainer ||
+                type.isInputTextWidget ||
+                type.isWebWidget ||
+                type.isListWidget ||
+                type == IdeWidgetType.SPINNER ||
+                type == IdeWidgetType.CALENDAR_VIEW ||
+                type == IdeWidgetType.DATE_PICKER ||
+                type == IdeWidgetType.TIME_PICKER ||
+                type == IdeWidgetType.DATE_RANGE_PICKER
+            ) "match_parent" else "wrap_content"
+            val defaultH = when {
+                type.isWebWidget -> "180dp"
+                type.isListWidget -> "140dp"
+                else -> "wrap_content"
+            }
             val defaultPad = if (type.isContainer) 8 else 4
+            val defaultOrientation = when (type) {
+                IdeWidgetType.LINEAR_H,
+                IdeWidgetType.SCROLL_V,
+                IdeWidgetType.VIEW_PAGER,
+                IdeWidgetType.HORIZONTAL_LIST_VIEW,
+                IdeWidgetType.CAROUSEL_VIEW -> "horizontal"
+                else -> "vertical"
+            }
+            val defaultLayoutMgr = when (type) {
+                IdeWidgetType.GRID_VIEW -> "Grid"
+                IdeWidgetType.STAGGERED_GRID_VIEW -> "StaggeredGrid"
+                IdeWidgetType.HORIZONTAL_LIST_VIEW, IdeWidgetType.CAROUSEL_VIEW -> "LinearHorizontal"
+                else -> "LinearVertical"
+            }
             val defaultText = when {
                 type == IdeWidgetType.TEXT_VIEW -> "TextView"
                 type == IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
                 type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON -> type.displayName
                 type.isChooseWidget && type != IdeWidgetType.SPINNER -> type.displayName
+                type.isClockTextWidget -> "12:30:45"
                 else -> ""
             }
             val defaultHint = when (type) {
@@ -1277,6 +1542,27 @@ class WorkspaceRepository(context: Context) {
                     rippleColor = obj.optString("rippleColor", "#38BDF8").ifBlank { "#38BDF8" },
                     allCaps = obj.optBoolean("allCaps", false),
                     enabled = obj.optBoolean("enabled", true),
+                    orientation = obj.optString("orientation", defaultOrientation).ifBlank { defaultOrientation },
+                    customView = obj.optString("customView", "none").ifBlank { "none" },
+                    dividerHeightDp = obj.optInt("dividerHeightDp", 1),
+                    numColumns = obj.optInt("numColumns", if (type == IdeWidgetType.GRID_VIEW || type == IdeWidgetType.STAGGERED_GRID_VIEW) 2 else 1),
+                    horizontalSpacingDp = obj.optInt("horizontalSpacingDp", 4),
+                    verticalSpacingDp = obj.optInt("verticalSpacingDp", 4),
+                    choiceMode = obj.optString("choiceMode", "none").ifBlank { "none" },
+                    layoutManager = obj.optString("layoutManager", defaultLayoutMgr).ifBlank { defaultLayoutMgr },
+                    stackFromBottom = obj.optBoolean("stackFromBottom", false),
+                    fastScroll = obj.optBoolean("fastScroll", true),
+                    pageLimit = obj.optInt("pageLimit", 2),
+                    format12Hour = obj.optString("format12Hour", "hh:mm:ss a").ifBlank { "hh:mm:ss a" },
+                    format24Hour = obj.optString("format24Hour", "HH:mm:ss").ifBlank { "HH:mm:ss" },
+                    is24HourView = obj.optBoolean("is24HourView", false),
+                    pickerMode = obj.optString("pickerMode", if (type == IdeWidgetType.DATE_PICKER || type == IdeWidgetType.DATE_RANGE_PICKER) "calendar" else "clock").ifBlank { "clock" },
+                    firstDayOfWeek = obj.optInt("firstDayOfWeek", 1),
+                    minDate = obj.optString("minDate", "01/01/2000").ifBlank { "01/01/2000" },
+                    maxDate = obj.optString("maxDate", "12/31/2035").ifBlank { "12/31/2035" },
+                    showWeekNumber = obj.optBoolean("showWeekNumber", false),
+                    timeZone = obj.optString("timeZone", "Default").ifBlank { "Default" },
+                    countDown = obj.optBoolean("countDown", type == IdeWidgetType.COUNTDOWN_VIEW),
                     layoutWidth = obj.optString("layoutWidth", defaultW).ifBlank { defaultW },
                     layoutHeight = obj.optString("layoutHeight", defaultH).ifBlank { defaultH },
                     paddingDp = obj.optInt("paddingDp", defaultPad),
@@ -1394,7 +1680,9 @@ class WorkspaceRepository(context: Context) {
     private fun appendWidgetXml(sb: StringBuilder, node: IdeWidgetNode, indent: String) {
         when (node.type) {
             IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V -> {
-                val orientation = if (node.type == IdeWidgetType.LINEAR_H) "horizontal" else "vertical"
+                val orientation = node.orientation.ifBlank {
+                    if (node.type == IdeWidgetType.LINEAR_H) "horizontal" else "vertical"
+                }
                 sb.appendLine("""$indent<LinearLayout""")
                 appendCommonXmlAttributes(sb, node, indent)
                 sb.appendLine("""$indent    android:orientation="$orientation"""")
@@ -1412,6 +1700,7 @@ class WorkspaceRepository(context: Context) {
             IdeWidgetType.SCROLL_V -> {
                 sb.appendLine("""$indent<HorizontalScrollView""")
                 appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:orientation="${node.orientation.ifBlank { "horizontal" }}"""")
                 if (node.children.isEmpty()) {
                     sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
@@ -1426,6 +1715,7 @@ class WorkspaceRepository(context: Context) {
             IdeWidgetType.SCROLL_H -> {
                 sb.appendLine("""$indent<ScrollView""")
                 appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:orientation="${node.orientation.ifBlank { "vertical" }}"""")
                 if (node.children.isEmpty()) {
                     sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
@@ -1672,6 +1962,130 @@ class WorkspaceRepository(context: Context) {
                 sb.appendLine("""$indent    tools:desktopMode="${node.webDesktopMode}"""")
                 sb.appendLine("""$indent    tools:cacheMode="${node.webCacheMode}"""")
                 sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
+            }
+
+            IdeWidgetType.GRID_VIEW,
+            IdeWidgetType.LIST_VIEW,
+            IdeWidgetType.TREE_VIEW,
+            IdeWidgetType.RECYCLER_VIEW,
+            IdeWidgetType.VIEW_PAGER,
+            IdeWidgetType.EXPANDABLE_LIST_VIEW,
+            IdeWidgetType.STAGGERED_GRID_VIEW,
+            IdeWidgetType.HORIZONTAL_LIST_VIEW,
+            IdeWidgetType.CAROUSEL_VIEW,
+            IdeWidgetType.SWIPE_LIST_VIEW -> {
+                val tagName = when (node.type) {
+                    IdeWidgetType.GRID_VIEW -> "GridView"
+                    IdeWidgetType.LIST_VIEW -> "ListView"
+                    IdeWidgetType.EXPANDABLE_LIST_VIEW -> "ExpandableListView"
+                    IdeWidgetType.VIEW_PAGER,
+                    IdeWidgetType.CAROUSEL_VIEW -> "androidx.viewpager2.widget.ViewPager2"
+                    IdeWidgetType.SWIPE_LIST_VIEW -> "androidx.swiperefreshlayout.widget.SwipeRefreshLayout"
+                    else -> "androidx.recyclerview.widget.RecyclerView"
+                }
+                sb.appendLine("""$indent<$tagName""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
+                if (node.customView != "none" && node.customView.isNotBlank()) {
+                    val cleanCustom = node.customView.removeSuffix(".xml")
+                    sb.appendLine("""$indent    tools:listitem="@layout/$cleanCustom"""")
+                }
+                when (node.type) {
+                    IdeWidgetType.GRID_VIEW -> {
+                        sb.appendLine("""$indent    android:numColumns="${node.numColumns}"""")
+                        sb.appendLine("""$indent    android:horizontalSpacing="${node.horizontalSpacingDp}dp"""")
+                        sb.appendLine("""$indent    android:verticalSpacing="${node.verticalSpacingDp}dp"""")
+                        sb.appendLine("""$indent    android:choiceMode="${node.choiceMode}" />""")
+                    }
+                    IdeWidgetType.LIST_VIEW,
+                    IdeWidgetType.EXPANDABLE_LIST_VIEW,
+                    IdeWidgetType.SWIPE_LIST_VIEW -> {
+                        sb.appendLine("""$indent    android:dividerHeight="${node.dividerHeightDp}dp"""")
+                        sb.appendLine("""$indent    android:choiceMode="${node.choiceMode}"""")
+                        sb.appendLine("""$indent    android:stackFromBottom="${node.stackFromBottom}"""")
+                        sb.appendLine("""$indent    android:fastScrollEnabled="${node.fastScroll}" />""")
+                    }
+                    IdeWidgetType.VIEW_PAGER,
+                    IdeWidgetType.CAROUSEL_VIEW -> {
+                        sb.appendLine("""$indent    android:orientation="${node.orientation}"""")
+                        sb.appendLine("""$indent    tools:offscreenPageLimit="${node.pageLimit}" />""")
+                    }
+                    else -> {
+                        sb.appendLine("""$indent    android:orientation="${node.orientation}"""")
+                        sb.appendLine("""$indent    app:spanCount="${node.numColumns}"""")
+                        sb.appendLine("""$indent    tools:layoutManager="${node.layoutManager}" />""")
+                    }
+                }
+            }
+
+            IdeWidgetType.ANALOG_CLOCK,
+            IdeWidgetType.DIGITAL_CLOCK,
+            IdeWidgetType.TIME_PICKER,
+            IdeWidgetType.DATE_PICKER,
+            IdeWidgetType.CALENDAR_VIEW,
+            IdeWidgetType.TEXT_CLOCK,
+            IdeWidgetType.CHRONOMETER,
+            IdeWidgetType.COUNTDOWN_VIEW,
+            IdeWidgetType.STOPWATCH_VIEW,
+            IdeWidgetType.DATE_RANGE_PICKER,
+            IdeWidgetType.WORLD_CLOCK_VIEW -> {
+                val tagName = when (node.type) {
+                    IdeWidgetType.ANALOG_CLOCK -> "AnalogClock"
+                    IdeWidgetType.DIGITAL_CLOCK -> "DigitalClock"
+                    IdeWidgetType.TIME_PICKER -> "TimePicker"
+                    IdeWidgetType.DATE_PICKER -> "DatePicker"
+                    IdeWidgetType.CALENDAR_VIEW,
+                    IdeWidgetType.DATE_RANGE_PICKER -> "CalendarView"
+                    IdeWidgetType.TEXT_CLOCK,
+                    IdeWidgetType.WORLD_CLOCK_VIEW -> "TextClock"
+                    IdeWidgetType.CHRONOMETER,
+                    IdeWidgetType.COUNTDOWN_VIEW,
+                    IdeWidgetType.STOPWATCH_VIEW -> "Chronometer"
+                    else -> "TextClock"
+                }
+                sb.appendLine("""$indent<$tagName""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
+                when (node.type) {
+                    IdeWidgetType.TIME_PICKER -> {
+                        sb.appendLine("""$indent    android:timePickerMode="${node.pickerMode}"""")
+                        sb.appendLine("""$indent    tools:is24HourView="${node.is24HourView}" />""")
+                    }
+                    IdeWidgetType.DATE_PICKER,
+                    IdeWidgetType.DATE_RANGE_PICKER -> {
+                        sb.appendLine("""$indent    android:datePickerMode="${node.pickerMode}"""")
+                        sb.appendLine("""$indent    android:firstDayOfWeek="${node.firstDayOfWeek}"""")
+                        sb.appendLine("""$indent    android:minDate="${node.minDate}"""")
+                        sb.appendLine("""$indent    android:maxDate="${node.maxDate}" />""")
+                    }
+                    IdeWidgetType.CALENDAR_VIEW -> {
+                        sb.appendLine("""$indent    android:firstDayOfWeek="${node.firstDayOfWeek}"""")
+                        sb.appendLine("""$indent    android:minDate="${node.minDate}"""")
+                        sb.appendLine("""$indent    android:maxDate="${node.maxDate}"""")
+                        sb.appendLine("""$indent    android:showWeekNumber="${node.showWeekNumber}" />""")
+                    }
+                    IdeWidgetType.TEXT_CLOCK,
+                    IdeWidgetType.DIGITAL_CLOCK,
+                    IdeWidgetType.WORLD_CLOCK_VIEW -> {
+                        sb.appendLine("""$indent    android:format12Hour="${node.format12Hour}"""")
+                        sb.appendLine("""$indent    android:format24Hour="${node.format24Hour}"""")
+                        if (node.timeZone != "Default" && node.timeZone.isNotBlank()) {
+                            sb.appendLine("""$indent    android:timeZone="${node.timeZone}"""")
+                        }
+                        sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
+                        sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
+                    }
+                    IdeWidgetType.CHRONOMETER,
+                    IdeWidgetType.COUNTDOWN_VIEW,
+                    IdeWidgetType.STOPWATCH_VIEW -> {
+                        sb.appendLine("""$indent    android:countDown="${node.countDown}"""")
+                        sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
+                        sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
+                    }
+                    else -> {
+                        sb.appendLine("""$indent    tools:timeZone="${node.timeZone}" />""")
+                    }
+                }
             }
         }
     }

@@ -563,12 +563,24 @@ fun IdeProjectScreen(
                                 },
                                 onRequestEditWidgetPrimary = { node ->
                                     when {
+                                        node.type.isContainer ->
+                                            openPropertyDialog(node, IdeWidgetProperty.ORIENTATION)
                                         node.type.isImageWidget || node.type == IdeWidgetType.FAB_BUTTON ->
                                             openPropertyDialog(node, IdeWidgetProperty.IMAGE)
                                         node.type.isWebWidget ->
                                             openPropertyDialog(node, IdeWidgetProperty.WEB_URL)
+                                        node.type.isListWidget ->
+                                            openPropertyDialog(node, IdeWidgetProperty.CUSTOM_VIEW)
                                         node.type == IdeWidgetType.SPINNER ->
                                             openPropertyDialog(node, IdeWidgetProperty.SPINNER_ENTRIES)
+                                        node.type == IdeWidgetType.TIME_PICKER ||
+                                            node.type == IdeWidgetType.DATE_PICKER ||
+                                            node.type == IdeWidgetType.DATE_RANGE_PICKER ->
+                                            openPropertyDialog(node, IdeWidgetProperty.PICKER_MODE)
+                                        node.type == IdeWidgetType.CALENDAR_VIEW ->
+                                            openPropertyDialog(node, IdeWidgetProperty.FIRST_DAY_OF_WEEK)
+                                        node.type == IdeWidgetType.ANALOG_CLOCK ->
+                                            openPropertyDialog(node, IdeWidgetProperty.TIME_ZONE)
                                         node.type.isInputTextWidget ->
                                             openPropertyDialog(node, IdeWidgetProperty.HINT)
                                         node.type.hasTextLabel ->
@@ -1126,6 +1138,7 @@ private fun IdeViewDesigner(
     var draggingType by remember { mutableStateOf<IdeWidgetType?>(null) }
     var draggingExistingNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
     var dragFingerInRoot by remember { mutableStateOf(Offset.Zero) }
+    var showAddWidgetBottomSheet by remember { mutableStateOf(false) }
 
     val currentWidgetNodes by rememberUpdatedState(widgetNodes)
     val currentSelectedWidgetUid by rememberUpdatedState(selectedWidgetUid)
@@ -1215,7 +1228,7 @@ private fun IdeViewDesigner(
         return "${type.idPrefix}$index"
     }
 
-    fun createDefaultWidgetNode(type: IdeWidgetType): IdeWidgetNode {
+    fun createDefaultWidgetNode(type: IdeWidgetType, customViewId: String? = null): IdeWidgetNode {
         val defaultText = when (type) {
             IdeWidgetType.BUTTON -> "Button"
             IdeWidgetType.MATERIAL_BUTTON -> "MaterialButton"
@@ -1229,19 +1242,36 @@ private fun IdeViewDesigner(
             IdeWidgetType.RADIO_BUTTON -> "RadioButton"
             IdeWidgetType.SWITCH -> "Switch"
             IdeWidgetType.SPINNER -> "Spinner"
+            IdeWidgetType.DIGITAL_CLOCK,
+            IdeWidgetType.TEXT_CLOCK -> "12:30:45 PM"
+            IdeWidgetType.CHRONOMETER,
+            IdeWidgetType.STOPWATCH_VIEW -> "00:00"
+            IdeWidgetType.COUNTDOWN_VIEW -> "05:00"
+            IdeWidgetType.WORLD_CLOCK_VIEW -> "Cairo 12:30 PM"
             else -> "TextView"
         }
+        val cleanedCustomId = customViewId
+            ?.trim()
+            ?.removePrefix("@+id/")
+            ?.replace(Regex("[^a-zA-Z0-9_]+"), "_")
+            ?.takeIf { it.isNotEmpty() }
         return IdeWidgetNode(
-            viewId = nextViewIdFor(type),
+            viewId = cleanedCustomId ?: nextViewIdFor(type),
             type = type,
             text = defaultText,
             layoutWidth = when {
                 type.isContainer -> "match_parent"
                 type.isWebWidget -> "match_parent"
+                type.isListWidget -> "match_parent"
+                type == IdeWidgetType.CALENDAR_VIEW ||
+                    type == IdeWidgetType.DATE_PICKER ||
+                    type == IdeWidgetType.TIME_PICKER ||
+                    type == IdeWidgetType.DATE_RANGE_PICKER -> "match_parent"
                 else -> "wrap_content"
             },
             layoutHeight = when {
                 type.isWebWidget -> "120dp"
+                type.isListWidget -> "130dp"
                 else -> "wrap_content"
             },
         )
@@ -1352,6 +1382,9 @@ private fun IdeViewDesigner(
                     currentOnUpdateWidgets(updated)
                     currentOnSelectWidgetUid(newNode.uid)
                 },
+                onOpenAddWidgetSheet = {
+                    showAddWidgetBottomSheet = true
+                },
                 modifier = Modifier
                     .width(120.dp)
                     .fillMaxHeight(),
@@ -1452,6 +1485,36 @@ private fun IdeViewDesigner(
                 )
             }
         }
+
+        if (showAddWidgetBottomSheet) {
+            val containerList = remember(widgetNodes) {
+                flattenAllNodes(widgetNodes).filter { it.type.isContainer }
+            }
+            val initialContainerUid = remember(selectedWidgetUid, widgetNodes) {
+                selectedWidgetUid?.let { uid ->
+                    val n = findNodeByUid(widgetNodes, uid)
+                    if (n?.type?.isContainer == true) n.uid else findParentNodeOf(widgetNodes, uid)?.uid
+                }
+            }
+            AddWidgetModalBottomSheet(
+                containers = containerList,
+                initialParentContainerUid = initialContainerUid,
+                suggestViewIdForType = { type -> nextViewIdFor(type) },
+                onDismiss = { showAddWidgetBottomSheet = false },
+                onConfirmAdd = { chosenType, customId, parentContainerUid ->
+                    val nodes = currentWidgetNodes
+                    val newNode = createDefaultWidgetNode(chosenType, customId)
+                    val updated = if (parentContainerUid != null) {
+                        insertChildIntoContainer(nodes, parentContainerUid, newNode)
+                    } else {
+                        nodes + newNode
+                    }
+                    currentOnUpdateWidgets(updated)
+                    currentOnSelectWidgetUid(newNode.uid)
+                    showAddWidgetBottomSheet = false
+                },
+            )
+        }
     }
 }
 
@@ -1510,151 +1573,35 @@ private fun WidgetsPaletteColumn(
     onCancelDrag: () -> Unit,
     onPaletteTouchOrScroll: () -> Unit,
     onTapAdd: (IdeWidgetType) -> Unit,
+    onOpenAddWidgetSheet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
+    var searchQuery by remember { mutableStateOf("") }
+
     LaunchedEffect(scrollState.isScrollInProgress) {
         if (scrollState.isScrollInProgress) {
             onPaletteTouchOrScroll()
         }
     }
 
-    Column(
-        modifier = modifier
-            .verticalScroll(scrollState, enabled = !isDragging)
-            .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
-    ) {
-        // Top mini-switcher strip matching screenshot (Palette active tab + Bookmark icon)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(bottomEnd = 8.dp, bottomStart = 4.dp))
-                    .background(Color(0xFF1E2952))
-                    .border(
-                        width = 1.dp,
-                        color = Cyan.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(bottomEnd = 8.dp, bottomStart = 4.dp),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(Modifier.size(14.dp)) {
-                    val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-                    drawLine(Cyan, Offset(2f, 3f), Offset(size.width - 2f, 3f), strokeWidth = stroke.width)
-                    drawRoundRect(
-                        color = Cyan,
-                        topLeft = Offset(3f, size.height * 0.36f),
-                        size = Size(size.width - 6f, size.height * 0.50f),
-                        cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-                        style = stroke,
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(28.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(Modifier.size(13.dp)) {
-                    val stroke = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    val path = Path().apply {
-                        moveTo(size.width * 0.22f, size.height * 0.12f)
-                        lineTo(size.width * 0.78f, size.height * 0.12f)
-                        lineTo(size.width * 0.78f, size.height * 0.88f)
-                        lineTo(size.width * 0.50f, size.height * 0.68f)
-                        lineTo(size.width * 0.22f, size.height * 0.88f)
-                        close()
-                    }
-                    drawPath(path, color = Muted, style = stroke)
-                }
-            }
-        }
-
-        // Section 1: Layouts ("قسم layout")
-        // Section 1: Layouts ("قسم layout")
-        Text(
-            text = "Layouts",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
-            ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+    val sections = remember {
+        listOf(
+            "Layouts" to listOf(
                 IdeWidgetType.LINEAR_H,
                 IdeWidgetType.LINEAR_V,
                 IdeWidgetType.SCROLL_H,
                 IdeWidgetType.SCROLL_V,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Section 2: Text ("قسم Text" — TextView, EditText, AutoCompleteTextView, MultiAutoCompleteTextView, CheckedTextView, TextInputEditText)
-        Text(
-            text = "Text",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
             ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+            "Text" to listOf(
                 IdeWidgetType.TEXT_VIEW,
                 IdeWidgetType.EDIT_TEXT,
                 IdeWidgetType.AUTO_COMPLETE_TEXT,
                 IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT,
                 IdeWidgetType.CHECKED_TEXT_VIEW,
                 IdeWidgetType.TEXT_INPUT_EDIT_TEXT,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Section 3: Image ("قسم Image" — ImageView, CircleImageView + 6 Image widgets)
-        Text(
-            text = "Image",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
             ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+            "Image" to listOf(
                 IdeWidgetType.IMAGE_VIEW,
                 IdeWidgetType.CIRCLE_IMAGE_VIEW,
                 IdeWidgetType.IMAGE_BUTTON,
@@ -1663,32 +1610,8 @@ private fun WidgetsPaletteColumn(
                 IdeWidgetType.ZOOM_IMAGE_VIEW,
                 IdeWidgetType.ASPECT_IMAGE_VIEW,
                 IdeWidgetType.IMAGE_FILTER_VIEW,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-
-        // Section 4: Buttons ("قسم الازرار" — Button, MaterialButton + 6 additional Button widgets)
-        Text(
-            text = "Buttons",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
             ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+            "Buttons" to listOf(
                 IdeWidgetType.BUTTON,
                 IdeWidgetType.MATERIAL_BUTTON,
                 IdeWidgetType.OUTLINED_BUTTON,
@@ -1697,78 +1620,501 @@ private fun WidgetsPaletteColumn(
                 IdeWidgetType.EXTENDED_FAB,
                 IdeWidgetType.TOGGLE_BUTTON,
                 IdeWidgetType.CHIP_BUTTON,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Section 5: Choose ("قسم Choose" — CheckBox, RadioButton, Switch, Spinner)
-        Text(
-            text = "Choose",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
             ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+            "Choose" to listOf(
                 IdeWidgetType.CHECK_BOX,
                 IdeWidgetType.RADIO_BUTTON,
                 IdeWidgetType.SWITCH,
                 IdeWidgetType.SPINNER,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Section 6: Web ("قسم Web" — WebView + 4 Web display widgets)
-        Text(
-            text = "Web",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
             ),
-            color = Muted,
-            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            listOf(
+            "Web" to listOf(
                 IdeWidgetType.WEB_VIEW,
                 IdeWidgetType.CUSTOM_TAB_VIEW,
                 IdeWidgetType.GECKO_WEB_VIEW,
                 IdeWidgetType.AD_WEB_VIEW,
                 IdeWidgetType.SWIPE_WEB_VIEW,
-            ).forEach { widgetType ->
-                DraggableWidgetPaletteItem(
-                    type = widgetType,
-                    onStartDrag = onStartDrag,
-                    onUpdateDragRootPos = onUpdateDragRootPos,
-                    onEndDrag = onEndDrag,
-                    onCancelDrag = onCancelDrag,
-                    onTap = { onTapAdd(widgetType) },
+            ),
+            "List" to listOf(
+                IdeWidgetType.GRID_VIEW,
+                IdeWidgetType.LIST_VIEW,
+                IdeWidgetType.TREE_VIEW,
+                IdeWidgetType.RECYCLER_VIEW,
+                IdeWidgetType.VIEW_PAGER,
+                IdeWidgetType.EXPANDABLE_LIST_VIEW,
+                IdeWidgetType.STAGGERED_GRID_VIEW,
+                IdeWidgetType.HORIZONTAL_LIST_VIEW,
+                IdeWidgetType.CAROUSEL_VIEW,
+                IdeWidgetType.SWIPE_LIST_VIEW,
+            ),
+            "Date" to listOf(
+                IdeWidgetType.ANALOG_CLOCK,
+                IdeWidgetType.DIGITAL_CLOCK,
+                IdeWidgetType.TIME_PICKER,
+                IdeWidgetType.DATE_PICKER,
+                IdeWidgetType.CALENDAR_VIEW,
+                IdeWidgetType.TEXT_CLOCK,
+                IdeWidgetType.CHRONOMETER,
+                IdeWidgetType.COUNTDOWN_VIEW,
+                IdeWidgetType.STOPWATCH_VIEW,
+                IdeWidgetType.DATE_RANGE_PICKER,
+                IdeWidgetType.WORLD_CLOCK_VIEW,
+            ),
+        )
+    }
+
+    val cleanQuery = searchQuery.trim().lowercase()
+
+    Column(
+        modifier = modifier
+            .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 6.dp),
+    ) {
+        // 1. Above Search & Layouts: "+ Add Widget" Button (opens Modal Bottom Sheet with Widget Type + Name/ID)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Cyan.copy(alpha = 0.18f))
+                .border(1.dp, Cyan.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                .clickable(onClick = onOpenAddWidgetSheet)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Add Widget",
+                tint = Cyan,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Add Widget",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Cyan,
+                maxLines = 1,
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // 2. Above Layout: Live Widget Search Bar ("وفوق Layout شريط بحث للعناصر")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF141C3A))
+                .border(
+                    width = 1.dp,
+                    color = if (cleanQuery.isNotEmpty()) Cyan.copy(alpha = 0.65f) else Color(0x2EFFFFFF),
+                    shape = RoundedCornerShape(8.dp),
                 )
+                .padding(horizontal = 6.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "Search Widgets",
+                    tint = if (cleanQuery.isNotEmpty()) Cyan else Muted,
+                    modifier = Modifier.size(13.dp),
+                )
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.sp,
+                        color = Ink,
+                    ),
+                    cursorBrush = SolidColor(Cyan),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Search...",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                color = Muted.copy(alpha = 0.75f),
+                                maxLines = 1,
+                            )
+                        }
+                        innerTextField()
+                    },
+                )
+                if (searchQuery.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Clear search",
+                        tint = Muted,
+                        modifier = Modifier
+                            .size(13.dp)
+                            .clip(CircleShape)
+                            .clickable { searchQuery = "" },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // 3. Scrollable Palette Sections (Layouts, Text, Image, Buttons, Choose, Web, List, Date)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(scrollState, enabled = !isDragging)
+                .padding(bottom = 8.dp),
+        ) {
+            sections.forEach { (sectionTitle, sectionWidgets) ->
+                val filteredWidgets = if (cleanQuery.isEmpty()) {
+                    sectionWidgets
+                } else {
+                    sectionWidgets.filter { w ->
+                        sketchWidgetLabel(w).lowercase().contains(cleanQuery) ||
+                            w.displayName.lowercase().contains(cleanQuery) ||
+                            w.idPrefix.lowercase().contains(cleanQuery) ||
+                            sectionTitle.lowercase().contains(cleanQuery)
+                    }
+                }
+                if (filteredWidgets.isNotEmpty()) {
+                    Text(
+                        text = sectionTitle,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = Muted,
+                        modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 6.dp),
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        filteredWidgets.forEach { widgetType ->
+                            DraggableWidgetPaletteItem(
+                                type = widgetType,
+                                onStartDrag = onStartDrag,
+                                onUpdateDragRootPos = onUpdateDragRootPos,
+                                onEndDrag = onEndDrag,
+                                onCancelDrag = onCancelDrag,
+                                onTap = { onTapAdd(widgetType) },
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddWidgetModalBottomSheet(
+    containers: List<IdeWidgetNode>,
+    initialParentContainerUid: String?,
+    suggestViewIdForType: (IdeWidgetType) -> String,
+    onDismiss: () -> Unit,
+    onConfirmAdd: (IdeWidgetType, String, String?) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedCategory by remember { mutableStateOf<IdeWidgetCategory?>(null) }
+    var selectedType by remember { mutableStateOf(IdeWidgetType.LINEAR_V) }
+    var widgetNameInput by remember { mutableStateOf(suggestViewIdForType(IdeWidgetType.LINEAR_V)) }
+    var selectedParentUid by remember { mutableStateOf(initialParentContainerUid) }
+    var typeSearchQuery by remember { mutableStateOf("") }
+
+    val filteredTypes = remember(selectedCategory, typeSearchQuery) {
+        val q = typeSearchQuery.trim().lowercase()
+        IdeWidgetType.entries.filter { t ->
+            (selectedCategory == null || t.category == selectedCategory) &&
+                (q.isEmpty() ||
+                    sketchWidgetLabel(t).lowercase().contains(q) ||
+                    t.displayName.lowercase().contains(q) ||
+                    t.idPrefix.lowercase().contains(q))
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text(
+                            text = "Add Widget • إضافة عنصر جديد",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "اختر نوع الـ Widget وحدد الاسم (ID) لإضافته مباشرةً إلى التصميم",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Cyan,
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = null, tint = Muted)
+                    }
+                }
+
+                // 1. Widget Name / ID Input
+                OutlinedTextField(
+                    value = widgetNameInput,
+                    onValueChange = { widgetNameInput = it },
+                    singleLine = true,
+                    label = { Text("Widget Name / ID (الاسم)") },
+                    placeholder = { Text(suggestViewIdForType(selectedType)) },
+                    leadingIcon = {
+                        Box(
+                            modifier = Modifier.padding(start = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            SketchWidgetIcon(type = selectedType, tint = Cyan)
+                        }
+                    },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        color = Ink,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink,
+                        cursorColor = Cyan,
+                        focusedBorderColor = Cyan,
+                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        focusedLabelColor = Cyan,
+                        unfocusedLabelColor = Muted,
+                        focusedContainerColor = Color(0x14FFFFFF),
+                        unfocusedContainerColor = Color(0x0AFFFFFF),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // 2. Optional Parent Layout Selector (if containers exist on canvas)
+                if (containers.isNotEmpty()) {
+                    Text(
+                        text = "Parent Layout (الحاوية الأب):",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Muted,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val isRoot = selectedParentUid == null
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isRoot) Cyan.copy(alpha = 0.22f) else Color(0xFF151E3F))
+                                .border(1.dp, if (isRoot) Cyan else Color(0x28FFFFFF), RoundedCornerShape(50))
+                                .clickable { selectedParentUid = null }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Root Screen",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = if (isRoot) Cyan else Ink,
+                            )
+                        }
+                        containers.forEach { container ->
+                            val selected = selectedParentUid == container.uid
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0xFF151E3F))
+                                    .border(1.dp, if (selected) Cyan else Color(0x28FFFFFF), RoundedCornerShape(50))
+                                    .clickable { selectedParentUid = container.uid }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                SketchWidgetIcon(type = container.type, tint = if (selected) Cyan else Ink)
+                                Text(
+                                    text = container.viewId,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                    color = if (selected) Cyan else Ink,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 3. Category Filter Pills + Search for Widget Type
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val allSelected = selectedCategory == null
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (allSelected) Color(0xFF213163) else Color(0xFF151E3F))
+                            .border(1.dp, if (allSelected) Cyan else Color(0x24FFFFFF), RoundedCornerShape(50))
+                            .clickable { selectedCategory = null }
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = "All (${IdeWidgetType.entries.size})",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (allSelected) Cyan else Ink,
+                        )
+                    }
+                    IdeWidgetCategory.entries.forEach { cat ->
+                        val catSelected = selectedCategory == cat
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (catSelected) Color(0xFF213163) else Color(0xFF151E3F))
+                                .border(1.dp, if (catSelected) Cyan else Color(0x24FFFFFF), RoundedCornerShape(50))
+                                .clickable { selectedCategory = cat }
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                        ) {
+                            Text(
+                                text = cat.title.replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (catSelected) Cyan else Ink,
+                            )
+                        }
+                    }
+                }
+
+                // 4. Scrollable Widget Types List ("نوع الـ Widget")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    filteredTypes.chunked(2).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            rowItems.forEach { type ->
+                                val isSelected = selectedType == type
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF141D3D))
+                                        .border(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) Cyan else Color(0x26FFFFFF),
+                                            shape = RoundedCornerShape(12.dp),
+                                        )
+                                        .clickable {
+                                            selectedType = type
+                                            widgetNameInput = suggestViewIdForType(type)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    SketchWidgetIcon(type = type, tint = if (isSelected) Cyan else Ink)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = sketchWidgetLabel(type),
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.5.sp,
+                                            ),
+                                            color = if (isSelected) Cyan else Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = type.category.title.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.5.sp,
+                                            ),
+                                            color = Muted,
+                                        )
+                                    }
+                                }
+                            }
+                            if (rowItems.size == 1) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                // 5. Confirm Add Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.dialog_cancel), color = Muted)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            onConfirmAdd(
+                                selectedType,
+                                widgetNameInput.ifBlank { suggestViewIdForType(selectedType) },
+                                selectedParentUid,
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Cyan,
+                            contentColor = Color(0xFF050816),
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "إضافة • Add Widget",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        )
+                    }
+                }
             }
         }
     }
@@ -1810,6 +2156,27 @@ private fun sketchWidgetLabel(type: IdeWidgetType): String = when (type) {
     IdeWidgetType.GECKO_WEB_VIEW -> "GeckoWebView"
     IdeWidgetType.AD_WEB_VIEW -> "AdBlockWeb"
     IdeWidgetType.SWIPE_WEB_VIEW -> "SwipeWebView"
+    IdeWidgetType.GRID_VIEW -> "Grid View"
+    IdeWidgetType.LIST_VIEW -> "List View"
+    IdeWidgetType.TREE_VIEW -> "TreeView"
+    IdeWidgetType.RECYCLER_VIEW -> "RecyclerView"
+    IdeWidgetType.VIEW_PAGER -> "ViewPager"
+    IdeWidgetType.EXPANDABLE_LIST_VIEW -> "ExpandableList"
+    IdeWidgetType.STAGGERED_GRID_VIEW -> "StaggeredGrid"
+    IdeWidgetType.HORIZONTAL_LIST_VIEW -> "HorizontalList"
+    IdeWidgetType.CAROUSEL_VIEW -> "CarouselView"
+    IdeWidgetType.SWIPE_LIST_VIEW -> "SwipeListView"
+    IdeWidgetType.ANALOG_CLOCK -> "AnalogClock"
+    IdeWidgetType.DIGITAL_CLOCK -> "DigitalClock"
+    IdeWidgetType.TIME_PICKER -> "TimePicker"
+    IdeWidgetType.DATE_PICKER -> "DatePicker"
+    IdeWidgetType.CALENDAR_VIEW -> "CalendarView"
+    IdeWidgetType.TEXT_CLOCK -> "TextClock"
+    IdeWidgetType.CHRONOMETER -> "Chronometer"
+    IdeWidgetType.COUNTDOWN_VIEW -> "CountDownView"
+    IdeWidgetType.STOPWATCH_VIEW -> "StopwatchView"
+    IdeWidgetType.DATE_RANGE_PICKER -> "DateRangePicker"
+    IdeWidgetType.WORLD_CLOCK_VIEW -> "WorldClockView"
 }
 
 @Composable
@@ -2408,6 +2775,103 @@ private fun SketchWidgetIcon(
                     style = stroke,
                 )
             }
+
+            IdeWidgetType.GRID_VIEW,
+            IdeWidgetType.STAGGERED_GRID_VIEW -> {
+                // 2x2 Grid cells
+                val gap = 1.6f
+                val cellW = (size.width - 3.6f - gap) / 2f
+                val cellH = (size.height - 3.6f - gap) / 2f
+                for (r in 0..1) {
+                    for (c in 0..1) {
+                        drawRoundRect(
+                            color = tint,
+                            topLeft = Offset(1.8f + c * (cellW + gap), 1.8f + r * (cellH + gap)),
+                            size = Size(cellW, cellH),
+                            cornerRadius = CornerRadius(1.2.dp.toPx(), 1.2.dp.toPx()),
+                            style = stroke,
+                        )
+                    }
+                }
+            }
+
+            IdeWidgetType.LIST_VIEW,
+            IdeWidgetType.RECYCLER_VIEW,
+            IdeWidgetType.EXPANDABLE_LIST_VIEW,
+            IdeWidgetType.SWIPE_LIST_VIEW -> {
+                // 3 horizontal list rows with bullet dots
+                for (i in 0..2) {
+                    val y = size.height * (0.24f + i * 0.26f)
+                    drawCircle(tint, radius = 1.1.dp.toPx(), center = Offset(size.width * 0.20f, y))
+                    drawLine(tint, Offset(size.width * 0.36f, y), Offset(size.width * 0.86f, y), strokeWidth = stroke.width)
+                }
+            }
+
+            IdeWidgetType.TREE_VIEW -> {
+                // Hierarchical tree branch lines
+                drawLine(tint, Offset(size.width * 0.22f, size.height * 0.18f), Offset(size.width * 0.22f, size.height * 0.78f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.22f, size.height * 0.24f), Offset(size.width * 0.78f, size.height * 0.24f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.22f, size.height * 0.52f), Offset(size.width * 0.84f, size.height * 0.52f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.22f, size.height * 0.78f), Offset(size.width * 0.84f, size.height * 0.78f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.VIEW_PAGER,
+            IdeWidgetType.HORIZONTAL_LIST_VIEW,
+            IdeWidgetType.CAROUSEL_VIEW -> {
+                // Center page card + side peeks
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.24f, size.height * 0.16f),
+                    size = Size(size.width * 0.52f, size.height * 0.68f),
+                    cornerRadius = CornerRadius(1.8.dp.toPx(), 1.8.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.10f, size.height * 0.26f), Offset(size.width * 0.10f, size.height * 0.74f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.90f, size.height * 0.26f), Offset(size.width * 0.90f, size.height * 0.74f), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.ANALOG_CLOCK,
+            IdeWidgetType.TIME_PICKER,
+            IdeWidgetType.CHRONOMETER,
+            IdeWidgetType.COUNTDOWN_VIEW,
+            IdeWidgetType.STOPWATCH_VIEW,
+            IdeWidgetType.WORLD_CLOCK_VIEW -> {
+                // Clock dial + hands
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val r = size.minDimension * 0.42f
+                drawCircle(tint, radius = r, center = c, style = stroke)
+                drawLine(tint, c, Offset(c.x, c.y - r * 0.58f), strokeWidth = stroke.width)
+                drawLine(tint, c, Offset(c.x + r * 0.48f, c.y), strokeWidth = stroke.width)
+            }
+
+            IdeWidgetType.DIGITAL_CLOCK,
+            IdeWidgetType.TEXT_CLOCK -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1f, size.height * 0.22f),
+                    size = Size(size.width - 2f, size.height * 0.56f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawCircle(tint, radius = 0.9.dp.toPx(), center = Offset(size.width * 0.50f, size.height * 0.42f))
+                drawCircle(tint, radius = 0.9.dp.toPx(), center = Offset(size.width * 0.50f, size.height * 0.58f))
+            }
+
+            IdeWidgetType.DATE_PICKER,
+            IdeWidgetType.CALENDAR_VIEW,
+            IdeWidgetType.DATE_RANGE_PICKER -> {
+                // Calendar box with top binding rings & grid
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1.4f, size.height * 0.20f),
+                    size = Size(size.width - 2.8f, size.height * 0.68f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(1.4f, size.height * 0.38f), Offset(size.width - 1.4f, size.height * 0.38f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.32f, size.height * 0.10f), Offset(size.width * 0.32f, size.height * 0.26f), strokeWidth = stroke.width)
+                drawLine(tint, Offset(size.width * 0.68f, size.height * 0.10f), Offset(size.width * 0.68f, size.height * 0.26f), strokeWidth = stroke.width)
+            }
         }
     }
 }
@@ -2421,12 +2885,12 @@ private fun SketchDropPlaceholder(
     type: IdeWidgetType,
     inHorizontalParent: Boolean,
 ) {
-    val placeholderModifier = if ((type.isContainer || type.isInputTextWidget || type.isWebWidget || type == IdeWidgetType.SPINNER) && !inHorizontalParent) {
+    val placeholderModifier = if ((type.isContainer || type.isInputTextWidget || type.isWebWidget || type.isListWidget || type == IdeWidgetType.SPINNER || type == IdeWidgetType.CALENDAR_VIEW || type == IdeWidgetType.DATE_PICKER || type == IdeWidgetType.TIME_PICKER || type == IdeWidgetType.DATE_RANGE_PICKER) && !inHorizontalParent) {
         Modifier
             .fillMaxWidth()
-            .height(if (type.isWebWidget) 48.dp else 24.dp)
+            .height(if (type.isWebWidget || type.isListWidget) 48.dp else 24.dp)
             .background(Color(0xFFD6D6D6))
-    } else if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW || type == IdeWidgetType.FAB_BUTTON) {
+    } else if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW || type == IdeWidgetType.FAB_BUTTON || type == IdeWidgetType.ANALOG_CLOCK) {
         Modifier
             .size(36.dp)
             .clip(CircleShape)
@@ -3950,6 +4414,515 @@ private fun RenderWidgetNodeOnPhone(
                 }
             }
         }
+
+        // 7. List Widgets (GridView, ListView, TreeView, RecyclerView, ViewPager + 5 specialized List widgets)
+        IdeWidgetType.GRID_VIEW,
+        IdeWidgetType.LIST_VIEW,
+        IdeWidgetType.TREE_VIEW,
+        IdeWidgetType.RECYCLER_VIEW,
+        IdeWidgetType.VIEW_PAGER,
+        IdeWidgetType.EXPANDABLE_LIST_VIEW,
+        IdeWidgetType.STAGGERED_GRID_VIEW,
+        IdeWidgetType.HORIZONTAL_LIST_VIEW,
+        IdeWidgetType.CAROUSEL_VIEW,
+        IdeWidgetType.SWIPE_LIST_VIEW -> {
+            val listHeightDp = customHeightDp?.coerceIn(56, 280)?.dp ?: 110.dp
+            val listShape = RoundedCornerShape(6.dp)
+            Column(
+                modifier = Modifier
+                    .padding(visualMargin)
+                    .then(
+                        when {
+                            customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(60, 320).dp)
+                            node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
+                            else -> Modifier.width(180.dp)
+                        },
+                    )
+                    .height(listHeightDp)
+                    .then(transformModifier)
+                    .clip(listShape)
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        if (!isBeingMoved) {
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(if (isSelected) selectedFill else Color(0xFFF8FAFC), listShape)
+                    .border(
+                        width = if (isSelected) 1.4.dp else 1.dp,
+                        color = if (isSelected) Color(0xFF0284C7) else Color(0xFF94A3B8),
+                        shape = listShape,
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    },
+            ) {
+                // Header strip showing widget type, viewId, and Custom View / Columns info
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE2E8F0))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    SketchWidgetIcon(type = node.type, tint = Color(0xFF0284C7))
+                    Text(
+                        text = "${node.type.displayName} (${node.viewId})",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Color(0xFF1E293B),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (node.customView != "none" && node.customView.isNotBlank()) {
+                        Text(
+                            text = node.customView,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 7.5.sp,
+                            ),
+                            color = Color(0xFF0284C7),
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                // Body preview of list items / grid cells / pager cards
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp),
+                ) {
+                    when (node.type) {
+                        IdeWidgetType.GRID_VIEW,
+                        IdeWidgetType.STAGGERED_GRID_VIEW -> {
+                            val cols = node.numColumns.coerceIn(1, 4)
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                for (r in 0..1) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        for (c in 1..cols) {
+                                            val idx = r * cols + c
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(Color(0xFFE2E8F0))
+                                                    .border(0.8.dp, Color(0xFFCBD5E1), RoundedCornerShape(4.dp)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = "Item $idx",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontFamily = JetBrainsMono,
+                                                        fontSize = 8.sp,
+                                                    ),
+                                                    color = Color(0xFF475569),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        IdeWidgetType.VIEW_PAGER,
+                        IdeWidgetType.HORIZONTAL_LIST_VIEW,
+                        IdeWidgetType.CAROUSEL_VIEW -> {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                for (p in 1..3) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(if (p == 1) Color(0xFFDBEAFE) else Color(0xFFE2E8F0))
+                                            .border(
+                                                0.8.dp,
+                                                if (p == 1) Color(0xFF3B82F6) else Color(0xFFCBD5E1),
+                                                RoundedCornerShape(5.dp),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = "Page $p",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            ),
+                                            color = Color(0xFF1E3A8A),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        IdeWidgetType.TREE_VIEW -> {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                listOf("▾ Root Folder" to 0.dp, "  ├─ Child Node 1" to 10.dp, "  └─ Child Node 2" to 10.dp).forEach { (label, indentDp) ->
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 8.5.sp,
+                                        ),
+                                        color = Color(0xFF334155),
+                                        modifier = Modifier.padding(start = indentDp),
+                                    )
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                for (idx in 1..3) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(Color(0xFFE2E8F0).copy(alpha = 0.65f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text(
+                                            text = if (node.type == IdeWidgetType.EXPANDABLE_LIST_VIEW) "▾ Group Item $idx" else "List Item $idx",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.5.sp,
+                                            ),
+                                            color = Color(0xFF334155),
+                                        )
+                                        Text(
+                                            text = "#$idx",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 7.5.sp,
+                                            ),
+                                            color = Color(0xFF64748B),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 8. Date & Time Widgets (AnalogClock, DigitalClock, TimePicker, DatePicker, CalendarView + 6 Date/Time widgets)
+        IdeWidgetType.ANALOG_CLOCK,
+        IdeWidgetType.DIGITAL_CLOCK,
+        IdeWidgetType.TIME_PICKER,
+        IdeWidgetType.DATE_PICKER,
+        IdeWidgetType.CALENDAR_VIEW,
+        IdeWidgetType.TEXT_CLOCK,
+        IdeWidgetType.CHRONOMETER,
+        IdeWidgetType.COUNTDOWN_VIEW,
+        IdeWidgetType.STOPWATCH_VIEW,
+        IdeWidgetType.DATE_RANGE_PICKER,
+        IdeWidgetType.WORLD_CLOCK_VIEW -> {
+            val dateShape = if (node.type == IdeWidgetType.ANALOG_CLOCK) CircleShape else RoundedCornerShape(8.dp)
+            Box(
+                modifier = Modifier
+                    .padding(visualMargin)
+                    .then(
+                        when {
+                            node.type == IdeWidgetType.ANALOG_CLOCK -> {
+                                val d = (customWidthDp ?: customHeightDp ?: 68).coerceIn(44, 180).dp
+                                Modifier.size(d)
+                            }
+                            customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(48, 320).dp)
+                            node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
+                            else -> Modifier.wrapContentWidth()
+                        },
+                    )
+                    .then(
+                        when {
+                            node.type == IdeWidgetType.ANALOG_CLOCK -> Modifier
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(32, 260).dp)
+                            else -> Modifier.wrapContentHeight()
+                        },
+                    )
+                    .then(transformModifier)
+                    .clip(dateShape)
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        if (!isBeingMoved) {
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(
+                        color = if (isSelected) selectedFill else (parsedBgColor ?: Color(0xFFF8FAFC)),
+                        shape = dateShape,
+                    )
+                    .border(
+                        width = if (isSelected) 1.4.dp else 1.dp,
+                        color = if (isSelected) Color(0xFF0284C7) else Color(0xFFCBD5E1),
+                        shape = dateShape,
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                when (node.type) {
+                    IdeWidgetType.ANALOG_CLOCK -> {
+                        Canvas(Modifier.fillMaxSize()) {
+                            val c = Offset(size.width / 2f, size.height / 2f)
+                            val r = size.minDimension * 0.44f
+                            drawCircle(Color(0xFF0284C7), radius = r, center = c, style = Stroke(width = 2.dp.toPx()))
+                            for (tick in 0 until 12) {
+                                val angle = Math.toRadians((tick * 30).toDouble())
+                                val startR = r * 0.80f
+                                drawLine(
+                                    color = Color(0xFF475569),
+                                    start = Offset(c.x + (startR * kotlin.math.sin(angle)).toFloat(), c.y - (startR * kotlin.math.cos(angle)).toFloat()),
+                                    end = Offset(c.x + (r * 0.94f * kotlin.math.sin(angle)).toFloat(), c.y - (r * 0.94f * kotlin.math.cos(angle)).toFloat()),
+                                    strokeWidth = 1.2.dp.toPx(),
+                                )
+                            }
+                            // Hour & Minute hands
+                            drawLine(Color(0xFF0F172A), c, Offset(c.x, c.y - r * 0.52f), strokeWidth = 2.2.dp.toPx(), cap = StrokeCap.Round)
+                            drawLine(Color(0xFF0284C7), c, Offset(c.x + r * 0.62f, c.y), strokeWidth = 1.8.dp.toPx(), cap = StrokeCap.Round)
+                            drawCircle(Color(0xFF0284C7), radius = 2.5.dp.toPx(), center = c)
+                        }
+                    }
+
+                    IdeWidgetType.DIGITAL_CLOCK,
+                    IdeWidgetType.TEXT_CLOCK,
+                    IdeWidgetType.CHRONOMETER,
+                    IdeWidgetType.COUNTDOWN_VIEW,
+                    IdeWidgetType.STOPWATCH_VIEW,
+                    IdeWidgetType.WORLD_CLOCK_VIEW -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            SketchWidgetIcon(type = node.type, tint = Color(0xFF0284C7))
+                            Text(
+                                text = node.text.ifBlank {
+                                    when (node.type) {
+                                        IdeWidgetType.CHRONOMETER, IdeWidgetType.STOPWATCH_VIEW -> "00:00"
+                                        IdeWidgetType.COUNTDOWN_VIEW -> "05:00"
+                                        IdeWidgetType.WORLD_CLOCK_VIEW -> "${node.timeZone}: 12:30"
+                                        else -> if (node.is24HourView) "14:30:45" else "02:30:45 PM"
+                                    }
+                                },
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = node.textSizeSp.coerceIn(10, 26).sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = parsedTxtColor,
+                            )
+                        }
+                    }
+
+                    IdeWidgetType.TIME_PICKER -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SketchWidgetIcon(type = node.type, tint = Color(0xFF0284C7))
+                                Text(
+                                    text = if (node.is24HourView) "14 : 30" else "02 : 30 PM",
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Color(0xFF0F172A),
+                                )
+                            }
+                            Text(
+                                text = "TimePicker (${node.pickerMode} • ${node.viewId})",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 8.5.sp,
+                                ),
+                                color = Color(0xFF64748B),
+                            )
+                        }
+                    }
+
+                    IdeWidgetType.DATE_PICKER,
+                    IdeWidgetType.CALENDAR_VIEW,
+                    IdeWidgetType.DATE_RANGE_PICKER -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF0284C7))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = if (node.type == IdeWidgetType.DATE_RANGE_PICKER) "Oct 17 – Oct 24, 2026" else "October 2026",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Color.White,
+                                )
+                                Text(
+                                    text = node.viewId,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 8.sp,
+                                    ),
+                                    color = Color.White.copy(alpha = 0.85f),
+                                )
+                            }
+                            // Mini calendar days row preview
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                listOf("S", "M", "T", "W", "T", "F", "S").forEachIndexed { idx, d ->
+                                    Text(
+                                        text = d,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = if (idx == 6) Color(0xFF0284C7) else Color(0xFF64748B),
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                (11..17).forEach { dayNum ->
+                                    val highlight = dayNum == 17
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(if (highlight) Color(0xFF0284C7) else Color.Transparent),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = dayNum.toString(),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.sp,
+                                                fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal,
+                                            ),
+                                            color = if (highlight) Color.White else Color(0xFF1E293B),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {}
+                }
+            }
+        }
     }
 }
 
@@ -4008,6 +4981,27 @@ private enum class IdeWidgetProperty(
     WEB_FILE_ACCESS(title = "File access", cardLabel = "File\naccess"),
     WEB_CACHE_MODE(title = "Cache mode", cardLabel = "Cache\nmode"),
     WEB_USER_AGENT(title = "User agent", cardLabel = "User\nagent"),
+    ORIENTATION(title = "Orientation", cardLabel = "Orientation"),
+    CUSTOM_VIEW(title = "Custom View", cardLabel = "Custom\nView"),
+    DIVIDER_HEIGHT(title = "Divider height", cardLabel = "Divider\nheight"),
+    NUM_COLUMNS(title = "Columns / Span count", cardLabel = "Columns"),
+    HORIZONTAL_SPACING(title = "Horizontal spacing", cardLabel = "Horiz\nspacing"),
+    VERTICAL_SPACING(title = "Vertical spacing", cardLabel = "Vert\nspacing"),
+    CHOICE_MODE(title = "Choice mode", cardLabel = "Choice\nmode"),
+    LAYOUT_MANAGER(title = "Layout manager", cardLabel = "Layout\nmanager"),
+    STACK_FROM_BOTTOM(title = "Stack from bottom", cardLabel = "Stack\nbottom"),
+    FAST_SCROLL(title = "Fast scroll", cardLabel = "Fast\nscroll"),
+    PAGE_LIMIT(title = "Offscreen page limit", cardLabel = "Page\nlimit"),
+    TIME_FORMAT_12H(title = "Format 12h", cardLabel = "Format\n12h"),
+    TIME_FORMAT_24H(title = "Format 24h", cardLabel = "Format\n24h"),
+    IS_24_HOUR_VIEW(title = "24-Hour view", cardLabel = "24-Hour\nview"),
+    PICKER_MODE(title = "Picker mode", cardLabel = "Picker\nmode"),
+    FIRST_DAY_OF_WEEK(title = "First day of week", cardLabel = "First\nday"),
+    MIN_DATE(title = "Min date", cardLabel = "Min date"),
+    MAX_DATE(title = "Max date", cardLabel = "Max date"),
+    SHOW_WEEK_NUMBER(title = "Show week number", cardLabel = "Week\nnumber"),
+    TIME_ZONE(title = "Time zone", cardLabel = "Time\nzone"),
+    COUNT_DOWN(title = "Count down", cardLabel = "Count\ndown"),
     CUSTOM_ATTRIBUTES(title = "Custom attributes", cardLabel = "Custom\nattributes"),
     CONVERT(title = "Convert", cardLabel = "Convert"),
     WIDTH(title = "Width", cardLabel = "Width"),
@@ -4092,6 +5086,92 @@ private fun isPropertyAvailableForWidget(prop: IdeWidgetProperty, type: IdeWidge
     IdeWidgetProperty.WEB_FILE_ACCESS,
     IdeWidgetProperty.WEB_CACHE_MODE,
     IdeWidgetProperty.WEB_USER_AGENT -> type.isWebWidget
+
+    IdeWidgetProperty.ORIENTATION ->
+        type.isContainer ||
+            type == IdeWidgetType.RECYCLER_VIEW ||
+            type == IdeWidgetType.VIEW_PAGER ||
+            type == IdeWidgetType.CAROUSEL_VIEW ||
+            type == IdeWidgetType.STAGGERED_GRID_VIEW ||
+            type == IdeWidgetType.HORIZONTAL_LIST_VIEW
+
+    IdeWidgetProperty.CUSTOM_VIEW -> type.isListWidget
+
+    IdeWidgetProperty.DIVIDER_HEIGHT ->
+        type == IdeWidgetType.LIST_VIEW ||
+            type == IdeWidgetType.EXPANDABLE_LIST_VIEW ||
+            type == IdeWidgetType.SWIPE_LIST_VIEW ||
+            type == IdeWidgetType.TREE_VIEW
+
+    IdeWidgetProperty.NUM_COLUMNS ->
+        type == IdeWidgetType.GRID_VIEW ||
+            type == IdeWidgetType.RECYCLER_VIEW ||
+            type == IdeWidgetType.STAGGERED_GRID_VIEW
+
+    IdeWidgetProperty.HORIZONTAL_SPACING,
+    IdeWidgetProperty.VERTICAL_SPACING ->
+        type == IdeWidgetType.GRID_VIEW ||
+            type == IdeWidgetType.STAGGERED_GRID_VIEW
+
+    IdeWidgetProperty.CHOICE_MODE ->
+        type == IdeWidgetType.LIST_VIEW ||
+            type == IdeWidgetType.GRID_VIEW ||
+            type == IdeWidgetType.EXPANDABLE_LIST_VIEW ||
+            type == IdeWidgetType.SWIPE_LIST_VIEW
+
+    IdeWidgetProperty.LAYOUT_MANAGER ->
+        type == IdeWidgetType.RECYCLER_VIEW ||
+            type == IdeWidgetType.STAGGERED_GRID_VIEW ||
+            type == IdeWidgetType.HORIZONTAL_LIST_VIEW ||
+            type == IdeWidgetType.TREE_VIEW
+
+    IdeWidgetProperty.STACK_FROM_BOTTOM,
+    IdeWidgetProperty.FAST_SCROLL ->
+        type == IdeWidgetType.LIST_VIEW ||
+            type == IdeWidgetType.RECYCLER_VIEW ||
+            type == IdeWidgetType.EXPANDABLE_LIST_VIEW ||
+            type == IdeWidgetType.SWIPE_LIST_VIEW
+
+    IdeWidgetProperty.PAGE_LIMIT ->
+        type == IdeWidgetType.VIEW_PAGER ||
+            type == IdeWidgetType.CAROUSEL_VIEW
+
+    IdeWidgetProperty.TIME_FORMAT_12H,
+    IdeWidgetProperty.TIME_FORMAT_24H ->
+        type == IdeWidgetType.DIGITAL_CLOCK ||
+            type == IdeWidgetType.TEXT_CLOCK ||
+            type == IdeWidgetType.WORLD_CLOCK_VIEW
+
+    IdeWidgetProperty.IS_24_HOUR_VIEW ->
+        type == IdeWidgetType.TIME_PICKER ||
+            type == IdeWidgetType.DIGITAL_CLOCK ||
+            type == IdeWidgetType.TEXT_CLOCK ||
+            type == IdeWidgetType.WORLD_CLOCK_VIEW
+
+    IdeWidgetProperty.PICKER_MODE ->
+        type == IdeWidgetType.TIME_PICKER ||
+            type == IdeWidgetType.DATE_PICKER ||
+            type == IdeWidgetType.DATE_RANGE_PICKER
+
+    IdeWidgetProperty.FIRST_DAY_OF_WEEK,
+    IdeWidgetProperty.MIN_DATE,
+    IdeWidgetProperty.MAX_DATE ->
+        type == IdeWidgetType.CALENDAR_VIEW ||
+            type == IdeWidgetType.DATE_PICKER ||
+            type == IdeWidgetType.DATE_RANGE_PICKER
+
+    IdeWidgetProperty.SHOW_WEEK_NUMBER -> type == IdeWidgetType.CALENDAR_VIEW
+
+    IdeWidgetProperty.TIME_ZONE ->
+        type == IdeWidgetType.ANALOG_CLOCK ||
+            type == IdeWidgetType.DIGITAL_CLOCK ||
+            type == IdeWidgetType.TEXT_CLOCK ||
+            type == IdeWidgetType.WORLD_CLOCK_VIEW
+
+    IdeWidgetProperty.COUNT_DOWN ->
+        type == IdeWidgetType.CHRONOMETER ||
+            type == IdeWidgetType.COUNTDOWN_VIEW ||
+            type == IdeWidgetType.STOPWATCH_VIEW
 
     IdeWidgetProperty.TEXT,
     IdeWidgetProperty.TEXT_SIZE,
@@ -4583,6 +5663,73 @@ private fun SketchPropertyVectorIcon(
 
         IdeWidgetProperty.WEB_URL -> {
             SketchWidgetIcon(type = IdeWidgetType.WEB_VIEW, tint = tint)
+        }
+
+        IdeWidgetProperty.ORIENTATION -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawLine(tint, Offset(size.width * 0.16f, size.height * 0.50f), Offset(size.width * 0.84f, size.height * 0.50f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.50f, size.height * 0.16f), Offset(size.width * 0.50f, size.height * 0.84f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.CUSTOM_VIEW -> {
+            SketchWidgetIcon(type = IdeWidgetType.LIST_VIEW, tint = tint)
+        }
+
+        IdeWidgetProperty.NUM_COLUMNS,
+        IdeWidgetProperty.LAYOUT_MANAGER -> {
+            SketchWidgetIcon(type = IdeWidgetType.GRID_VIEW, tint = tint)
+        }
+
+        IdeWidgetProperty.DIVIDER_HEIGHT,
+        IdeWidgetProperty.HORIZONTAL_SPACING,
+        IdeWidgetProperty.VERTICAL_SPACING,
+        IdeWidgetProperty.PAGE_LIMIT,
+        IdeWidgetProperty.FIRST_DAY_OF_WEEK -> {
+            Text(
+                text = "123",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = tint,
+            )
+        }
+
+        IdeWidgetProperty.CHOICE_MODE,
+        IdeWidgetProperty.PICKER_MODE,
+        IdeWidgetProperty.TIME_ZONE -> {
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        IdeWidgetProperty.STACK_FROM_BOTTOM,
+        IdeWidgetProperty.FAST_SCROLL,
+        IdeWidgetProperty.IS_24_HOUR_VIEW,
+        IdeWidgetProperty.SHOW_WEEK_NUMBER,
+        IdeWidgetProperty.COUNT_DOWN -> {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+
+        IdeWidgetProperty.TIME_FORMAT_12H,
+        IdeWidgetProperty.TIME_FORMAT_24H -> {
+            SketchWidgetIcon(type = IdeWidgetType.ANALOG_CLOCK, tint = tint)
+        }
+
+        IdeWidgetProperty.MIN_DATE,
+        IdeWidgetProperty.MAX_DATE -> {
+            SketchWidgetIcon(type = IdeWidgetType.CALENDAR_VIEW, tint = tint)
         }
 
         IdeWidgetProperty.HINT -> {
@@ -7673,6 +8820,27 @@ private fun IdeWidgetPropertyEditDialog(
                 IdeWidgetProperty.WEB_FILE_ACCESS -> node.webAllowFileAccess.toString()
                 IdeWidgetProperty.WEB_CACHE_MODE -> node.webCacheMode
                 IdeWidgetProperty.WEB_USER_AGENT -> node.webUserAgent
+                IdeWidgetProperty.ORIENTATION -> node.orientation
+                IdeWidgetProperty.CUSTOM_VIEW -> node.customView
+                IdeWidgetProperty.DIVIDER_HEIGHT -> node.dividerHeightDp.toString()
+                IdeWidgetProperty.NUM_COLUMNS -> node.numColumns.toString()
+                IdeWidgetProperty.HORIZONTAL_SPACING -> node.horizontalSpacingDp.toString()
+                IdeWidgetProperty.VERTICAL_SPACING -> node.verticalSpacingDp.toString()
+                IdeWidgetProperty.CHOICE_MODE -> node.choiceMode
+                IdeWidgetProperty.LAYOUT_MANAGER -> node.layoutManager
+                IdeWidgetProperty.STACK_FROM_BOTTOM -> node.stackFromBottom.toString()
+                IdeWidgetProperty.FAST_SCROLL -> node.fastScroll.toString()
+                IdeWidgetProperty.PAGE_LIMIT -> node.pageLimit.toString()
+                IdeWidgetProperty.TIME_FORMAT_12H -> node.format12Hour
+                IdeWidgetProperty.TIME_FORMAT_24H -> node.format24Hour
+                IdeWidgetProperty.IS_24_HOUR_VIEW -> node.is24HourView.toString()
+                IdeWidgetProperty.PICKER_MODE -> node.pickerMode
+                IdeWidgetProperty.FIRST_DAY_OF_WEEK -> node.firstDayOfWeek.toString()
+                IdeWidgetProperty.MIN_DATE -> node.minDate
+                IdeWidgetProperty.MAX_DATE -> node.maxDate
+                IdeWidgetProperty.SHOW_WEEK_NUMBER -> node.showWeekNumber.toString()
+                IdeWidgetProperty.TIME_ZONE -> node.timeZone
+                IdeWidgetProperty.COUNT_DOWN -> node.countDown.toString()
                 IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.customAttributes
                 IdeWidgetProperty.CONVERT -> node.type.name
                 IdeWidgetProperty.WIDTH -> node.layoutWidth
@@ -7773,10 +8941,64 @@ private fun IdeWidgetPropertyEditDialog(
             IdeWidgetProperty.WEB_FILE_ACCESS -> node.copy(webAllowFileAccess = trimmed.equals("true", ignoreCase = true))
             IdeWidgetProperty.WEB_CACHE_MODE -> node.copy(webCacheMode = trimmed.ifBlank { "LOAD_DEFAULT" })
             IdeWidgetProperty.WEB_USER_AGENT -> node.copy(webUserAgent = raw.ifBlank { "default" })
+            IdeWidgetProperty.ORIENTATION -> {
+                val cleanOrient = if (trimmed.equals("horizontal", ignoreCase = true)) "horizontal" else "vertical"
+                val syncedType = when (node.type) {
+                    IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V ->
+                        if (cleanOrient == "horizontal") IdeWidgetType.LINEAR_H else IdeWidgetType.LINEAR_V
+                    IdeWidgetType.SCROLL_V, IdeWidgetType.SCROLL_H ->
+                        if (cleanOrient == "horizontal") IdeWidgetType.SCROLL_V else IdeWidgetType.SCROLL_H
+                    else -> node.type
+                }
+                node.copy(orientation = cleanOrient, type = syncedType)
+            }
+            IdeWidgetProperty.CUSTOM_VIEW -> node.copy(customView = trimmed.ifBlank { "none" })
+            IdeWidgetProperty.DIVIDER_HEIGHT -> {
+                val dh = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 32) ?: node.dividerHeightDp
+                node.copy(dividerHeightDp = dh)
+            }
+            IdeWidgetProperty.NUM_COLUMNS -> {
+                val nc = trimmed.toIntOrNull()?.coerceIn(1, 8) ?: node.numColumns
+                node.copy(numColumns = nc)
+            }
+            IdeWidgetProperty.HORIZONTAL_SPACING -> {
+                val hs = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 48) ?: node.horizontalSpacingDp
+                node.copy(horizontalSpacingDp = hs)
+            }
+            IdeWidgetProperty.VERTICAL_SPACING -> {
+                val vs = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 48) ?: node.verticalSpacingDp
+                node.copy(verticalSpacingDp = vs)
+            }
+            IdeWidgetProperty.CHOICE_MODE -> node.copy(choiceMode = trimmed.ifBlank { "none" })
+            IdeWidgetProperty.LAYOUT_MANAGER -> node.copy(layoutManager = trimmed.ifBlank { "LinearVertical" })
+            IdeWidgetProperty.STACK_FROM_BOTTOM -> node.copy(stackFromBottom = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.FAST_SCROLL -> node.copy(fastScroll = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.PAGE_LIMIT -> {
+                val pl = trimmed.toIntOrNull()?.coerceIn(1, 10) ?: node.pageLimit
+                node.copy(pageLimit = pl)
+            }
+            IdeWidgetProperty.TIME_FORMAT_12H -> node.copy(format12Hour = raw.ifBlank { "hh:mm:ss a" })
+            IdeWidgetProperty.TIME_FORMAT_24H -> node.copy(format24Hour = raw.ifBlank { "HH:mm:ss" })
+            IdeWidgetProperty.IS_24_HOUR_VIEW -> node.copy(is24HourView = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.PICKER_MODE -> node.copy(pickerMode = trimmed.ifBlank { "clock" })
+            IdeWidgetProperty.FIRST_DAY_OF_WEEK -> {
+                val fd = trimmed.toIntOrNull()?.coerceIn(1, 7) ?: node.firstDayOfWeek
+                node.copy(firstDayOfWeek = fd)
+            }
+            IdeWidgetProperty.MIN_DATE -> node.copy(minDate = trimmed.ifBlank { "01/01/2000" })
+            IdeWidgetProperty.MAX_DATE -> node.copy(maxDate = trimmed.ifBlank { "12/31/2035" })
+            IdeWidgetProperty.SHOW_WEEK_NUMBER -> node.copy(showWeekNumber = trimmed.equals("true", ignoreCase = true))
+            IdeWidgetProperty.TIME_ZONE -> node.copy(timeZone = trimmed.ifBlank { "Default" })
+            IdeWidgetProperty.COUNT_DOWN -> node.copy(countDown = trimmed.equals("true", ignoreCase = true))
             IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.copy(customAttributes = trimmed)
             IdeWidgetProperty.CONVERT -> {
                 val chosenType = runCatching { IdeWidgetType.valueOf(trimmed) }.getOrDefault(node.type)
-                node.copy(type = chosenType)
+                val syncedOrient = when (chosenType) {
+                    IdeWidgetType.LINEAR_H, IdeWidgetType.SCROLL_V -> "horizontal"
+                    IdeWidgetType.LINEAR_V, IdeWidgetType.SCROLL_H -> "vertical"
+                    else -> node.orientation
+                }
+                node.copy(type = chosenType, orientation = syncedOrient)
             }
             IdeWidgetProperty.WIDTH -> {
                 val clean = when {
@@ -8226,6 +9448,248 @@ private fun IdeWidgetPropertyEditDialog(
                             )
                         }
 
+                        IdeWidgetProperty.ORIENTATION -> {
+                            listOf(
+                                "vertical" to "Vertical (عمودي — العناصر تحت بعضها)",
+                                "horizontal" to "Horizontal (أفقي — العناصر بجانب بعضها)",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.CUSTOM_VIEW -> {
+                            listOf(
+                                "none" to "Default List Row Layout (بدون Custom View)",
+                                "custom_item.xml" to "Custom List Row (@layout/custom_item)",
+                                "item_card.xml" to "Card List Row (@layout/item_card)",
+                                "grid_cell.xml" to "Grid Cell Layout (@layout/grid_cell)",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Custom View XML file name (e.g. custom_item.xml)",
+                            )
+                        }
+
+                        IdeWidgetProperty.DIVIDER_HEIGHT,
+                        IdeWidgetProperty.HORIZONTAL_SPACING,
+                        IdeWidgetProperty.VERTICAL_SPACING -> {
+                            val presets = listOf("0", "1", "2", "4", "8", "12", "16")
+                            DialogPresetChipsGrid(
+                                presets = presets,
+                                selectedValue = textInput,
+                                suffix = "dp",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "${property.title} (dp)",
+                            )
+                        }
+
+                        IdeWidgetProperty.NUM_COLUMNS,
+                        IdeWidgetProperty.PAGE_LIMIT -> {
+                            val presets = listOf("1", "2", "3", "4", "5", "6")
+                            DialogPresetChipsGrid(
+                                presets = presets,
+                                selectedValue = textInput,
+                                suffix = "",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = property.title,
+                            )
+                        }
+
+                        IdeWidgetProperty.CHOICE_MODE -> {
+                            listOf(
+                                "none" to "No Selection (Default)",
+                                "singleChoice" to "Single Choice (اختيار عنصر واحد)",
+                                "multipleChoice" to "Multiple Choice (اختيار متعدد)",
+                                "multipleChoiceModal" to "Multiple Choice Modal Action Mode",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.LAYOUT_MANAGER -> {
+                            listOf(
+                                "LinearVertical" to "LinearLayoutManager (Vertical)",
+                                "LinearHorizontal" to "LinearLayoutManager (Horizontal)",
+                                "Grid" to "GridLayoutManager (Columns)",
+                                "StaggeredGrid" to "StaggeredGridLayoutManager",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.TIME_FORMAT_12H -> {
+                            listOf(
+                                "hh:mm:ss a" to "12:30:45 PM (Hours, Minutes, Seconds)",
+                                "hh:mm a" to "12:30 PM (Hours & Minutes)",
+                                "EEE, MMM d, hh:mm a" to "Sat, Oct 17, 12:30 PM",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput == valStr,
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:format12Hour",
+                            )
+                        }
+
+                        IdeWidgetProperty.TIME_FORMAT_24H -> {
+                            listOf(
+                                "HH:mm:ss" to "14:30:45 (24-Hour with Seconds)",
+                                "HH:mm" to "14:30 (24-Hour Short)",
+                                "yyyy-MM-dd HH:mm" to "2026-10-17 14:30",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput == valStr,
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:format24Hour",
+                            )
+                        }
+
+                        IdeWidgetProperty.PICKER_MODE -> {
+                            val modes = if (node.type == IdeWidgetType.TIME_PICKER) {
+                                listOf(
+                                    "clock" to "Clock Dial Mode (ساعة دائرية)",
+                                    "spinner" to "Spinner Wheel Mode (بكرة تمرير)",
+                                )
+                            } else {
+                                listOf(
+                                    "calendar" to "Calendar Grid Mode (تقويم شهري)",
+                                    "spinner" to "Spinner Wheel Mode (بكرة تمرير)",
+                                )
+                            }
+                            modes.forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.FIRST_DAY_OF_WEEK -> {
+                            listOf(
+                                "1" to "Sunday (الأحد)",
+                                "2" to "Monday (الإثنين)",
+                                "7" to "Saturday (السبت)",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput == valStr,
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.MIN_DATE,
+                        IdeWidgetProperty.MAX_DATE -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "${property.title} (MM/DD/YYYY)",
+                            )
+                        }
+
+                        IdeWidgetProperty.TIME_ZONE -> {
+                            listOf(
+                                "Default" to "Device Local Time Zone",
+                                "UTC" to "Coordinated Universal Time (UTC)",
+                                "Africa/Cairo" to "Cairo (EET / GMT+2)",
+                                "Asia/Riyadh" to "Riyadh (AST / GMT+3)",
+                                "Europe/London" to "London (GMT / BST)",
+                                "America/New_York" to "New York (EST / EDT)",
+                            ).forEach { (valStr, sub) ->
+                                DialogOptionRow(
+                                    label = valStr,
+                                    subtitle = sub,
+                                    selected = textInput.equals(valStr, ignoreCase = true),
+                                    onClick = {
+                                        textInput = valStr
+                                        applyAndSave(valStr)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:timeZone",
+                            )
+                        }
+
                         IdeWidgetProperty.CONVERT -> {
                             val candidateTypes = when {
                                 node.type.isContainer -> listOf(
@@ -8267,6 +9731,31 @@ private fun IdeWidgetPropertyEditDialog(
                                     IdeWidgetType.AD_WEB_VIEW,
                                     IdeWidgetType.SWIPE_WEB_VIEW,
                                 )
+                                node.type.isListWidget -> listOf(
+                                    IdeWidgetType.GRID_VIEW,
+                                    IdeWidgetType.LIST_VIEW,
+                                    IdeWidgetType.TREE_VIEW,
+                                    IdeWidgetType.RECYCLER_VIEW,
+                                    IdeWidgetType.VIEW_PAGER,
+                                    IdeWidgetType.EXPANDABLE_LIST_VIEW,
+                                    IdeWidgetType.STAGGERED_GRID_VIEW,
+                                    IdeWidgetType.HORIZONTAL_LIST_VIEW,
+                                    IdeWidgetType.CAROUSEL_VIEW,
+                                    IdeWidgetType.SWIPE_LIST_VIEW,
+                                )
+                                node.type.isDateWidget -> listOf(
+                                    IdeWidgetType.ANALOG_CLOCK,
+                                    IdeWidgetType.DIGITAL_CLOCK,
+                                    IdeWidgetType.TIME_PICKER,
+                                    IdeWidgetType.DATE_PICKER,
+                                    IdeWidgetType.CALENDAR_VIEW,
+                                    IdeWidgetType.TEXT_CLOCK,
+                                    IdeWidgetType.CHRONOMETER,
+                                    IdeWidgetType.COUNTDOWN_VIEW,
+                                    IdeWidgetType.STOPWATCH_VIEW,
+                                    IdeWidgetType.DATE_RANGE_PICKER,
+                                    IdeWidgetType.WORLD_CLOCK_VIEW,
+                                )
                                 else -> listOf(
                                     IdeWidgetType.TEXT_VIEW,
                                     IdeWidgetType.EDIT_TEXT,
@@ -8286,6 +9775,8 @@ private fun IdeWidgetPropertyEditDialog(
                                         t.isButtonWidget -> "Button Widget"
                                         t.isChooseWidget -> "Choose Widget"
                                         t.isWebWidget -> "Web Widget"
+                                        t.isListWidget -> "List Widget"
+                                        t.isDateWidget -> "Date / Time Widget"
                                         else -> "Text Widget"
                                     },
                                     selected = selected,
@@ -8475,7 +9966,12 @@ private fun IdeWidgetPropertyEditDialog(
                         IdeWidgetProperty.WEB_DOM_STORAGE,
                         IdeWidgetProperty.WEB_ZOOM,
                         IdeWidgetProperty.WEB_DESKTOP_MODE,
-                        IdeWidgetProperty.WEB_FILE_ACCESS -> {
+                        IdeWidgetProperty.WEB_FILE_ACCESS,
+                        IdeWidgetProperty.STACK_FROM_BOTTOM,
+                        IdeWidgetProperty.FAST_SCROLL,
+                        IdeWidgetProperty.IS_24_HOUR_VIEW,
+                        IdeWidgetProperty.SHOW_WEEK_NUMBER,
+                        IdeWidgetProperty.COUNT_DOWN -> {
                             listOf("true" to "Enabled (True)", "false" to "Disabled (False)").forEach { (valStr, sub) ->
                                 DialogOptionRow(
                                     label = valStr,
