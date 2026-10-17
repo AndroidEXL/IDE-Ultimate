@@ -35,4 +35,64 @@
     <string name="feature_plugins_desc">Extend your setup with custom packs.</string>
     <string name="feature_build">Build &amp; sign</string>
     <string name="feature_build_desc">Ship an APK in a single tap.</string>
+
+    <!-- Workspace -->
+    <string name="workspace_title">Workspace</string>
+    <string name="workspace_subtitle">Organise your projects into folders</string>
+    <string name="workspace_back">Back</string>
+    <string name="workspace_root">Root</string>
+    <string name="workspace_root_inside">Create inside: %1$s</string>
+    <string name="workspace_empty_title">Nothing here yet</string>
+    <string name="workspace_empty_desc">Tap + to create a folder or a new project and start organising.</string>
+    <string name="workspace_count">Items: %1$d</string>
+    <string name="workspace_empty_folder">Empty folder</string>
+    <string name="workspace_fab">Add item</string>
+
+    <string name="sheet_create_title">What do you want to create?</string>
+    <string name="sheet_create_subtitle">Pick the type of the new item in this location.</string>
+    <string name="sheet_new_folder">New folder</string>
+    <string name="sheet_new_folder_desc">Create a folder to organise your projects.</string>
+    <string name="sheet_new_project">New project</string>
+    <string name="sheet_new_project_desc">Create a new Kotlin project with ready Gradle files.</string>
+    <string name="sheet_folder_hint">Long press any folder or project for more options.</string>
+    <string name="sheet_folder_actions">Folder options</string>
+    <string name="sheet_project_actions">Project options</string>
+    <string name="folder_label">Folder</string>
+    <string name="project_label">Kotlin project</string>
+
+    <string name="action_rename">Rename</string>
+    <string name="action_rename_desc">Change the item name at any time.</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_delete_folder_desc">Delete the folder and everything inside it.</string>
+    <string name="action_delete_project_desc">Remove the project from your workspace.</string>
+    <string name="action_export">Export code (ZIP)</string>
+    <string name="action_export_desc">Download a ZIP with a ready Gradle project.</string>
+    <string name="action_new_project_here">Create new project</string>
+    <string name="action_new_project_here_desc">Add a new project in the same folder.</string>
+
+    <string name="dialog_new_folder">New folder</string>
+    <string name="dialog_new_project">New project</string>
+    <string name="dialog_rename">Rename item</string>
+    <string name="dialog_name_label">Name</string>
+    <string name="dialog_name_hint">Type a clear name…</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_create">Create</string>
+    <string name="dialog_save">Save</string>
+    <string name="error_name_empty">Type a name first.</string>
+    <string name="error_name_taken">That name is already used here.</string>
+    <string name="error_name_too_long">The name is too long (40 characters max).</string>
+
+    <string name="delete_folder_title">Delete folder &quot;%1$s&quot;?</string>
+    <string name="delete_project_title">Delete project &quot;%1$s&quot;?</string>
+    <string name="delete_folder_message">The folder and everything inside it will be removed permanently. This cannot be undone.</string>
+    <string name="delete_project_message">The project will be removed permanently. This cannot be undone.</string>
+    <string name="delete_folder_count">The folder contains %1$d item(s) that will be removed too.</string>
+    <string name="delete_confirm">Delete permanently</string>
+
+    <string name="msg_folder_created">Folder created</string>
+    <string name="msg_project_created">Project created</string>
+    <string name="msg_renamed">Name updated</string>
+    <string name="msg_deleted">Item deleted</string>
+    <string name="export_success">&quot;%1$s&quot; exported successfully</string>
+    <string name="export_failed">Could not export the project</string>
 </resources>

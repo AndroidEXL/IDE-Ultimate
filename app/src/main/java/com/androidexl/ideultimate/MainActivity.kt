@@ -18,8 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.androidexl.ideultimate.ui.screens.HomeScreen
 import com.androidexl.ideultimate.ui.screens.SplashScreen
+import com.androidexl.ideultimate.ui.screens.WorkspaceScreen
 import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.IDEUltimateTheme
+
+private enum class Screen { Splash, Home, Workspace }
 
 class MainActivity : ComponentActivity() {
 
@@ -34,8 +37,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             IDEUltimateTheme {
-                var showSplash by rememberSaveable { mutableStateOf(true) }
-                var homeVisible by rememberSaveable { mutableStateOf(false) }
+                var screen by rememberSaveable { mutableStateOf(Screen.Splash.name) }
                 var splashKey by rememberSaveable { mutableStateOf(0) }
 
                 Box(
@@ -43,22 +45,20 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(DeepNavy),
                 ) {
-                    if (homeVisible) {
-                        HomeScreen(
+                    when (screen) {
+                        Screen.Home.name -> HomeScreen(
                             onReplaySplash = {
                                 splashKey += 1
-                                showSplash = true
+                                screen = Screen.Splash.name
                             },
+                            onOpenWorkspace = { screen = Screen.Workspace.name },
                         )
-                    }
-
-                    if (showSplash) {
-                        key(splashKey) {
+                        Screen.Workspace.name -> WorkspaceScreen(
+                            onBack = { screen = Screen.Home.name },
+                        )
+                        else -> key(splashKey) {
                             SplashScreen(
-                                onFinished = {
-                                    showSplash = false
-                                    homeVisible = true
-                                },
+                                onFinished = { screen = Screen.Home.name },
                             )
                         }
                     }

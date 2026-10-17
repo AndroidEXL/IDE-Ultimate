@@ -84,6 +84,7 @@ private val HomeEnterEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 @Composable
 fun HomeScreen(
     onReplaySplash: () -> Unit,
+    onOpenWorkspace: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -173,7 +174,7 @@ fun HomeScreen(
             Spacer(Modifier.height(26.dp))
 
             WorkspaceCard(
-                onStart = { toast(context, R.string.home_soon) },
+                onStart = onOpenWorkspace,
                 onReplaySplash = onReplaySplash,
             )
 

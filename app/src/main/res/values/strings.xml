@@ -35,4 +35,64 @@
     <string name="feature_plugins_desc">وسّع بيئتك بحزم مخصصة.</string>
     <string name="feature_build">بناء وتوقيع</string>
     <string name="feature_build_desc">أنشئ APK بضغطة واحدة.</string>
+
+    <!-- Workspace -->
+    <string name="workspace_title">مساحة العمل</string>
+    <string name="workspace_subtitle">نظّم مشاريعك في مجلدات</string>
+    <string name="workspace_back">رجوع</string>
+    <string name="workspace_root">الجذر</string>
+    <string name="workspace_root_inside">إنشاء داخل: %1$s</string>
+    <string name="workspace_empty_title">لا توجد عناصر بعد</string>
+    <string name="workspace_empty_desc">اضغط زر + لإنشاء مجلد أو مشروع جديد وبدء التنظيم.</string>
+    <string name="workspace_count">العناصر: %1$d</string>
+    <string name="workspace_empty_folder">مجلد فارغ</string>
+    <string name="workspace_fab">إضافة عنصر</string>
+
+    <string name="sheet_create_title">ماذا تريد أن تنشئ؟</string>
+    <string name="sheet_create_subtitle">اختر نوع العنصر الجديد داخل هذا الموقع.</string>
+    <string name="sheet_new_folder">مجلد جديد</string>
+    <string name="sheet_new_folder_desc">أنشئ مجلدًا لتنظيم مشاريعك.</string>
+    <string name="sheet_new_project">مشروع جديد</string>
+    <string name="sheet_new_project_desc">أنشئ مشروع Kotlin جديدًا بملفات Gradle جاهزة.</string>
+    <string name="sheet_folder_hint">اضغط مطولًا على أي مجلد أو مشروع لمزيد من الخيارات.</string>
+    <string name="sheet_folder_actions">خيارات المجلد</string>
+    <string name="sheet_project_actions">خيارات المشروع</string>
+    <string name="folder_label">مجلد</string>
+    <string name="project_label">مشروع Kotlin</string>
+
+    <string name="action_rename">تعديل الاسم</string>
+    <string name="action_rename_desc">غيّر اسم العنصر في أي وقت.</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_delete_folder_desc">حذف المجلد وكل ما بداخله.</string>
+    <string name="action_delete_project_desc">حذف المشروع من مساحة العمل.</string>
+    <string name="action_export">تصدير الكود (ZIP)</string>
+    <string name="action_export_desc">نزّل ملف ZIP يحتوي مشروع Gradle جاهزًا.</string>
+    <string name="action_new_project_here">إنشاء مشروع جديد</string>
+    <string name="action_new_project_here_desc">أضف مشروعًا جديدًا في نفس المجلد.</string>
+
+    <string name="dialog_new_folder">مجلد جديد</string>
+    <string name="dialog_new_project">مشروع جديد</string>
+    <string name="dialog_rename">تعديل الاسم</string>
+    <string name="dialog_name_label">الاسم</string>
+    <string name="dialog_name_hint">اكتب اسمًا واضحًا…</string>
+    <string name="dialog_cancel">إلغاء</string>
+    <string name="dialog_create">إنشاء</string>
+    <string name="dialog_save">حفظ</string>
+    <string name="error_name_empty">اكتب اسمًا أولًا.</string>
+    <string name="error_name_taken">هذا الاسم مستخدم بالفعل هنا.</string>
+    <string name="error_name_too_long">الاسم طويل جدًا (40 حرفًا كحد أقصى).</string>
+
+    <string name="delete_folder_title">حذف المجلد &quot;%1$s&quot;؟</string>
+    <string name="delete_project_title">حذف المشروع &quot;%1$s&quot;؟</string>
+    <string name="delete_folder_message">سيُحذف المجلد وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_project_message">سيُحذف المشروع نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_folder_count">يحتوي المجلد على %1$d عنصرًا ستتم إزالته أيضًا.</string>
+    <string name="delete_confirm">حذف نهائي</string>
+
+    <string name="msg_folder_created">تم إنشاء المجلد</string>
+    <string name="msg_project_created">تم إنشاء المشروع</string>
+    <string name="msg_renamed">تم تحديث الاسم</string>
+    <string name="msg_deleted">تم الحذف</string>
+    <string name="export_success">تم تصدير &quot;%1$s&quot; بنجاح</string>
+    <string name="export_failed">تعذّر تصدير المشروع</string>
 </resources>
