@@ -7,19 +7,6 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
-/**
- * Signing setup.
- *
- * CI runners start from a clean image, so the auto-generated debug keystore is
- * different on every run. That makes each APK carry a different signature and
- * Android refuses to install a new build over the previous one. To keep every
- * artifact upgradeable we ship one demo key in `keystore/` and use it for both
- * build types.
- *
- * For store distribution, provide a private key through Gradle properties or
- * environment variables (IDEU_STORE_FILE, IEU_STORE_PASSWORD, IEU_KEY_ALIAS,
- * IEU_KEY_PASSWORD) — they take priority when present.
- */
 val demoKeystore = rootProject.file("keystore/ide-ultimate.p12")
 
 fun secret(name: String): String? =
@@ -35,8 +22,8 @@ android {
         applicationId = "com.androidexl.ideultimate"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.9.0"
+        versionCode = 11
+        versionName = "1.10.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -71,12 +58,11 @@ android {
         }
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Demo APK: signed with the committed demo key so upgrades install cleanly.
             signingConfig = signingConfigs.findByName(
                 if (productionStoreFile != null) "production" else "demo",
             )
@@ -119,8 +105,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
 
-    // Firebase (Realtime Database + Storage configured via google-services.json)
+    // Firebase (Auth + Realtime Database + Storage configured via google-services.json)
     implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
     implementation(libs.firebase.database)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.common)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -33,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -54,6 +56,7 @@ import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
@@ -86,12 +89,12 @@ fun savePickedProjectIcon(context: Context, uri: Uri): String? = runCatching {
     val rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
         BitmapFactory.decodeStream(stream)
     } ?: return null
-    val size = 256
+    val size = 192
     val scaled = Bitmap.createScaledBitmap(rawBitmap, size, size, true)
     val dir = File(context.filesDir, "project_icons").apply { mkdirs() }
     val outFile = File(dir, "icon_${System.currentTimeMillis()}.png")
     FileOutputStream(outFile).use { out ->
-        scaled.compress(Bitmap.CompressFormat.PNG, 92, out)
+        scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
     }
     outFile.absolutePath
 }.getOrNull()
@@ -100,7 +103,7 @@ fun savePickedProjectScreenshot(context: Context, uri: Uri): String? = runCatchi
     val rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
         BitmapFactory.decodeStream(stream)
     } ?: return null
-    val maxDim = 960
+    val maxDim = 720
     val w = rawBitmap.width.coerceAtLeast(1)
     val h = rawBitmap.height.coerceAtLeast(1)
     val scale = (maxDim.toFloat() / maxOf(w, h)).coerceAtMost(1f)
@@ -115,12 +118,62 @@ fun savePickedProjectScreenshot(context: Context, uri: Uri): String? = runCatchi
         rawBitmap
     }
     val dir = File(context.filesDir, "project_screenshots").apply { mkdirs() }
-    val outFile = File(dir, "shot_${System.currentTimeMillis()}_${(100..999).random()}.png")
+    val outFile = File(dir, "shot_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
     FileOutputStream(outFile).use { out ->
-        scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
+        scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
     }
     outFile.absolutePath
 }.getOrNull()
+
+/**
+ * Converts a local image file path into a compact Base64 data URI so it can be stored directly
+ * in Firebase Realtime Database when uploading user avatars, project icons, or screenshots.
+ */
+fun encodeImageForFirebase(pathOrData: String?, maxDim: Int = 160): String? {
+    val value = pathOrData?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    if (value.startsWith("data:image", ignoreCase = true) || value.startsWith("http", ignoreCase = true)) {
+        return value
+    }
+    return runCatching {
+        val raw = BitmapFactory.decodeFile(value) ?: return value
+        val w = raw.width.coerceAtLeast(1)
+        val h = raw.height.coerceAtLeast(1)
+        val scale = (maxDim.toFloat() / maxOf(w, h)).coerceAtMost(1f)
+        val bmp = if (scale < 1f) {
+            Bitmap.createScaledBitmap(
+                raw,
+                (w * scale).toInt().coerceAtLeast(1),
+                (h * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        } else {
+            raw
+        }
+        val baos = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 78, baos)
+        val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        "data:image/jpeg;base64,$b64"
+    }.getOrDefault(value)
+}
+
+fun decodePathOrDataUri(pathOrData: String?): ImageBitmap? {
+    val value = pathOrData?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching {
+        if (value.startsWith("data:image", ignoreCase = true)) {
+            val comma = value.indexOf(',')
+            if (comma > 0) {
+                val bytes = Base64.decode(value.substring(comma + 1), Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            } else {
+                null
+            }
+        } else if (!value.startsWith("http", ignoreCase = true)) {
+            BitmapFactory.decodeFile(value)?.asImageBitmap()
+        } else {
+            null
+        }
+    }.getOrNull()
+}
 
 @Composable
 fun UserAvatarView(
@@ -130,12 +183,7 @@ fun UserAvatarView(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val customBitmap = remember(avatarPath) {
-        avatarPath?.takeIf { it.isNotBlank() }?.let { path ->
-            runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
-        }
-    }
-
+    val customBitmap = remember(avatarPath) { decodePathOrDataUri(avatarPath) }
     val clickMod = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
 
     Box(
@@ -189,13 +237,7 @@ fun ProjectScreenshotImage(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 18.dp,
 ) {
-    val localBitmap = remember(pathOrUrl) {
-        if (!pathOrUrl.startsWith("http", ignoreCase = true)) {
-            runCatching { BitmapFactory.decodeFile(pathOrUrl)?.asImageBitmap() }.getOrNull()
-        } else {
-            null
-        }
-    }
+    val localBitmap = remember(pathOrUrl) { decodePathOrDataUri(pathOrUrl) }
     val shape = RoundedCornerShape(cornerRadius)
     Box(
         modifier = modifier
@@ -260,11 +302,7 @@ fun ProjectIconView(
         ((iconPreset % ProjectIconPresets.size) + ProjectIconPresets.size) % ProjectIconPresets.size,
     ) { ProjectIconPresets.first() }
 
-    val customBitmap = remember(customIconPath) {
-        customIconPath?.takeIf { it.isNotBlank() }?.let { path ->
-            runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
-        }
-    }
+    val customBitmap = remember(customIconPath) { decodePathOrDataUri(customIconPath) }
 
     val shape = RoundedCornerShape(cornerRadius)
     Box(

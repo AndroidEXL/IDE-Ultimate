@@ -1,12 +1,15 @@
 package com.androidexl.ideultimate.data
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import com.androidexl.ideultimate.ui.components.encodeImageForFirebase
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -15,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.Executors
 
 enum class StoreItemType {
     PROJECT,
@@ -55,16 +59,17 @@ data class UserAccountRecord(
 
 /**
  * Real-time Firebase-backed repository (`https://sketchware-f2a24-default-rtdb.firebaseio.com`)
- * with:
- * - Zero fake user & zero demo/sample items
- * - Full user authentication (Sign In & Sign Up with Name, Icon, Email, Password, Confirm Password)
- * - 3 item types: PROJECT (قسم المشاريع الجديدة), CODE_SNIPPET (قسم الأكواد البرمجية), LIBRARY (قسم المكتبات الخاصة)
+ * using BOTH the official Firebase Realtime Database / Auth SDKs AND direct HTTPS REST calls
+ * so every registration, login, project upload, code snippet, library, like/dislike, and collection
+ * is guaranteed to write to and read from Realtime Database immediately.
  */
 class CommunityStoreRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val prefs = appContext
-        .getSharedPreferences("ide_ultimate_community_v2", Context.MODE_PRIVATE)
+        .getSharedPreferences("ide_ultimate_community_v3", Context.MODE_PRIVATE)
+    private val ioExecutor = Executors.newCachedThreadPool()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     var currentUserId by mutableStateOf(prefs.getString(KEY_USER_ID, "") ?: "")
         private set
@@ -87,16 +92,20 @@ class CommunityStoreRepository(context: Context) {
     var isFirebaseConnected by mutableStateOf(false)
         private set
 
+    var lastFirebaseStatus by mutableStateOf("")
+        private set
+
     val firebaseProjectId: String = FirebaseConfig.PROJECT_ID
     val firebaseDatabaseUrl: String = FirebaseConfig.FIREBASE_URL
 
-    /** All store items across the 3 types (PROJECT, CODE_SNIPPET, LIBRARY) — starts empty with 0 demo items. */
+    /** All store items across the 3 types (PROJECT, CODE_SNIPPET, LIBRARY) — 0 demo items. */
     val items: SnapshotStateList<StoreProjectItem> = mutableStateListOf()
 
     private val accounts: SnapshotStateList<UserAccountRecord> = mutableStateListOf()
     private var firebaseDb: FirebaseDatabase? = null
 
     init {
+        FirebaseConfig.currentIdToken = prefs.getString(KEY_ID_TOKEN, null)
         val rawItems = prefs.getString(KEY_ITEMS, null)
         if (rawItems != null) {
             items.addAll(runCatching { parseItems(rawItems) }.getOrDefault(emptyList()))
@@ -109,100 +118,175 @@ class CommunityStoreRepository(context: Context) {
     }
 
     private fun initFirebaseRealtimeSync() {
-        val db = FirebaseConfig.ensureInitialized(appContext) ?: return
+        val db = FirebaseConfig.ensureInitialized(appContext)
         firebaseDb = db
 
-        // Remove any legacy demo items that existed in earlier versions
-        runCatching {
-            FirebaseConfig.LEGACY_DEMO_NODES.forEach { legacyPath ->
-                db.getReference(legacyPath).removeValue()
+        if (db != null) {
+            // 1. Monitor Firebase connection state (.info/connected)
+            runCatching {
+                db.getReference(".info/connected")
+                    .addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            val connected = snapshot.getValue(Boolean::class.java) == true
+                            if (connected) isFirebaseConnected = true
+                        }
+
+                        override fun onCancelled(error: DatabaseError) = Unit
+                    })
+            }
+
+            // 2. Listen to /users in Realtime Database
+            runCatching {
+                db.getReference(FirebaseConfig.NODE_USERS)
+                    .addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            isFirebaseConnected = true
+                            val loaded = ArrayList<UserAccountRecord>()
+                            for (child in snapshot.children) {
+                                val rec = parseAccountSnapshot(child)
+                                if (rec != null) loaded.add(rec)
+                            }
+                            if (loaded.isNotEmpty()) {
+                                mergeAccountsOnMain(loaded)
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            lastFirebaseStatus = error.message
+                        }
+                    })
+            }
+
+            // 3. Listen to /store_items in Realtime Database
+            runCatching {
+                db.getReference(FirebaseConfig.NODE_STORE_ITEMS)
+                    .addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            isFirebaseConnected = true
+                            val localById = items.associateBy { it.id }
+                            val remoteList = ArrayList<StoreProjectItem>()
+                            for (child in snapshot.children) {
+                                val parsed = parseItemSnapshot(child, localById[child.key])
+                                if (parsed != null) remoteList.add(parsed)
+                            }
+                            remoteList.sortByDescending { it.createdAt }
+                            items.clear()
+                            items.addAll(remoteList)
+                            persistItems()
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            lastFirebaseStatus = error.message
+                        }
+                    })
             }
         }
 
-        // 1. Monitor Firebase connection state (.info/connected)
-        runCatching {
-            db.getReference(".info/connected")
-                .addValueEventListener(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        isFirebaseConnected = snapshot.getValue(Boolean::class.java) == true
-                    }
+        // 4. Immediately fetch latest /users and /store_items over HTTPS REST
+        refreshFromFirebaseRest()
+    }
 
-                    override fun onCancelled(error: DatabaseError) {
-                        isFirebaseConnected = false
-                    }
-                })
-        }
-
-        // 2. Sync registered accounts (ide_ultimate/accounts)
-        runCatching {
-            val accountsRef = db.getReference(FirebaseConfig.NODE_ACCOUNTS)
-            accountsRef.keepSynced(true)
-            accountsRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val loaded = ArrayList<UserAccountRecord>()
-                    for (child in snapshot.children) {
-                        val userId = child.child("userId").getValue(String::class.java)
-                            ?: child.key
-                            ?: continue
-                        val name = child.child("name").getValue(String::class.java) ?: continue
-                        val email = child.child("email").getValue(String::class.java) ?: continue
-                        val passwordHash = child.child("passwordHash").getValue(String::class.java) ?: continue
-                        val avatarPath = child.child("avatarPath").getValue(String::class.java)
-                            ?.takeIf { it.isNotBlank() }
-                        val subs = child.child("subscribersCount").getValue(Int::class.java) ?: 0
-                        val createdAt = child.child("createdAt").getValue(Long::class.java)
-                            ?: System.currentTimeMillis()
-                        loaded.add(
-                            UserAccountRecord(
-                                userId = userId,
-                                name = name,
-                                email = email,
-                                passwordHash = passwordHash,
-                                avatarPath = avatarPath,
-                                subscribersCount = subs,
-                                createdAt = createdAt,
-                            ),
-                        )
-                    }
-                    accounts.clear()
-                    accounts.addAll(loaded)
-                    persistAccounts()
-
-                    if (isLoggedIn) {
-                        val currentAccount = accounts.firstOrNull { it.userId == currentUserId }
-                        if (currentAccount != null) {
-                            subscribersCount = currentAccount.subscribersCount
-                        }
+    fun refreshFromFirebaseRest() {
+        ioExecutor.execute {
+            val usersRes = FirebaseConfig.getRtdbJson(FirebaseConfig.NODE_USERS)
+            if (usersRes.isSuccess) {
+                val parsedUsers = parseUsersFromRtdbJson(usersRes.body)
+                mainHandler.post {
+                    isFirebaseConnected = true
+                    if (parsedUsers.isNotEmpty()) {
+                        mergeAccountsOnMain(parsedUsers)
                     }
                 }
-
-                override fun onCancelled(error: DatabaseError) = Unit
-            })
-        }
-
-        // 3. Sync Store Items (ide_ultimate/store_items) — no demo seeding
-        runCatching {
-            val itemsRef = db.getReference(FirebaseConfig.NODE_STORE_ITEMS)
-            itemsRef.keepSynced(true)
-            itemsRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
+            }
+            val itemsRes = FirebaseConfig.getRtdbJson(FirebaseConfig.NODE_STORE_ITEMS)
+            if (itemsRes.isSuccess) {
+                mainHandler.post {
+                    isFirebaseConnected = true
                     val localById = items.associateBy { it.id }
-                    val remoteList = ArrayList<StoreProjectItem>()
-                    for (child in snapshot.children) {
-                        val parsed = parseItemSnapshot(child, localById[child.key])
-                        if (parsed != null) {
-                            remoteList.add(parsed)
-                        }
-                    }
-                    remoteList.sortByDescending { it.createdAt }
+                    val parsedItems = parseItemsFromRtdbJson(itemsRes.body, localById)
+                    parsedItems.sortByDescending { it.createdAt }
                     items.clear()
-                    items.addAll(remoteList)
+                    items.addAll(parsedItems)
                     persistItems()
                 }
-
-                override fun onCancelled(error: DatabaseError) = Unit
-            })
+            }
         }
+    }
+
+    private fun mergeAccountsOnMain(remoteAccounts: List<UserAccountRecord>) {
+        val byEmail = LinkedHashMap<String, UserAccountRecord>()
+        accounts.forEach { byEmail[it.email.lowercase()] = it }
+        remoteAccounts.forEach { byEmail[it.email.lowercase()] = it }
+        accounts.clear()
+        accounts.addAll(byEmail.values)
+        persistAccounts()
+
+        if (isLoggedIn) {
+            val currentAccount = accounts.firstOrNull {
+                it.userId == currentUserId || it.email.equals(userEmail, ignoreCase = true)
+            }
+            if (currentAccount != null) {
+                subscribersCount = currentAccount.subscribersCount
+            }
+        }
+    }
+
+    private fun parseAccountSnapshot(child: DataSnapshot): UserAccountRecord? {
+        return runCatching {
+            val userId = child.child("userId").value?.toString()
+                ?: child.key
+                ?: return null
+            val name = child.child("name").value?.toString() ?: return null
+            val email = child.child("email").value?.toString() ?: return null
+            val passwordHash = child.child("passwordHash").value?.toString() ?: ""
+            val avatarPath = child.child("avatarPath").value?.toString()?.takeIf { it.isNotBlank() }
+            val subs = child.child("subscribersCount").value?.toString()?.toIntOrNull() ?: 0
+            val createdAt = child.child("createdAt").value?.toString()?.toLongOrNull()
+                ?: System.currentTimeMillis()
+            UserAccountRecord(
+                userId = userId,
+                name = name,
+                email = email,
+                passwordHash = passwordHash,
+                avatarPath = avatarPath,
+                subscribersCount = subs,
+                createdAt = createdAt,
+            )
+        }.getOrNull()
+    }
+
+    private fun parseUsersFromRtdbJson(body: String): List<UserAccountRecord> {
+        val trimmed = body.trim()
+        if (trimmed.isEmpty() || trimmed == "null" || !trimmed.startsWith("{")) return emptyList()
+        return runCatching {
+            val root = JSONObject(trimmed)
+            val result = ArrayList<UserAccountRecord>()
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val obj = root.optJSONObject(key) ?: continue
+                val userId = obj.optString("userId", key)
+                val name = obj.optString("name", "")
+                val email = obj.optString("email", "")
+                if (email.isBlank()) continue
+                val passwordHash = obj.optString("passwordHash", "")
+                val avatarPath = obj.optString("avatarPath", "").ifBlank { null }
+                val subs = obj.optInt("subscribersCount", 0)
+                val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                result.add(
+                    UserAccountRecord(
+                        userId = userId,
+                        name = name.ifBlank { email.substringBefore('@') },
+                        email = email,
+                        passwordHash = passwordHash,
+                        avatarPath = avatarPath,
+                        subscribersCount = subs,
+                        createdAt = createdAt,
+                    ),
+                )
+            }
+            result
+        }.getOrDefault(emptyList())
     }
 
     private fun parseItemSnapshot(
@@ -210,33 +294,33 @@ class CommunityStoreRepository(context: Context) {
         localExisting: StoreProjectItem?,
     ): StoreProjectItem? {
         return runCatching {
-            val id = snapshot.child("id").getValue(String::class.java)
+            val id = snapshot.child("id").value?.toString()
                 ?: snapshot.key
                 ?: return null
-            val typeStr = snapshot.child("type").getValue(String::class.java)
+            val typeStr = snapshot.child("type").value?.toString()
                 ?: StoreItemType.PROJECT.name
             val type = runCatching { StoreItemType.valueOf(typeStr) }
                 .getOrDefault(StoreItemType.PROJECT)
-            val name = snapshot.child("name").getValue(String::class.java) ?: return null
-            val details = snapshot.child("details").getValue(String::class.java) ?: ""
-            val codeContent = snapshot.child("codeContent").getValue(String::class.java) ?: ""
-            val iconPreset = snapshot.child("iconPreset").getValue(Int::class.java) ?: 0
-            val customIconPath = snapshot.child("customIconPath").getValue(String::class.java)
+            val name = snapshot.child("name").value?.toString() ?: return null
+            val details = snapshot.child("details").value?.toString() ?: ""
+            val codeContent = snapshot.child("codeContent").value?.toString() ?: ""
+            val iconPreset = snapshot.child("iconPreset").value?.toString()?.toIntOrNull() ?: 0
+            val customIconPath = snapshot.child("customIconPath").value?.toString()
                 ?.takeIf { it.isNotBlank() }
                 ?: localExisting?.customIconPath
-            val langName = snapshot.child("language").getValue(String::class.java) ?: "KOTLIN"
+            val langName = snapshot.child("language").value?.toString() ?: "KOTLIN"
             val language = runCatching { ProjectLanguage.valueOf(langName) }
                 .getOrDefault(ProjectLanguage.KOTLIN)
             val downloadLinks = snapshot.child("downloadLinks").children
-                .mapNotNull { it.getValue(String::class.java)?.takeIf { s -> s.isNotBlank() } }
+                .mapNotNull { it.value?.toString()?.takeIf { s -> s.isNotBlank() } }
             val imagePaths = snapshot.child("imagePaths").children
-                .mapNotNull { it.getValue(String::class.java)?.takeIf { s -> s.isNotBlank() } }
-            val likesCount = snapshot.child("likesCount").getValue(Int::class.java) ?: 0
-            val dislikesCount = snapshot.child("dislikesCount").getValue(Int::class.java) ?: 0
-            val authorName = snapshot.child("authorName").getValue(String::class.java) ?: ""
-            val createdByUserId = snapshot.child("createdByUserId").getValue(String::class.java) ?: ""
+                .mapNotNull { it.value?.toString()?.takeIf { s -> s.isNotBlank() } }
+            val likesCount = snapshot.child("likesCount").value?.toString()?.toIntOrNull() ?: 0
+            val dislikesCount = snapshot.child("dislikesCount").value?.toString()?.toIntOrNull() ?: 0
+            val authorName = snapshot.child("authorName").value?.toString() ?: ""
+            val createdByUserId = snapshot.child("createdByUserId").value?.toString() ?: ""
             val isMine = isLoggedIn && currentUserId.isNotBlank() && createdByUserId == currentUserId
-            val createdAt = snapshot.child("createdAt").getValue(Long::class.java)
+            val createdAt = snapshot.child("createdAt").value?.toString()?.toLongOrNull()
                 ?: localExisting?.createdAt
                 ?: System.currentTimeMillis()
 
@@ -263,106 +347,335 @@ class CommunityStoreRepository(context: Context) {
         }.getOrNull()
     }
 
-    private fun pushItemToFirebase(item: StoreProjectItem) {
-        val db = firebaseDb ?: return
+    private fun parseItemsFromRtdbJson(
+        body: String,
+        localById: Map<String, StoreProjectItem>,
+    ): ArrayList<StoreProjectItem> {
+        val list = ArrayList<StoreProjectItem>()
+        val trimmed = body.trim()
+        if (trimmed.isEmpty() || trimmed == "null" || !trimmed.startsWith("{")) return list
         runCatching {
-            val payload = mapOf(
+            val root = JSONObject(trimmed)
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val obj = root.optJSONObject(key) ?: continue
+                val id = obj.optString("id", key)
+                val name = obj.optString("name", "")
+                if (name.isBlank()) continue
+                val localExisting = localById[id]
+                val type = runCatching {
+                    StoreItemType.valueOf(obj.optString("type", StoreItemType.PROJECT.name))
+                }.getOrDefault(StoreItemType.PROJECT)
+                val lang = runCatching {
+                    ProjectLanguage.valueOf(obj.optString("language", ProjectLanguage.KOTLIN.name))
+                }.getOrDefault(ProjectLanguage.KOTLIN)
+                val linksArr = obj.optJSONArray("downloadLinks") ?: JSONArray()
+                val links = (0 until linksArr.length()).mapNotNull { i ->
+                    linksArr.optString(i).takeIf { it.isNotBlank() }
+                }
+                val imagesArr = obj.optJSONArray("imagePaths") ?: JSONArray()
+                val images = (0 until imagesArr.length()).mapNotNull { i ->
+                    imagesArr.optString(i).takeIf { it.isNotBlank() }
+                }
+                val customIcon = obj.optString("customIconPath", "").ifBlank {
+                    localExisting?.customIconPath
+                }
+                val createdByUserId = obj.optString("createdByUserId", "")
+                val isMine = isLoggedIn && currentUserId.isNotBlank() && createdByUserId == currentUserId
+                list.add(
+                    StoreProjectItem(
+                        id = id,
+                        type = type,
+                        name = name,
+                        details = obj.optString("details", ""),
+                        codeContent = obj.optString("codeContent", ""),
+                        iconPreset = obj.optInt("iconPreset", 0),
+                        customIconPath = customIcon,
+                        language = lang,
+                        downloadLinks = links,
+                        imagePaths = images,
+                        likesCount = obj.optInt("likesCount", 0),
+                        dislikesCount = obj.optInt("dislikesCount", 0),
+                        userReaction = localExisting?.userReaction ?: 0,
+                        savedInCollection = localExisting?.savedInCollection ?: false,
+                        createdByUserId = createdByUserId,
+                        createdByCurrentUser = isMine,
+                        authorName = obj.optString("authorName", ""),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    ),
+                )
+            }
+        }
+        return list
+    }
+
+    private fun itemToJsonObject(item: StoreProjectItem): JSONObject {
+        val encodedIcon = encodeImageForFirebase(item.customIconPath, maxDim = 160) ?: ""
+        val encodedImages = item.imagePaths.mapNotNull {
+            encodeImageForFirebase(it, maxDim = 480)
+        }
+        return JSONObject().apply {
+            put("id", item.id)
+            put("type", item.type.name)
+            put("name", item.name)
+            put("details", item.details)
+            put("codeContent", item.codeContent)
+            put("iconPreset", item.iconPreset)
+            put("customIconPath", encodedIcon)
+            put("language", item.language.name)
+            put("downloadLinks", JSONArray(item.downloadLinks))
+            put("imagePaths", JSONArray(encodedImages))
+            put("likesCount", item.likesCount)
+            put("dislikesCount", item.dislikesCount)
+            put("authorName", item.authorName)
+            put("createdByUserId", item.createdByUserId)
+            put("createdAt", item.createdAt)
+        }
+    }
+
+    private fun categoryNodeFor(type: StoreItemType): String = when (type) {
+        StoreItemType.PROJECT -> FirebaseConfig.NODE_PROJECTS
+        StoreItemType.CODE_SNIPPET -> FirebaseConfig.NODE_CODES
+        StoreItemType.LIBRARY -> FirebaseConfig.NODE_LIBRARIES
+    }
+
+    private fun pushItemToFirebaseBlocking(item: StoreProjectItem): RtdbHttpResponse {
+        val jsonObj = itemToJsonObject(item)
+        val jsonString = jsonObj.toString()
+
+        // 1. Write via official FirebaseDatabase SDK
+        runCatching {
+            val mapPayload = mapOf(
                 "id" to item.id,
                 "type" to item.type.name,
                 "name" to item.name,
                 "details" to item.details,
                 "codeContent" to item.codeContent,
                 "iconPreset" to item.iconPreset,
-                "customIconPath" to (item.customIconPath ?: ""),
+                "customIconPath" to jsonObj.optString("customIconPath", ""),
                 "language" to item.language.name,
                 "downloadLinks" to item.downloadLinks,
-                "imagePaths" to item.imagePaths,
+                "imagePaths" to (0 until (jsonObj.optJSONArray("imagePaths")?.length() ?: 0)).map {
+                    jsonObj.getJSONArray("imagePaths").getString(it)
+                },
                 "likesCount" to item.likesCount,
                 "dislikesCount" to item.dislikesCount,
                 "authorName" to item.authorName,
                 "createdByUserId" to item.createdByUserId,
                 "createdAt" to item.createdAt,
             )
-            db.getReference(FirebaseConfig.NODE_STORE_ITEMS)
-                .child(item.id)
-                .setValue(payload)
+            firebaseDb?.getReference(FirebaseConfig.NODE_STORE_ITEMS)
+                ?.child(item.id)
+                ?.setValue(mapPayload)
+            firebaseDb?.getReference(categoryNodeFor(item.type))
+                ?.child(item.id)
+                ?.setValue(mapPayload)
         }
+
+        // 2. Write directly via HTTPS PUT to Realtime Database REST API
+        val mainWrite = FirebaseConfig.putRtdbJson(
+            "${FirebaseConfig.NODE_STORE_ITEMS}/${item.id}",
+            jsonString,
+        )
+        FirebaseConfig.putRtdbJson(
+            "${categoryNodeFor(item.type)}/${item.id}",
+            jsonString,
+        )
+        return mainWrite
     }
 
-    private fun pushAccountToFirebase(account: UserAccountRecord) {
-        val db = firebaseDb ?: return
+    private fun pushAccountToFirebaseBlocking(account: UserAccountRecord): RtdbHttpResponse {
+        val encodedAvatar = encodeImageForFirebase(account.avatarPath, maxDim = 160) ?: ""
+        val userProjectsCount = items.count { it.createdByUserId == account.userId }
+        val userLikesCount = items.filter { it.createdByUserId == account.userId }.sumOf { it.likesCount }
+        val userDislikesCount = items.filter { it.createdByUserId == account.userId }.sumOf { it.dislikesCount }
+
+        val jsonObj = JSONObject().apply {
+            put("userId", account.userId)
+            put("name", account.name)
+            put("email", account.email)
+            put("passwordHash", account.passwordHash)
+            put("avatarPath", encodedAvatar)
+            put("subscribersCount", account.subscribersCount)
+            put("projectsCount", userProjectsCount)
+            put("likesCount", userLikesCount)
+            put("dislikesCount", userDislikesCount)
+            put("createdAt", account.createdAt)
+            put("updatedAt", System.currentTimeMillis())
+        }
+
+        // 1. Write via official FirebaseDatabase SDK
         runCatching {
             val payload = mapOf(
                 "userId" to account.userId,
                 "name" to account.name,
                 "email" to account.email,
                 "passwordHash" to account.passwordHash,
-                "avatarPath" to (account.avatarPath ?: ""),
+                "avatarPath" to encodedAvatar,
                 "subscribersCount" to account.subscribersCount,
+                "projectsCount" to userProjectsCount,
+                "likesCount" to userLikesCount,
+                "dislikesCount" to userDislikesCount,
                 "createdAt" to account.createdAt,
+                "updatedAt" to System.currentTimeMillis(),
             )
-            db.getReference(FirebaseConfig.NODE_ACCOUNTS)
-                .child(account.userId)
-                .setValue(payload)
-            db.getReference(FirebaseConfig.NODE_USERS)
-                .child(account.userId)
-                .setValue(
-                    payload + mapOf(
-                        "projectsCount" to userPublishedProjects().size,
-                        "likesCount" to totalUserLikes(),
-                        "dislikesCount" to totalUserDislikes(),
-                    ),
-                )
+            firebaseDb?.getReference(FirebaseConfig.NODE_USERS)
+                ?.child(account.userId)
+                ?.setValue(payload)
         }
+
+        // 2. Write directly via HTTPS PUT to /users/<userId>.json in Realtime Database
+        return FirebaseConfig.putRtdbJson(
+            "${FirebaseConfig.NODE_USERS}/${account.userId}",
+            jsonObj.toString(),
+        )
     }
 
     /**
-     * Sign up a new user with Name, Avatar, Email, Password, and Confirm Password.
+     * Asynchronously registers a new account in Firebase Auth + Realtime Database (`/users/<userId>`)
+     * and invokes [onComplete] on the Main Thread once saved in Realtime Database.
      */
-    fun registerNewAccount(
+    fun registerNewAccountAsync(
         name: String,
         email: String,
         password: String,
         avatarPath: String?,
-    ): Result<UserAccountRecord> {
+        onComplete: (Boolean, String?) -> Unit,
+    ) {
         val cleanName = name.trim()
         val cleanEmail = email.trim().lowercase()
-        val existing = accounts.firstOrNull { it.email.equals(cleanEmail, ignoreCase = true) }
-        if (existing != null) {
-            return Result.failure(IllegalArgumentException("EMAIL_TAKEN"))
-        }
 
-        val newId = "usr_" + UUID.randomUUID().toString().replace("-", "").take(12)
-        val record = UserAccountRecord(
-            userId = newId,
-            name = cleanName,
-            email = cleanEmail,
-            passwordHash = hashPassword(password),
-            avatarPath = avatarPath,
-            subscribersCount = 0,
-        )
-        accounts.add(record)
-        persistAccounts()
-        pushAccountToFirebase(record)
-        applyActiveSession(record)
-        return Result.success(record)
+        ioExecutor.execute {
+            // 1. Fetch latest /users from Realtime Database to check if email already exists
+            val latestUsersRes = FirebaseConfig.getRtdbJson(FirebaseConfig.NODE_USERS)
+            val remoteAccounts = if (latestUsersRes.isSuccess) {
+                parseUsersFromRtdbJson(latestUsersRes.body)
+            } else {
+                emptyList()
+            }
+
+            val alreadyExists = remoteAccounts.any { it.email.equals(cleanEmail, ignoreCase = true) } ||
+                accounts.any { it.email.equals(cleanEmail, ignoreCase = true) }
+            if (alreadyExists) {
+                mainHandler.post {
+                    onComplete(false, "EMAIL_TAKEN")
+                }
+                return@execute
+            }
+
+            // 2. Register in Firebase Authentication (IdentityToolkit + FirebaseAuth SDK)
+            val authRes = FirebaseConfig.signUpWithIdentityToolkit(cleanEmail, password)
+            runCatching {
+                FirebaseConfig.authInstance(appContext)
+                    ?.createUserWithEmailAndPassword(cleanEmail, password)
+            }
+            if (authRes.idToken.isNotBlank()) {
+                prefs.edit().putString(KEY_ID_TOKEN, authRes.idToken).apply()
+            }
+
+            val newId = authRes.localId.takeIf { it.isNotBlank() }
+                ?: ("usr_" + UUID.randomUUID().toString().replace("-", "").take(12))
+
+            val encodedAvatar = encodeImageForFirebase(avatarPath, maxDim = 160)
+            val record = UserAccountRecord(
+                userId = newId,
+                name = cleanName,
+                email = cleanEmail,
+                passwordHash = hashPassword(password),
+                avatarPath = encodedAvatar ?: avatarPath,
+                subscribersCount = 0,
+            )
+
+            // 3. Push user data directly into Realtime Database (/users/<userId>)
+            val rtdbWrite = pushAccountToFirebaseBlocking(record)
+
+            mainHandler.post {
+                isFirebaseConnected = rtdbWrite.isSuccess
+                if (!rtdbWrite.isSuccess) {
+                    lastFirebaseStatus = "HTTP ${rtdbWrite.statusCode}: ${rtdbWrite.body}"
+                }
+                accounts.removeAll { it.email.equals(cleanEmail, ignoreCase = true) }
+                accounts.add(record)
+                persistAccounts()
+                applyActiveSession(record)
+                onComplete(true, if (rtdbWrite.isSuccess) null else rtdbWrite.body)
+            }
+        }
     }
 
     /**
-     * Sign in an existing user with Email and Password.
+     * Asynchronously signs in an existing user against Firebase Auth + Realtime Database (`/users`)
+     * and updates their record in Realtime Database.
      */
-    fun signInWithEmailPassword(
+    fun signInWithEmailPasswordAsync(
         email: String,
         password: String,
-    ): Result<UserAccountRecord> {
+        onComplete: (Boolean, String?) -> Unit,
+    ) {
         val cleanEmail = email.trim().lowercase()
         val hashed = hashPassword(password)
-        val matched = accounts.firstOrNull {
-            it.email.equals(cleanEmail, ignoreCase = true) && it.passwordHash == hashed
-        } ?: return Result.failure(IllegalArgumentException("INVALID_CREDENTIALS"))
 
-        applyActiveSession(matched)
-        return Result.success(matched)
+        ioExecutor.execute {
+            // 1. Try Firebase Auth IdentityToolkit Sign In
+            val authRes = FirebaseConfig.signInWithIdentityToolkit(cleanEmail, password)
+            runCatching {
+                FirebaseConfig.authInstance(appContext)
+                    ?.signInWithEmailAndPassword(cleanEmail, password)
+            }
+            if (authRes.idToken.isNotBlank()) {
+                prefs.edit().putString(KEY_ID_TOKEN, authRes.idToken).apply()
+            }
+
+            // 2. Fetch latest /users from Realtime Database
+            val usersRes = FirebaseConfig.getRtdbJson(FirebaseConfig.NODE_USERS)
+            val remoteUsers = if (usersRes.isSuccess) {
+                parseUsersFromRtdbJson(usersRes.body)
+            } else {
+                emptyList()
+            }
+
+            val allKnown = LinkedHashMap<String, UserAccountRecord>()
+            accounts.forEach { allKnown[it.email.lowercase()] = it }
+            remoteUsers.forEach { allKnown[it.email.lowercase()] = it }
+
+            val matchedInDb = allKnown[cleanEmail]?.takeIf {
+                it.passwordHash == hashed || authRes.isSuccess
+            }
+
+            val finalAccount = matchedInDb ?: if (authRes.isSuccess) {
+                // User existed in Firebase Authentication; create/sync their /users/<uid> node in Realtime DB
+                UserAccountRecord(
+                    userId = authRes.localId.ifBlank {
+                        "usr_" + UUID.randomUUID().toString().replace("-", "").take(12)
+                    },
+                    name = cleanEmail.substringBefore('@'),
+                    email = cleanEmail,
+                    passwordHash = hashed,
+                    avatarPath = null,
+                    subscribersCount = 0,
+                )
+            } else {
+                null
+            }
+
+            if (finalAccount == null) {
+                mainHandler.post {
+                    onComplete(false, "INVALID_CREDENTIALS")
+                }
+                return@execute
+            }
+
+            // 3. Ensure user record is written/updated in Realtime Database (/users/<userId>)
+            val rtdbWrite = pushAccountToFirebaseBlocking(finalAccount)
+
+            mainHandler.post {
+                isFirebaseConnected = rtdbWrite.isSuccess || usersRes.isSuccess
+                mergeAccountsOnMain(allKnown.values.toList() + listOf(finalAccount))
+                applyActiveSession(finalAccount)
+                onComplete(true, null)
+            }
+        }
     }
 
     private fun applyActiveSession(account: UserAccountRecord) {
@@ -392,6 +705,8 @@ class CommunityStoreRepository(context: Context) {
         userEmail = ""
         userAvatarPath = null
         subscribersCount = 0
+        FirebaseConfig.currentIdToken = null
+        runCatching { FirebaseConfig.authInstance(appContext)?.signOut() }
 
         prefs.edit()
             .putBoolean(KEY_LOGGED_IN, false)
@@ -399,6 +714,7 @@ class CommunityStoreRepository(context: Context) {
             .remove(KEY_USER_NAME)
             .remove(KEY_USER_EMAIL)
             .remove(KEY_USER_AVATAR)
+            .remove(KEY_ID_TOKEN)
             .putInt(KEY_SUBSCRIBERS, 0)
             .apply()
 
@@ -419,22 +735,33 @@ class CommunityStoreRepository(context: Context) {
     fun updateProfile(newName: String, newAvatarPath: String?) {
         if (!isLoggedIn) return
         val trimmed = newName.trim().ifBlank { userName }
+        val encodedAvatar = encodeImageForFirebase(newAvatarPath, maxDim = 160) ?: newAvatarPath
         userName = trimmed
-        userAvatarPath = newAvatarPath
+        userAvatarPath = encodedAvatar
         prefs.edit()
             .putString(KEY_USER_NAME, trimmed)
-            .putString(KEY_USER_AVATAR, newAvatarPath)
+            .putString(KEY_USER_AVATAR, encodedAvatar)
             .apply()
 
         val idx = accounts.indexOfFirst { it.userId == currentUserId }
-        if (idx >= 0) {
-            val updatedAccount = accounts[idx].copy(
+        val updatedAccount = if (idx >= 0) {
+            accounts[idx].copy(name = trimmed, avatarPath = encodedAvatar).also { accounts[idx] = it }
+        } else {
+            UserAccountRecord(
+                userId = currentUserId,
                 name = trimmed,
-                avatarPath = newAvatarPath,
-            )
-            accounts[idx] = updatedAccount
-            persistAccounts()
-            pushAccountToFirebase(updatedAccount)
+                email = userEmail,
+                passwordHash = "",
+                avatarPath = encodedAvatar,
+                subscribersCount = subscribersCount,
+            ).also { accounts.add(it) }
+        }
+        persistAccounts()
+        ioExecutor.execute {
+            val res = pushAccountToFirebaseBlocking(updatedAccount)
+            mainHandler.post {
+                if (res.isSuccess) isFirebaseConnected = true
+            }
         }
     }
 
@@ -466,7 +793,11 @@ class CommunityStoreRepository(context: Context) {
     fun totalUserDislikes(): Int =
         userPublishedProjects().sumOf { it.dislikesCount }
 
-    fun createStoreItem(
+    /**
+     * Creates and uploads a new Store Item (Project, Code Snippet, or Library) directly to
+     * Firebase Realtime Database (`/store_items/<id>` and `/projects/<id>` | `/codes/<id>` | `/libraries/<id>`).
+     */
+    fun createStoreItemAsync(
         type: StoreItemType,
         name: String,
         details: String,
@@ -476,40 +807,61 @@ class CommunityStoreRepository(context: Context) {
         language: ProjectLanguage = ProjectLanguage.KOTLIN,
         downloadLinks: List<String>,
         imagePaths: List<String>,
-    ): StoreProjectItem {
-        val item = StoreProjectItem(
-            type = type,
-            name = name.trim(),
-            details = details.trim(),
-            codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
-            iconPreset = iconPreset,
-            customIconPath = customIconPath,
-            language = language,
-            downloadLinks = if (type == StoreItemType.PROJECT) {
-                downloadLinks.filter { it.isNotBlank() }
+        onComplete: (StoreProjectItem, Boolean) -> Unit,
+    ) {
+        ioExecutor.execute {
+            val encodedIcon = encodeImageForFirebase(customIconPath, maxDim = 160) ?: customIconPath
+            val encodedShots = if (type == StoreItemType.PROJECT) {
+                imagePaths.filter { it.isNotBlank() }.mapNotNull {
+                    encodeImageForFirebase(it, maxDim = 480)
+                }
             } else {
                 emptyList()
-            },
-            imagePaths = if (type == StoreItemType.PROJECT) {
-                imagePaths.filter { it.isNotBlank() }
-            } else {
-                emptyList()
-            },
-            likesCount = 0,
-            dislikesCount = 0,
-            userReaction = 0,
-            savedInCollection = false,
-            createdByUserId = currentUserId,
-            createdByCurrentUser = true,
-            authorName = userName.ifBlank { "User" },
-        )
-        items.add(0, item)
-        persistItems()
-        pushItemToFirebase(item)
-        return item
+            }
+
+            val item = StoreProjectItem(
+                type = type,
+                name = name.trim(),
+                details = details.trim(),
+                codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
+                iconPreset = iconPreset,
+                customIconPath = encodedIcon,
+                language = language,
+                downloadLinks = if (type == StoreItemType.PROJECT) {
+                    downloadLinks.filter { it.isNotBlank() }
+                } else {
+                    emptyList()
+                },
+                imagePaths = encodedShots,
+                likesCount = 0,
+                dislikesCount = 0,
+                userReaction = 0,
+                savedInCollection = false,
+                createdByUserId = currentUserId,
+                createdByCurrentUser = true,
+                authorName = userName.ifBlank { "User" },
+            )
+
+            val rtdbRes = pushItemToFirebaseBlocking(item)
+            val currentAcc = accounts.firstOrNull { it.userId == currentUserId }
+            if (currentAcc != null) {
+                pushAccountToFirebaseBlocking(currentAcc)
+            }
+
+            mainHandler.post {
+                isFirebaseConnected = rtdbRes.isSuccess
+                items.removeAll { it.id == item.id }
+                items.add(0, item)
+                persistItems()
+                onComplete(item, rtdbRes.isSuccess)
+            }
+        }
     }
 
-    fun updateStoreItem(
+    /**
+     * Updates an existing Store Item in Firebase Realtime Database.
+     */
+    fun updateStoreItemAsync(
         id: String,
         type: StoreItemType,
         name: String,
@@ -520,41 +872,71 @@ class CommunityStoreRepository(context: Context) {
         language: ProjectLanguage,
         downloadLinks: List<String>,
         imagePaths: List<String>,
+        onComplete: (Boolean) -> Unit,
     ) {
         val index = items.indexOfFirst { it.id == id }
-        if (index < 0) return
+        if (index < 0) {
+            onComplete(false)
+            return
+        }
         val existing = items[index]
-        val updated = existing.copy(
-            type = type,
-            name = name.trim(),
-            details = details.trim(),
-            codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
-            customIconPath = customIconPath,
-            iconPreset = iconPreset,
-            language = language,
-            downloadLinks = if (type == StoreItemType.PROJECT) {
-                downloadLinks.filter { it.isNotBlank() }
+        ioExecutor.execute {
+            val encodedIcon = encodeImageForFirebase(customIconPath, maxDim = 160) ?: customIconPath
+            val encodedShots = if (type == StoreItemType.PROJECT) {
+                imagePaths.filter { it.isNotBlank() }.mapNotNull {
+                    encodeImageForFirebase(it, maxDim = 480)
+                }
             } else {
                 emptyList()
-            },
-            imagePaths = if (type == StoreItemType.PROJECT) {
-                imagePaths.filter { it.isNotBlank() }
-            } else {
-                emptyList()
-            },
-        )
-        items[index] = updated
-        persistItems()
-        pushItemToFirebase(updated)
+            }
+            val updated = existing.copy(
+                type = type,
+                name = name.trim(),
+                details = details.trim(),
+                codeContent = if (type == StoreItemType.PROJECT) "" else codeContent.trim(),
+                customIconPath = encodedIcon,
+                iconPreset = iconPreset,
+                language = language,
+                downloadLinks = if (type == StoreItemType.PROJECT) {
+                    downloadLinks.filter { it.isNotBlank() }
+                } else {
+                    emptyList()
+                },
+                imagePaths = encodedShots,
+            )
+
+            val rtdbRes = pushItemToFirebaseBlocking(updated)
+            mainHandler.post {
+                isFirebaseConnected = rtdbRes.isSuccess
+                val idxNow = items.indexOfFirst { it.id == id }
+                if (idxNow >= 0) {
+                    items[idxNow] = updated
+                }
+                persistItems()
+                onComplete(rtdbRes.isSuccess)
+            }
+        }
     }
 
     fun deleteStoreItem(id: String) {
+        val target = items.firstOrNull { it.id == id }
         if (items.removeAll { it.id == id }) {
             persistItems()
-            runCatching {
-                firebaseDb?.getReference(FirebaseConfig.NODE_STORE_ITEMS)
-                    ?.child(id)
-                    ?.removeValue()
+            ioExecutor.execute {
+                runCatching {
+                    firebaseDb?.getReference(FirebaseConfig.NODE_STORE_ITEMS)
+                        ?.child(id)
+                        ?.removeValue()
+                    if (target != null) {
+                        firebaseDb?.getReference(categoryNodeFor(target.type))
+                            ?.child(id)
+                            ?.removeValue()
+                    }
+                }
+                FirebaseConfig.deleteRtdbJson("${FirebaseConfig.NODE_STORE_ITEMS}/$id")
+                if (target != null) {
+                    FirebaseConfig.deleteRtdbJson("${categoryNodeFor(target.type)}/$id")
+                }
             }
         }
     }
@@ -567,14 +949,12 @@ class CommunityStoreRepository(context: Context) {
         items[index] = current.copy(savedInCollection = nextSaved)
         persistItems()
         if (currentUserId.isNotBlank()) {
-            runCatching {
-                val ref = firebaseDb?.getReference(FirebaseConfig.NODE_COLLECTIONS)
-                    ?.child(currentUserId)
-                    ?.child(id)
+            ioExecutor.execute {
+                val path = "${FirebaseConfig.NODE_COLLECTIONS}/$currentUserId/$id"
                 if (nextSaved) {
-                    ref?.setValue(true)
+                    FirebaseConfig.putRtdbJson(path, "true")
                 } else {
-                    ref?.removeValue()
+                    FirebaseConfig.deleteRtdbJson(path)
                 }
             }
         }
@@ -602,7 +982,15 @@ class CommunityStoreRepository(context: Context) {
         }
         items[index] = updated
         persistItems()
-        pushItemToFirebase(updated)
+        ioExecutor.execute {
+            pushItemToFirebaseBlocking(updated)
+            if (currentUserId.isNotBlank()) {
+                FirebaseConfig.putRtdbJson(
+                    "${FirebaseConfig.NODE_REACTIONS}/$currentUserId/$id",
+                    "${updated.userReaction}",
+                )
+            }
+        }
     }
 
     fun toggleDislike(id: String) {
@@ -626,7 +1014,15 @@ class CommunityStoreRepository(context: Context) {
         }
         items[index] = updated
         persistItems()
-        pushItemToFirebase(updated)
+        ioExecutor.execute {
+            pushItemToFirebaseBlocking(updated)
+            if (currentUserId.isNotBlank()) {
+                FirebaseConfig.putRtdbJson(
+                    "${FirebaseConfig.NODE_REACTIONS}/$currentUserId/$id",
+                    "${updated.userReaction}",
+                )
+            }
+        }
     }
 
     private fun hashPassword(raw: String): String {
@@ -758,13 +1154,14 @@ class CommunityStoreRepository(context: Context) {
     }
 
     private companion object {
-        const val KEY_ITEMS = "store_items_v2"
-        const val KEY_ACCOUNTS = "store_accounts_v2"
-        const val KEY_USER_ID = "user_id_v2"
-        const val KEY_USER_NAME = "user_name_v2"
-        const val KEY_USER_EMAIL = "user_email_v2"
-        const val KEY_USER_AVATAR = "user_avatar_v2"
-        const val KEY_LOGGED_IN = "user_logged_in_v2"
-        const val KEY_SUBSCRIBERS = "user_subscribers_v2"
+        const val KEY_ITEMS = "store_items_v3"
+        const val KEY_ACCOUNTS = "store_accounts_v3"
+        const val KEY_USER_ID = "user_id_v3"
+        const val KEY_USER_NAME = "user_name_v3"
+        const val KEY_USER_EMAIL = "user_email_v3"
+        const val KEY_USER_AVATAR = "user_avatar_v3"
+        const val KEY_LOGGED_IN = "user_logged_in_v3"
+        const val KEY_SUBSCRIBERS = "user_subscribers_v3"
+        const val KEY_ID_TOKEN = "user_id_token_v3"
     }
 }

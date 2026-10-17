@@ -159,6 +159,7 @@ fun StoreProjectFormScreen(
 
     var showAddLinkDialog by remember { mutableStateOf(false) }
     var showAddImageUrlDialog by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val errNameEmpty = stringResource(R.string.error_name_empty)
@@ -759,8 +760,9 @@ fun StoreProjectFormScreen(
 
         // 5. Bottom: Save Button (زر الحفظ)
         GradientButton(
-            text = stringResource(R.string.store_form_save_btn),
+            text = if (isUploading) "Firebase..." else stringResource(R.string.store_form_save_btn),
             onClick = {
+                if (isUploading) return@GradientButton
                 val cleanName = programName.trim()
                 val cleanDetails = projectDetails.trim()
                 val cleanCode = codeContent.trim()
@@ -776,6 +778,7 @@ fun StoreProjectFormScreen(
                     errorMessage = errCodeEmpty
                     return@GradientButton
                 }
+                isUploading = true
                 onSave(
                     selectedType,
                     cleanName,

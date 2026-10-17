@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,7 +59,6 @@ import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
-import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 
@@ -68,6 +66,7 @@ import com.androidexl.ideultimate.ui.theme.VioletSoft
  * Bottom sheet displayed when the user is not logged in:
  * - Tab 0: تسجيل الدخول (Email + Password)
  * - Tab 1: تسجيل دخول جديد (Icon from device + Name + Email + Password + Confirm Password)
+ * Connects directly to Firebase Auth & Realtime Database (`/users/<userId>`).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +86,7 @@ fun AuthBottomSheet(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val errNameEmpty = stringResource(R.string.error_name_empty)
@@ -108,7 +108,7 @@ fun AuthBottomSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
         sheetState = sheetState,
         containerColor = Color(0xFF0B1028),
         contentColor = Ink,
@@ -156,8 +156,10 @@ fun AuthBottomSheet(
                     selected = selectedTab == 0,
                     accent = Cyan,
                     onClick = {
-                        selectedTab = 0
-                        errorMessage = null
+                        if (!isSubmitting) {
+                            selectedTab = 0
+                            errorMessage = null
+                        }
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -166,8 +168,10 @@ fun AuthBottomSheet(
                     selected = selectedTab == 1,
                     accent = VioletSoft,
                     onClick = {
-                        selectedTab = 1
-                        errorMessage = null
+                        if (!isSubmitting) {
+                            selectedTab = 1
+                            errorMessage = null
+                        }
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -311,12 +315,13 @@ fun AuthBottomSheet(
             Spacer(Modifier.height(16.dp))
 
             GradientButton(
-                text = if (selectedTab == 0) {
-                    stringResource(R.string.auth_btn_login)
-                } else {
-                    stringResource(R.string.auth_btn_register)
+                text = when {
+                    isSubmitting -> "Firebase..."
+                    selectedTab == 0 -> stringResource(R.string.auth_btn_login)
+                    else -> stringResource(R.string.auth_btn_register)
                 },
                 onClick = {
+                    if (isSubmitting) return@GradientButton
                     val cleanEmail = email.trim()
                     if (!cleanEmail.contains("@") || !cleanEmail.contains(".")) {
                         errorMessage = errEmailInvalid
@@ -328,14 +333,17 @@ fun AuthBottomSheet(
                     }
 
                     if (selectedTab == 0) {
-                        val res = storeRepository.signInWithEmailPassword(
+                        isSubmitting = true
+                        storeRepository.signInWithEmailPasswordAsync(
                             email = cleanEmail,
                             password = password,
-                        )
-                        if (res.isSuccess) {
-                            onAuthenticated()
-                        } else {
-                            errorMessage = errInvalidCredentials
+                        ) { success, _ ->
+                            isSubmitting = false
+                            if (success) {
+                                onAuthenticated()
+                            } else {
+                                errorMessage = errInvalidCredentials
+                            }
                         }
                     } else {
                         val cleanName = name.trim()
@@ -347,16 +355,21 @@ fun AuthBottomSheet(
                             errorMessage = errPasswordMismatch
                             return@GradientButton
                         }
-                        val res = storeRepository.registerNewAccount(
+                        isSubmitting = true
+                        storeRepository.registerNewAccountAsync(
                             name = cleanName,
                             email = cleanEmail,
                             password = password,
                             avatarPath = avatarPath,
-                        )
-                        if (res.isSuccess) {
-                            onAuthenticated()
-                        } else {
-                            errorMessage = errEmailTaken
+                        ) { success, errCode ->
+                            isSubmitting = false
+                            if (success) {
+                                onAuthenticated()
+                            } else if (errCode == "EMAIL_TAKEN") {
+                                errorMessage = errEmailTaken
+                            } else {
+                                errorMessage = errCode ?: errEmailTaken
+                            }
                         }
                     }
                 },

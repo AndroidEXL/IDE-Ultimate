@@ -345,7 +345,7 @@ fun WorkspaceScreen(
                     onBack = { storeFormMode = null },
                     onSave = { type, name, details, codeContent, customIconPath, iconPreset, language, downloadLinks, imagePaths ->
                         if (editingTarget != null) {
-                            storeRepository.updateStoreItem(
+                            storeRepository.updateStoreItemAsync(
                                 id = editingTarget.id,
                                 type = type,
                                 name = name,
@@ -356,10 +356,12 @@ fun WorkspaceScreen(
                                 language = language,
                                 downloadLinks = downloadLinks,
                                 imagePaths = imagePaths,
-                            )
-                            showMessage(context.getString(R.string.msg_project_updated))
+                            ) {
+                                storeFormMode = null
+                                showMessage(context.getString(R.string.msg_project_updated))
+                            }
                         } else {
-                            storeRepository.createStoreItem(
+                            storeRepository.createStoreItemAsync(
                                 type = type,
                                 name = name,
                                 details = details,
@@ -369,10 +371,11 @@ fun WorkspaceScreen(
                                 language = language,
                                 downloadLinks = downloadLinks,
                                 imagePaths = imagePaths,
-                            )
-                            showMessage(context.getString(R.string.msg_project_created))
+                            ) { _, _ ->
+                                storeFormMode = null
+                                showMessage(context.getString(R.string.msg_project_created))
+                            }
                         }
-                        storeFormMode = null
                     },
                     bottomBarPadding = bottomBarPadding,
                 )
