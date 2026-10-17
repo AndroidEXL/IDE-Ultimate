@@ -89,6 +89,30 @@ jobs:
           sha256sum *.apk | tee checksums.txt
           ls -lh
 
+      - name: Verify APK contents
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import zipfile
+
+          ok = True
+          for apk in sorted(glob.glob("app/build/outputs/apk/*/*.apk")):
+              with zipfile.ZipFile(apk) as bundle:
+                  names = bundle.namelist()
+              fonts = [n for n in names if n.endswith(".ttf")]
+              dex = [n for n in names if n.endswith(".dex")]
+              webp = [n for n in names if n.endswith(".webp")]
+              res = [n for n in names if n.startswith("res/")]
+              print(f"== {apk}")
+              print(f"   entries={len(names)} fonts={len(fonts)} dex={len(dex)} webp={len(webp)} res={len(res)}")
+              print(f"   font files: {fonts}")
+              if "AndroidManifest.xml" not in names or not dex or len(fonts) < 5 or not webp:
+                  print(f"::error title=APK verification::Missing packaged assets in {apk}")
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
+
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
