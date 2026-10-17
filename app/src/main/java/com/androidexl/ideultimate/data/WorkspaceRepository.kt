@@ -148,11 +148,11 @@ class WorkspaceRepository(context: Context) {
         items.add(WorkspaceItem(name = "HelloCompose", type = WorkspaceItemType.PROJECT, parentId = android.id))
         items.add(WorkspaceItem(name = "NotesApp", type = WorkspaceItemType.PROJECT, parentId = android.id))
         items.add(WorkspaceItem(name = "Starter Template", type = WorkspaceItemType.PROJECT, parentId = templates.id))
-        items.add(WorkspaceItem(name = "Playground", type = WorkspaceItemType.PROJECT, parentId = null))
+        items.add(WorkspaceItem(name = "Playground", type = WorkspaceItemType.PROJECT, parentId = experiments.id))
         persist()
     }
 
     private companion object {
-        const val KEY_ITEMS = "items_v1"
+        const val KEY_ITEMS = "items_v2"
     }
 }

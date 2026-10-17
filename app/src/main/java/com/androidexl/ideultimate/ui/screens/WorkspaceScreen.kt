@@ -340,6 +340,7 @@ fun WorkspaceScreen(
                     when (currentSheet) {
                         is WorkspaceSheet.Create -> CreateSheetContent(
                             locationName = currentFolder?.name ?: stringResource(R.string.workspace_root),
+                            allowProject = currentFolder != null,
                             onNewFolder = {
                                 sheet = null
                                 dialog = NameDialog.Create(currentParentId, WorkspaceItemType.FOLDER)
@@ -422,7 +423,13 @@ fun WorkspaceScreen(
                 )
             }
             is NameDialog.Rename -> NameInputDialog(
-                title = stringResource(R.string.dialog_rename),
+                title = stringResource(
+                    if (currentDialog.item.type == WorkspaceItemType.PROJECT) {
+                        R.string.dialog_edit_project
+                    } else {
+                        R.string.dialog_rename
+                    },
+                ),
                 initialName = currentDialog.item.name,
                 confirmLabel = stringResource(R.string.dialog_save),
                 validate = { name ->
@@ -1029,6 +1036,7 @@ private fun SheetAction(
 @Composable
 private fun CreateSheetContent(
     locationName: String,
+    allowProject: Boolean,
     onNewFolder: () -> Unit,
     onNewProject: () -> Unit,
 ) {
@@ -1036,7 +1044,9 @@ private fun CreateSheetContent(
         SheetHeader(
             badge = stringResource(R.string.workspace_root_inside, locationName),
             title = stringResource(R.string.sheet_create_title),
-            subtitle = stringResource(R.string.sheet_create_subtitle),
+            subtitle = stringResource(
+                if (allowProject) R.string.sheet_create_subtitle else R.string.sheet_create_folder_only_subtitle,
+            ),
         )
         Spacer(Modifier.height(2.dp))
         SheetAction(
@@ -1046,20 +1056,22 @@ private fun CreateSheetContent(
             icon = { FolderGlyph(Modifier.size(22.dp), accent = Cyan) },
             onClick = onNewFolder,
         )
-        SheetAction(
-            title = stringResource(R.string.sheet_new_project),
-            description = stringResource(R.string.sheet_new_project_desc),
-            tint = VioletSoft,
-            icon = {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = VioletSoft,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-            onClick = onNewProject,
-        )
+        if (allowProject) {
+            SheetAction(
+                title = stringResource(R.string.sheet_new_project),
+                description = stringResource(R.string.sheet_new_project_desc),
+                tint = VioletSoft,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = VioletSoft,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+                onClick = onNewProject,
+            )
+        }
         Spacer(Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.sheet_folder_hint),
@@ -1132,8 +1144,8 @@ private fun ProjectActionsSheetContent(
         )
         Spacer(Modifier.height(2.dp))
         SheetAction(
-            title = stringResource(R.string.action_rename),
-            description = stringResource(R.string.action_rename_desc),
+            title = stringResource(R.string.action_edit_project),
+            description = stringResource(R.string.action_edit_project_desc),
             tint = Cyan,
             icon = {
                 Icon(
@@ -1160,21 +1172,7 @@ private fun ProjectActionsSheetContent(
             onClick = onExport,
         )
         SheetAction(
-            title = stringResource(R.string.action_new_project_here),
-            description = stringResource(R.string.action_new_project_here_desc),
-            tint = Teal,
-            icon = {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = Teal,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-            onClick = onNewProject,
-        )
-        SheetAction(
-            title = stringResource(R.string.action_delete),
+            title = stringResource(R.string.action_delete_project),
             description = stringResource(R.string.action_delete_project_desc),
             tint = Color(0xFFFF6B6B),
             destructive = true,
@@ -1187,6 +1185,20 @@ private fun ProjectActionsSheetContent(
                 )
             },
             onClick = onDelete,
+        )
+        SheetAction(
+            title = stringResource(R.string.action_new_project_here),
+            description = stringResource(R.string.action_new_project_here_desc),
+            tint = Teal,
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = Teal,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+            onClick = onNewProject,
         )
     }
 }

@@ -10,7 +10,7 @@
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
     <string name="splash_powered">KOTLIN  •  JETPACK COMPOSE</string>
-    <string name="splash_version">v1.4.0</string>
+    <string name="splash_version">v1.5.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.4.0</string>
+    <string name="home_version">Version 1.5.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -50,11 +50,12 @@
 
     <string name="sheet_create_title">What do you want to create?</string>
     <string name="sheet_create_subtitle">Pick the type of the new item in this location.</string>
-    <string name="sheet_new_folder">New folder</string>
-    <string name="sheet_new_folder_desc">Create a folder to organise your projects.</string>
-    <string name="sheet_new_project">New project</string>
+    <string name="sheet_create_folder_only_subtitle">Create a square folder to organise your projects inside it.</string>
+    <string name="sheet_new_folder">Create new folder</string>
+    <string name="sheet_new_folder_desc">Create a square folder to organise your projects.</string>
+    <string name="sheet_new_project">Create new project</string>
     <string name="sheet_new_project_desc">Create a new Kotlin project with ready Gradle files.</string>
-    <string name="sheet_folder_hint">Long press any folder or project for more options.</string>
+    <string name="sheet_folder_hint">Tap a folder to open it, or long press for more options.</string>
     <string name="sheet_folder_actions">Folder options</string>
     <string name="sheet_project_actions">Project options</string>
     <string name="folder_label">Folder</string>
@@ -62,17 +63,21 @@
 
     <string name="action_rename">Rename</string>
     <string name="action_rename_desc">Change the item name at any time.</string>
-    <string name="action_delete">Delete</string>
+    <string name="action_edit_project">Edit project</string>
+    <string name="action_edit_project_desc">Edit the project name and settings.</string>
+    <string name="action_delete">Delete item</string>
+    <string name="action_delete_project">Delete project</string>
     <string name="action_delete_folder_desc">Delete the folder and everything inside it.</string>
     <string name="action_delete_project_desc">Remove the project from your workspace.</string>
-    <string name="action_export">Export code (ZIP)</string>
-    <string name="action_export_desc">Download a ZIP with a ready Gradle project.</string>
+    <string name="action_export">Export to ZIP code</string>
+    <string name="action_export_desc">Download a ZIP archive with a ready Gradle project.</string>
     <string name="action_new_project_here">Create new project</string>
     <string name="action_new_project_here_desc">Add a new project in the same folder.</string>
 
-    <string name="dialog_new_folder">New folder</string>
-    <string name="dialog_new_project">New project</string>
+    <string name="dialog_new_folder">Create new folder</string>
+    <string name="dialog_new_project">Create new project</string>
     <string name="dialog_rename">Rename item</string>
+    <string name="dialog_edit_project">Edit project</string>
     <string name="dialog_name_label">Name</string>
     <string name="dialog_name_hint">Type a clear name…</string>
     <string name="dialog_cancel">Cancel</string>

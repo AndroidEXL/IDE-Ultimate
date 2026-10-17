@@ -73,6 +73,14 @@ fun AppBottomBar(
     ) {
         BottomBarItem(
             modifier = Modifier.weight(1f),
+            label = stringResource(R.string.nav_workspace),
+            selected = selected == AppTab.Workspace,
+            onClick = { onSelect(AppTab.Workspace) },
+        ) {
+            FolderNavIcon(modifier = Modifier.size(19.dp))
+        }
+        BottomBarItem(
+            modifier = Modifier.weight(1f),
             label = stringResource(R.string.nav_home),
             selected = selected == AppTab.Home,
             onClick = { onSelect(AppTab.Home) },
@@ -83,14 +91,6 @@ fun AppBottomBar(
                 tint = Color.Unspecified,
                 modifier = Modifier.size(19.dp),
             )
-        }
-        BottomBarItem(
-            modifier = Modifier.weight(1f),
-            label = stringResource(R.string.nav_workspace),
-            selected = selected == AppTab.Workspace,
-            onClick = { onSelect(AppTab.Workspace) },
-        ) {
-            FolderNavIcon(modifier = Modifier.size(19.dp))
         }
     }
 }

@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                         )
                         else -> key(splashKey) {
                             SplashScreen(
-                                onFinished = { screen = Screen.Home.name },
+                                onFinished = { screen = Screen.Workspace.name },
                             )
                         }
                     }
