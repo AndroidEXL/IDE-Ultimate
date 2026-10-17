@@ -62,6 +62,7 @@ enum class CodeEditorFlavor(
 enum class IdeWidgetCategory(val title: String) {
     LAYOUT("layout"),
     TEXT("text"),
+    IMAGE("image"),
 }
 
 enum class IdeWidgetType(
@@ -71,6 +72,7 @@ enum class IdeWidgetType(
     val category: IdeWidgetCategory,
     val isContainer: Boolean,
 ) {
+    // 1. Layouts
     LINEAR_H(
         displayName = "Linear(H)",
         shortTag = "H",
@@ -99,6 +101,8 @@ enum class IdeWidgetType(
         category = IdeWidgetCategory.LAYOUT,
         isContainer = true,
     ),
+
+    // 2. Text Widgets (TextView, EditText, AutoCompleteText + 3 additional Text widgets)
     TEXT_VIEW(
         displayName = "TextView",
         shortTag = "Ab",
@@ -106,13 +110,111 @@ enum class IdeWidgetType(
         category = IdeWidgetCategory.TEXT,
         isContainer = false,
     ),
+    EDIT_TEXT(
+        displayName = "EditText",
+        shortTag = "Ed",
+        idPrefix = "edittext",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+    AUTO_COMPLETE_TEXT(
+        displayName = "AutoCompleteText",
+        shortTag = "AC",
+        idPrefix = "autocompletetextview",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+    MULTI_AUTO_COMPLETE_TEXT(
+        displayName = "MultiAutoComplete",
+        shortTag = "MAC",
+        idPrefix = "multiautocompletetextview",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+    CHECKED_TEXT_VIEW(
+        displayName = "CheckedTextView",
+        shortTag = "CTV",
+        idPrefix = "checkedtextview",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+    TEXT_INPUT_EDIT_TEXT(
+        displayName = "TextInputEdit",
+        shortTag = "TIE",
+        idPrefix = "textinputedittext",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+
+    // 3. Image Widgets (ImageView, CircleImageView + 6 specialized Image widgets)
     IMAGE_VIEW(
         displayName = "ImageView",
         shortTag = "IMG",
         idPrefix = "imageview",
-        category = IdeWidgetCategory.TEXT,
+        category = IdeWidgetCategory.IMAGE,
         isContainer = false,
     ),
+    CIRCLE_IMAGE_VIEW(
+        displayName = "CircleImageView",
+        shortTag = "CIV",
+        idPrefix = "circleimageview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    IMAGE_BUTTON(
+        displayName = "ImageButton",
+        shortTag = "IB",
+        idPrefix = "imagebutton",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    ROUNDED_IMAGE_VIEW(
+        displayName = "RoundedImageView",
+        shortTag = "RIV",
+        idPrefix = "roundedimageview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    SHAPEABLE_IMAGE_VIEW(
+        displayName = "ShapeableImage",
+        shortTag = "SIV",
+        idPrefix = "shapeableimageview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    ZOOM_IMAGE_VIEW(
+        displayName = "ZoomImageView",
+        shortTag = "ZIV",
+        idPrefix = "zoomimageview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    ASPECT_IMAGE_VIEW(
+        displayName = "AspectImageView",
+        shortTag = "AIV",
+        idPrefix = "aspectimageview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    ),
+    IMAGE_FILTER_VIEW(
+        displayName = "ImageFilterView",
+        shortTag = "IFV",
+        idPrefix = "imagefilterview",
+        category = IdeWidgetCategory.IMAGE,
+        isContainer = false,
+    );
+
+    val isTextWidget: Boolean
+        get() = category == IdeWidgetCategory.TEXT
+
+    val isImageWidget: Boolean
+        get() = category == IdeWidgetCategory.IMAGE
+
+    val isInputTextWidget: Boolean
+        get() = this == EDIT_TEXT ||
+            this == AUTO_COMPLETE_TEXT ||
+            this == MULTI_AUTO_COMPLETE_TEXT ||
+            this == TEXT_INPUT_EDIT_TEXT
 }
 
 data class ProjectImageItem(
@@ -158,8 +260,25 @@ data class IdeWidgetNode(
     val uid: String = UUID.randomUUID().toString(),
     val viewId: String,
     val type: IdeWidgetType,
-    val text: String = "TextView",
-    val layoutWidth: String = if (type.isContainer) "match_parent" else "wrap_content",
+    val text: String = when (type) {
+        IdeWidgetType.TEXT_VIEW -> "TextView"
+        IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+        else -> ""
+    },
+    val hint: String = when {
+        type == IdeWidgetType.EDIT_TEXT -> "EditText"
+        type == IdeWidgetType.AUTO_COMPLETE_TEXT -> "AutoCompleteTextView"
+        type == IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "MultiAutoCompleteTextView"
+        type == IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> "TextInputEditText"
+        else -> "Hint"
+    },
+    val hintColor: String = "#94A3B8",
+    val inputType: String = "text",
+    val imeOptions: String = "actionUnspecified",
+    val singleLine: Boolean = false,
+    val checked: Boolean = true,
+    val completionThreshold: Int = 1,
+    val layoutWidth: String = if (type.isContainer || type.isInputTextWidget) "match_parent" else "wrap_content",
     val layoutHeight: String = "wrap_content",
     val paddingDp: Int = if (type.isContainer) 8 else 4,
     val marginDp: Int = 0,
@@ -171,8 +290,16 @@ data class IdeWidgetNode(
     val textColor: String = "#000000",
     val lines: Int = 0,
     val imageResName: String = "default_image",
-    val scaleType: String = "FIT_CENTER",
+    val scaleType: String = if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) "CENTER_CROP" else "FIT_CENTER",
     val imageTint: String = "none",
+    val civBorderWidthDp: Int = if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) 2 else 0,
+    val civBorderColor: String = "#38BDF8",
+    val civCircleBgColor: String = "transparent",
+    val cornerRadiusDp: Int = when (type) {
+        IdeWidgetType.ROUNDED_IMAGE_VIEW, IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> 14
+        IdeWidgetType.IMAGE_BUTTON -> 8
+        else -> 0
+    },
     val backgroundResource: String = "none",
     val backgroundColor: String = "transparent",
     val rotation: Float = 0f,
@@ -840,6 +967,13 @@ class WorkspaceRepository(context: Context) {
                 put("viewId", node.viewId)
                 put("type", node.type.name)
                 put("text", node.text)
+                put("hint", node.hint)
+                put("hintColor", node.hintColor)
+                put("inputType", node.inputType)
+                put("imeOptions", node.imeOptions)
+                put("singleLine", node.singleLine)
+                put("checked", node.checked)
+                put("completionThreshold", node.completionThreshold)
                 put("layoutWidth", node.layoutWidth)
                 put("layoutHeight", node.layoutHeight)
                 put("paddingDp", node.paddingDp)
@@ -854,6 +988,10 @@ class WorkspaceRepository(context: Context) {
                 put("imageResName", node.imageResName)
                 put("scaleType", node.scaleType)
                 put("imageTint", node.imageTint)
+                put("civBorderWidthDp", node.civBorderWidthDp)
+                put("civBorderColor", node.civBorderColor)
+                put("civCircleBgColor", node.civCircleBgColor)
+                put("cornerRadiusDp", node.cornerRadiusDp)
                 put("backgroundResource", node.backgroundResource)
                 put("backgroundColor", node.backgroundColor)
                 put("rotation", node.rotation.toDouble())
@@ -877,14 +1015,33 @@ class WorkspaceRepository(context: Context) {
             val type = runCatching { IdeWidgetType.valueOf(obj.getString("type")) }
                 .getOrDefault(IdeWidgetType.TEXT_VIEW)
             val childrenArr = obj.optJSONArray("children") ?: JSONArray()
-            val defaultW = if (type.isContainer) "match_parent" else "wrap_content"
+            val defaultW = if (type.isContainer || type.isInputTextWidget) "match_parent" else "wrap_content"
             val defaultPad = if (type.isContainer) 8 else 4
+            val defaultText = when (type) {
+                IdeWidgetType.TEXT_VIEW -> "TextView"
+                IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+                else -> ""
+            }
+            val defaultHint = when (type) {
+                IdeWidgetType.EDIT_TEXT -> "EditText"
+                IdeWidgetType.AUTO_COMPLETE_TEXT -> "AutoCompleteTextView"
+                IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "MultiAutoCompleteTextView"
+                IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> "TextInputEditText"
+                else -> "Hint"
+            }
             list.add(
                 IdeWidgetNode(
                     uid = obj.optString("uid").ifBlank { UUID.randomUUID().toString() },
                     viewId = obj.optString("viewId").ifBlank { "${type.idPrefix}${i + 1}" },
                     type = type,
-                    text = obj.optString("text", "TextView"),
+                    text = obj.optString("text", defaultText),
+                    hint = obj.optString("hint", defaultHint).ifBlank { defaultHint },
+                    hintColor = obj.optString("hintColor", "#94A3B8").ifBlank { "#94A3B8" },
+                    inputType = obj.optString("inputType", "text").ifBlank { "text" },
+                    imeOptions = obj.optString("imeOptions", "actionUnspecified").ifBlank { "actionUnspecified" },
+                    singleLine = obj.optBoolean("singleLine", false),
+                    checked = obj.optBoolean("checked", true),
+                    completionThreshold = obj.optInt("completionThreshold", 1).coerceIn(1, 10),
                     layoutWidth = obj.optString("layoutWidth", defaultW).ifBlank { defaultW },
                     layoutHeight = obj.optString("layoutHeight", "wrap_content").ifBlank { "wrap_content" },
                     paddingDp = obj.optInt("paddingDp", defaultPad),
@@ -897,8 +1054,18 @@ class WorkspaceRepository(context: Context) {
                     textColor = obj.optString("textColor", "#000000").ifBlank { "#000000" },
                     lines = obj.optInt("lines", 0),
                     imageResName = obj.optString("imageResName", "default_image").ifBlank { "default_image" },
-                    scaleType = obj.optString("scaleType", "FIT_CENTER").ifBlank { "FIT_CENTER" },
+                    scaleType = obj.optString(
+                        "scaleType",
+                        if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) "CENTER_CROP" else "FIT_CENTER",
+                    ).ifBlank { "FIT_CENTER" },
                     imageTint = obj.optString("imageTint", "none").ifBlank { "none" },
+                    civBorderWidthDp = obj.optInt(
+                        "civBorderWidthDp",
+                        if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) 2 else 0,
+                    ),
+                    civBorderColor = obj.optString("civBorderColor", "#38BDF8").ifBlank { "#38BDF8" },
+                    civCircleBgColor = obj.optString("civCircleBgColor", "transparent").ifBlank { "transparent" },
+                    cornerRadiusDp = obj.optInt("cornerRadiusDp", 0),
                     backgroundResource = obj.optString("backgroundResource", "none").ifBlank { "none" },
                     backgroundColor = obj.optString("backgroundColor", "transparent").ifBlank { "transparent" },
                     rotation = obj.optDouble("rotation", 0.0).toFloat(),
@@ -923,6 +1090,7 @@ class WorkspaceRepository(context: Context) {
         val sb = StringBuilder()
         sb.appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
         sb.appendLine("""<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"""")
+        sb.appendLine("""    xmlns:app="http://schemas.android.com/apk/res-auto"""")
         sb.appendLine("""    xmlns:tools="http://schemas.android.com/tools"""")
         sb.appendLine("""    android:id="@+id/root_${page.layoutResourceName}"""")
         sb.appendLine("""    android:layout_width="match_parent"""")
@@ -1034,16 +1202,55 @@ class WorkspaceRepository(context: Context) {
                 }
             }
 
-            IdeWidgetType.TEXT_VIEW -> {
+            IdeWidgetType.TEXT_VIEW,
+            IdeWidgetType.EDIT_TEXT,
+            IdeWidgetType.AUTO_COMPLETE_TEXT,
+            IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT,
+            IdeWidgetType.CHECKED_TEXT_VIEW,
+            IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> {
                 val safeText = node.text
                     .replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
                     .replace("\"", "&quot;")
-                sb.appendLine("""$indent<TextView""")
+                val safeHint = node.hint
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                val tagName = when (node.type) {
+                    IdeWidgetType.TEXT_VIEW -> "TextView"
+                    IdeWidgetType.EDIT_TEXT -> "EditText"
+                    IdeWidgetType.AUTO_COMPLETE_TEXT -> "AutoCompleteTextView"
+                    IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "MultiAutoCompleteTextView"
+                    IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+                    IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> "com.google.android.material.textfield.TextInputEditText"
+                    else -> "TextView"
+                }
+                sb.appendLine("""$indent<$tagName""")
                 appendCommonXmlAttributes(sb, node, indent)
                 sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
-                sb.appendLine("""$indent    android:text="$safeText"""")
+                if (safeText.isNotEmpty() || !node.type.isInputTextWidget) {
+                    sb.appendLine("""$indent    android:text="$safeText"""")
+                }
+                if (node.type.isInputTextWidget) {
+                    sb.appendLine("""$indent    android:hint="$safeHint"""")
+                    sb.appendLine("""$indent    android:textColorHint="${node.hintColor}"""")
+                    sb.appendLine("""$indent    android:inputType="${node.inputType}"""")
+                    if (node.imeOptions != "actionUnspecified" && node.imeOptions.isNotBlank()) {
+                        sb.appendLine("""$indent    android:imeOptions="${node.imeOptions}"""")
+                    }
+                    if (node.singleLine) {
+                        sb.appendLine("""$indent    android:singleLine="true"""")
+                    }
+                }
+                if (node.type == IdeWidgetType.AUTO_COMPLETE_TEXT || node.type == IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT) {
+                    sb.appendLine("""$indent    android:completionThreshold="${node.completionThreshold}"""")
+                }
+                if (node.type == IdeWidgetType.CHECKED_TEXT_VIEW) {
+                    sb.appendLine("""$indent    android:checked="${node.checked}"""")
+                    sb.appendLine("""$indent    android:checkMark="?android:attr/listChoiceIndicatorMultiple"""")
+                }
                 if (node.textStyle != "normal" && node.textStyle.isNotBlank()) {
                     sb.appendLine("""$indent    android:textStyle="${node.textStyle}"""")
                 }
@@ -1054,7 +1261,14 @@ class WorkspaceRepository(context: Context) {
                 sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
             }
 
-            IdeWidgetType.IMAGE_VIEW -> {
+            IdeWidgetType.IMAGE_VIEW,
+            IdeWidgetType.CIRCLE_IMAGE_VIEW,
+            IdeWidgetType.IMAGE_BUTTON,
+            IdeWidgetType.ROUNDED_IMAGE_VIEW,
+            IdeWidgetType.SHAPEABLE_IMAGE_VIEW,
+            IdeWidgetType.ZOOM_IMAGE_VIEW,
+            IdeWidgetType.ASPECT_IMAGE_VIEW,
+            IdeWidgetType.IMAGE_FILTER_VIEW -> {
                 val xmlScale = when (node.scaleType) {
                     "CENTER" -> "center"
                     "CENTER_CROP" -> "centerCrop"
@@ -1064,12 +1278,34 @@ class WorkspaceRepository(context: Context) {
                     "FIT_XY" -> "fitXY"
                     else -> "fitCenter"
                 }
-                sb.appendLine("""$indent<ImageView""")
+                val tagName = when (node.type) {
+                    IdeWidgetType.IMAGE_VIEW -> "ImageView"
+                    IdeWidgetType.CIRCLE_IMAGE_VIEW -> "de.hdodenhof.circleimageview.CircleImageView"
+                    IdeWidgetType.IMAGE_BUTTON -> "ImageButton"
+                    IdeWidgetType.ROUNDED_IMAGE_VIEW -> "com.makeramen.roundedimageview.RoundedImageView"
+                    IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> "com.google.android.material.imageview.ShapeableImageView"
+                    IdeWidgetType.ZOOM_IMAGE_VIEW -> "com.ortiz.touchview.TouchImageView"
+                    IdeWidgetType.ASPECT_IMAGE_VIEW -> "androidx.appcompat.widget.AppCompatImageView"
+                    IdeWidgetType.IMAGE_FILTER_VIEW -> "androidx.constraintlayout.utils.widget.ImageFilterView"
+                    else -> "ImageView"
+                }
+                sb.appendLine("""$indent<$tagName""")
                 appendCommonXmlAttributes(sb, node, indent)
                 sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
                 sb.appendLine("""$indent    android:src="@drawable/${node.imageResName}"""")
                 if (node.imageTint.isNotBlank() && node.imageTint != "none") {
                     sb.appendLine("""$indent    android:tint="${node.imageTint}"""")
+                }
+                if (node.type == IdeWidgetType.CIRCLE_IMAGE_VIEW) {
+                    sb.appendLine("""$indent    app:civ_border_width="${node.civBorderWidthDp}dp"""")
+                    sb.appendLine("""$indent    app:civ_border_color="${node.civBorderColor}"""")
+                    if (node.civCircleBgColor != "transparent" && node.civCircleBgColor.isNotBlank()) {
+                        sb.appendLine("""$indent    app:civ_circle_background_color="${node.civCircleBgColor}"""")
+                    }
+                }
+                if (node.cornerRadiusDp > 0 && (node.type == IdeWidgetType.ROUNDED_IMAGE_VIEW || node.type == IdeWidgetType.SHAPEABLE_IMAGE_VIEW || node.type == IdeWidgetType.IMAGE_FILTER_VIEW)) {
+                    sb.appendLine("""$indent    app:riv_corner_radius="${node.cornerRadiusDp}dp"""")
+                    sb.appendLine("""$indent    app:round="${node.cornerRadiusDp}dp"""")
                 }
                 sb.appendLine("""$indent    android:scaleType="$xmlScale" />""")
             }
