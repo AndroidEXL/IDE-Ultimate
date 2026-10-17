@@ -48,6 +48,72 @@ data class ProjectXmlPage(
         get() = xmlFileName.removeSuffix(".xml")
 }
 
+enum class CodeEditorFlavor(
+    val label: String,
+    val extension: String,
+) {
+    KOTLIN_ANDROID("Kotlin Android", "kt"),
+    JAVA_ANDROID("Java Android", "java"),
+    XML_ANDROID("xml Android", "xml"),
+}
+
+enum class IdeWidgetCategory(val title: String) {
+    LAYOUT("layout"),
+    TEXT("text"),
+}
+
+enum class IdeWidgetType(
+    val displayName: String,
+    val shortTag: String,
+    val idPrefix: String,
+    val category: IdeWidgetCategory,
+    val isContainer: Boolean,
+) {
+    LINEAR_H(
+        displayName = "Linear Layout H",
+        shortTag = "H",
+        idPrefix = "linear_h",
+        category = IdeWidgetCategory.LAYOUT,
+        isContainer = true,
+    ),
+    LINEAR_V(
+        displayName = "Linear Layout V",
+        shortTag = "V",
+        idPrefix = "linear_v",
+        category = IdeWidgetCategory.LAYOUT,
+        isContainer = true,
+    ),
+    SCROLL_V(
+        displayName = "Scroll V",
+        shortTag = "SV",
+        idPrefix = "scroll_v",
+        category = IdeWidgetCategory.LAYOUT,
+        isContainer = true,
+    ),
+    SCROLL_H(
+        displayName = "Scroll H",
+        shortTag = "SH",
+        idPrefix = "scroll_h",
+        category = IdeWidgetCategory.LAYOUT,
+        isContainer = true,
+    ),
+    TEXT_VIEW(
+        displayName = "Text View",
+        shortTag = "Ab",
+        idPrefix = "textview",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
+}
+
+data class IdeWidgetNode(
+    val uid: String = UUID.randomUUID().toString(),
+    val viewId: String,
+    val type: IdeWidgetType,
+    val text: String = "TextView",
+    val children: List<IdeWidgetNode> = emptyList(),
+)
+
 /**
  * Persistent workspace model backed by SharedPreferences + full two-way disk synchronization
  * under `/storage/emulated/0/.IDE Ultimate` (restores existing projects and folders from disk).
@@ -568,21 +634,266 @@ class WorkspaceRepository(context: Context) {
     }
 
     /**
-     * Reads the Activity code for the selected [xmlPage] from disk (or preferences/default template).
+     * Reads the code for [xmlPage] in the requested [flavor] (`Kotlin Android`, `Java Android`, or `xml Android`).
      */
-    fun readActivityCode(project: WorkspaceItem, xmlPage: ProjectXmlPage): String {
+    fun readCodeForFlavor(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+        flavor: CodeEditorFlavor,
+    ): String {
         ensureDefaultProjectFiles(project)
+        val pkgPath = project.packageName.replace('.', '/')
         for (projDir in projectDirectoriesFor(project)) {
-            val codeFile = activityFileInDir(projDir, project, xmlPage)
-            if (codeFile.exists() && codeFile.isFile && codeFile.canRead()) {
-                val text = runCatching { codeFile.readText(Charsets.UTF_8) }.getOrNull()
+            val targetFile = when (flavor) {
+                CodeEditorFlavor.KOTLIN_ANDROID ->
+                    File(projDir, "app/src/main/java/$pkgPath/${xmlPage.activityName}.kt")
+                CodeEditorFlavor.JAVA_ANDROID ->
+                    File(projDir, "app/src/main/java/$pkgPath/${xmlPage.activityName}.java")
+                CodeEditorFlavor.XML_ANDROID ->
+                    File(projDir, "app/src/main/res/layout/${xmlPage.xmlFileName}")
+            }
+            if (targetFile.exists() && targetFile.isFile && targetFile.canRead()) {
+                val text = runCatching { targetFile.readText(Charsets.UTF_8) }.getOrNull()
                 if (!text.isNullOrBlank()) return text
             }
         }
-        val prefKey = "code_${project.id}_${xmlPage.xmlFileName}"
+        val prefKey = "code_${project.id}_${xmlPage.xmlFileName}_${flavor.name}"
         val saved = prefs.getString(prefKey, null)
         if (!saved.isNullOrBlank()) return saved
-        return defaultActivityCodeContent(project, xmlPage)
+        return when (flavor) {
+            CodeEditorFlavor.KOTLIN_ANDROID -> defaultKotlinActivityContent(project, xmlPage)
+            CodeEditorFlavor.JAVA_ANDROID -> defaultJavaActivityContent(project, xmlPage)
+            CodeEditorFlavor.XML_ANDROID -> {
+                val widgets = loadWidgetsForXmlPage(project, xmlPage)
+                if (widgets.isNotEmpty()) {
+                    generateXmlFromWidgets(project, xmlPage, widgets)
+                } else {
+                    defaultXmlLayoutContent(project, xmlPage)
+                }
+            }
+        }
+    }
+
+    /**
+     * Saves the edited code for [xmlPage] in the requested [flavor] (`Kotlin Android`, `Java Android`, or `xml Android`).
+     */
+    fun saveCodeForFlavor(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+        flavor: CodeEditorFlavor,
+        newCode: String,
+    ) {
+        val prefKey = "code_${project.id}_${xmlPage.xmlFileName}_${flavor.name}"
+        prefs.edit().putString(prefKey, newCode).apply()
+        val pkgPath = project.packageName.replace('.', '/')
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val targetFile = when (flavor) {
+                    CodeEditorFlavor.KOTLIN_ANDROID ->
+                        File(projDir, "app/src/main/java/$pkgPath/${xmlPage.activityName}.kt")
+                    CodeEditorFlavor.JAVA_ANDROID ->
+                        File(projDir, "app/src/main/java/$pkgPath/${xmlPage.activityName}.java")
+                    CodeEditorFlavor.XML_ANDROID ->
+                        File(projDir, "app/src/main/res/layout/${xmlPage.xmlFileName}")
+                }
+                targetFile.parentFile?.mkdirs()
+                targetFile.writeText(newCode, Charsets.UTF_8)
+            }
+        }
+    }
+
+    /**
+     * Loads the visual widget tree placed on the white phone canvas for [xmlPage].
+     */
+    fun loadWidgetsForXmlPage(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+    ): List<IdeWidgetNode> {
+        val key = "widgets_${project.id}_${xmlPage.xmlFileName}"
+        val raw = prefs.getString(key, null)
+        if (!raw.isNullOrBlank()) {
+            return runCatching { parseWidgetNodes(JSONArray(raw)) }.getOrDefault(emptyList())
+        }
+        for (projDir in projectDirectoriesFor(project)) {
+            val file = File(projDir, ".ide-widgets-${xmlPage.layoutResourceName}.json")
+            if (file.exists() && file.canRead()) {
+                return runCatching {
+                    parseWidgetNodes(JSONArray(file.readText(Charsets.UTF_8)))
+                }.getOrDefault(emptyList())
+            }
+        }
+        return emptyList()
+    }
+
+    /**
+     * Saves the visual widget tree placed on the white phone canvas for [xmlPage] and
+     * automatically updates the corresponding Android XML file (`res/layout/<xmlFileName>`).
+     */
+    fun saveWidgetsForXmlPage(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+        nodes: List<IdeWidgetNode>,
+    ) {
+        val serialized = serializeWidgetNodes(nodes).toString(2)
+        val key = "widgets_${project.id}_${xmlPage.xmlFileName}"
+        prefs.edit().putString(key, serialized).apply()
+
+        val generatedXml = if (nodes.isEmpty()) {
+            defaultXmlLayoutContent(project, xmlPage)
+        } else {
+            generateXmlFromWidgets(project, xmlPage, nodes)
+        }
+        saveCodeForFlavor(project, xmlPage, CodeEditorFlavor.XML_ANDROID, generatedXml)
+
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val file = File(projDir, ".ide-widgets-${xmlPage.layoutResourceName}.json")
+                file.parentFile?.mkdirs()
+                file.writeText(serialized, Charsets.UTF_8)
+            }
+        }
+    }
+
+    private fun serializeWidgetNodes(nodes: List<IdeWidgetNode>): JSONArray {
+        val arr = JSONArray()
+        nodes.forEach { node ->
+            val obj = JSONObject().apply {
+                put("uid", node.uid)
+                put("viewId", node.viewId)
+                put("type", node.type.name)
+                put("text", node.text)
+                put("children", serializeWidgetNodes(node.children))
+            }
+            arr.put(obj)
+        }
+        return arr
+    }
+
+    private fun parseWidgetNodes(arr: JSONArray): List<IdeWidgetNode> {
+        val list = ArrayList<IdeWidgetNode>(arr.length())
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val type = runCatching { IdeWidgetType.valueOf(obj.getString("type")) }
+                .getOrDefault(IdeWidgetType.TEXT_VIEW)
+            val childrenArr = obj.optJSONArray("children") ?: JSONArray()
+            list.add(
+                IdeWidgetNode(
+                    uid = obj.optString("uid").ifBlank { UUID.randomUUID().toString() },
+                    viewId = obj.optString("viewId").ifBlank { "${type.idPrefix}_${i + 1}" },
+                    type = type,
+                    text = obj.optString("text", "TextView"),
+                    children = parseWidgetNodes(childrenArr),
+                ),
+            )
+        }
+        return list
+    }
+
+    fun generateXmlFromWidgets(
+        project: WorkspaceItem,
+        page: ProjectXmlPage,
+        nodes: List<IdeWidgetNode>,
+    ): String {
+        val sb = StringBuilder()
+        sb.appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
+        sb.appendLine("""<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"""")
+        sb.appendLine("""    xmlns:tools="http://schemas.android.com/tools"""")
+        sb.appendLine("""    android:id="@+id/root_${page.layoutResourceName}"""")
+        sb.appendLine("""    android:layout_width="match_parent"""")
+        sb.appendLine("""    android:layout_height="match_parent"""")
+        sb.appendLine("""    android:orientation="vertical"""")
+        sb.appendLine("""    android:background="#FFFFFF"""")
+        sb.appendLine("""    android:padding="8dp"""")
+        sb.appendLine("""    tools:context=".${page.activityName}">""")
+        nodes.forEach { node ->
+            sb.appendLine()
+            appendWidgetXml(sb, node, indent = "    ")
+        }
+        sb.appendLine()
+        sb.append("""</LinearLayout>""")
+        return sb.toString()
+    }
+
+    private fun appendWidgetXml(sb: StringBuilder, node: IdeWidgetNode, indent: String) {
+        when (node.type) {
+            IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V -> {
+                val orientation = if (node.type == IdeWidgetType.LINEAR_H) "horizontal" else "vertical"
+                sb.appendLine("""$indent<LinearLayout""")
+                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
+                sb.appendLine("""$indent    android:layout_width="match_parent"""")
+                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                sb.appendLine("""$indent    android:orientation="$orientation"""")
+                if (node.children.isEmpty()) {
+                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                } else {
+                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    node.children.forEach { child ->
+                        appendWidgetXml(sb, child, "$indent    ")
+                    }
+                    sb.appendLine("""$indent</LinearLayout>""")
+                }
+            }
+
+            IdeWidgetType.SCROLL_V -> {
+                sb.appendLine("""$indent<ScrollView""")
+                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
+                sb.appendLine("""$indent    android:layout_width="match_parent"""")
+                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                if (node.children.isEmpty()) {
+                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                } else {
+                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    node.children.forEach { child ->
+                        appendWidgetXml(sb, child, "$indent    ")
+                    }
+                    sb.appendLine("""$indent</ScrollView>""")
+                }
+            }
+
+            IdeWidgetType.SCROLL_H -> {
+                sb.appendLine("""$indent<HorizontalScrollView""")
+                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
+                sb.appendLine("""$indent    android:layout_width="match_parent"""")
+                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                if (node.children.isEmpty()) {
+                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                } else {
+                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    node.children.forEach { child ->
+                        appendWidgetXml(sb, child, "$indent    ")
+                    }
+                    sb.appendLine("""$indent</HorizontalScrollView>""")
+                }
+            }
+
+            IdeWidgetType.TEXT_VIEW -> {
+                val safeText = node.text
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                sb.appendLine("""$indent<TextView""")
+                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
+                sb.appendLine("""$indent    android:layout_width="wrap_content"""")
+                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                sb.appendLine("""$indent    android:padding="4dp"""")
+                sb.appendLine("""$indent    android:text="$safeText"""")
+                sb.appendLine("""$indent    android:textColor="#111827"""")
+                sb.appendLine("""$indent    android:textSize="14sp" />""")
+            }
+        }
+    }
+
+    /**
+     * Reads the Activity code for the selected [xmlPage] from disk (or preferences/default template).
+     */
+    fun readActivityCode(project: WorkspaceItem, xmlPage: ProjectXmlPage): String {
+        val defaultFlavor = if (project.language == ProjectLanguage.JAVA) {
+            CodeEditorFlavor.JAVA_ANDROID
+        } else {
+            CodeEditorFlavor.KOTLIN_ANDROID
+        }
+        return readCodeForFlavor(project, xmlPage, defaultFlavor)
     }
 
     /**
@@ -590,15 +901,12 @@ class WorkspaceRepository(context: Context) {
      * and local preferences.
      */
     fun saveActivityCode(project: WorkspaceItem, xmlPage: ProjectXmlPage, newCode: String) {
-        val prefKey = "code_${project.id}_${xmlPage.xmlFileName}"
-        prefs.edit().putString(prefKey, newCode).apply()
-        projectDirectoriesFor(project).forEach { projDir ->
-            runCatching {
-                val codeFile = activityFileInDir(projDir, project, xmlPage)
-                codeFile.parentFile?.mkdirs()
-                codeFile.writeText(newCode, Charsets.UTF_8)
-            }
+        val defaultFlavor = if (project.language == ProjectLanguage.JAVA) {
+            CodeEditorFlavor.JAVA_ANDROID
+        } else {
+            CodeEditorFlavor.KOTLIN_ANDROID
         }
+        saveCodeForFlavor(project, xmlPage, defaultFlavor, newCode)
     }
 
     private fun activityFileInDir(
@@ -616,6 +924,7 @@ class WorkspaceRepository(context: Context) {
 
     private fun ensureDefaultProjectFiles(project: WorkspaceItem) {
         val defaultPages = DEFAULT_XML_LAYOUTS.map { xmlPageForName(project, it) }
+        val pkgPath = project.packageName.replace('.', '/')
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
                 if (!projDir.exists()) projDir.mkdirs()
@@ -625,10 +934,15 @@ class WorkspaceRepository(context: Context) {
                     if (!layoutFile.exists()) {
                         layoutFile.writeText(defaultXmlLayoutContent(project, page), Charsets.UTF_8)
                     }
-                    val codeFile = activityFileInDir(projDir, project, page)
-                    codeFile.parentFile?.mkdirs()
-                    if (!codeFile.exists()) {
-                        codeFile.writeText(defaultActivityCodeContent(project, page), Charsets.UTF_8)
+                    val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+                    ktFile.parentFile?.mkdirs()
+                    if (!ktFile.exists()) {
+                        ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
+                    }
+                    val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
+                    javaFile.parentFile?.mkdirs()
+                    if (!javaFile.exists()) {
+                        javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
                     }
                 }
             }
@@ -694,67 +1008,56 @@ class WorkspaceRepository(context: Context) {
         </LinearLayout>
     """.trimIndent()
 
+    private fun defaultKotlinActivityContent(
+        project: WorkspaceItem,
+        page: ProjectXmlPage,
+    ): String = """
+        package ${project.packageName}
+
+        import android.os.Bundle
+        import androidx.appcompat.app.AppCompatActivity
+
+        /**
+         * Kotlin Android Activity linked to layout: res/layout/${page.xmlFileName}
+         */
+        class ${page.activityName} : AppCompatActivity() {
+
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                setContentView(R.layout.${page.layoutResourceName})
+            }
+        }
+    """.trimIndent()
+
+    private fun defaultJavaActivityContent(
+        project: WorkspaceItem,
+        page: ProjectXmlPage,
+    ): String = """
+        package ${project.packageName};
+
+        import android.app.Activity;
+        import android.os.Bundle;
+
+        /**
+         * Java Android Activity linked to layout: res/layout/${page.xmlFileName}
+         */
+        public class ${page.activityName} extends Activity {
+
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                setContentView(R.layout.${page.layoutResourceName});
+            }
+        }
+    """.trimIndent()
+
     private fun defaultActivityCodeContent(
         project: WorkspaceItem,
         page: ProjectXmlPage,
     ): String = when (project.language) {
-        ProjectLanguage.KOTLIN -> """
-            package ${project.packageName}
-
-            import android.os.Bundle
-            import androidx.appcompat.app.AppCompatActivity
-
-            /**
-             * Activity linked to layout: res/layout/${page.xmlFileName}
-             */
-            class ${page.activityName} : AppCompatActivity() {
-
-                override fun onCreate(savedInstanceState: Bundle?) {
-                    super.onCreate(savedInstanceState)
-                    setContentView(R.layout.${page.layoutResourceName})
-                }
-            }
-        """.trimIndent()
-
-        ProjectLanguage.JAVA -> """
-            package ${project.packageName};
-
-            import android.app.Activity;
-            import android.os.Bundle;
-
-            /**
-             * Activity linked to layout: res/layout/${page.xmlFileName}
-             */
-            public class ${page.activityName} extends Activity {
-
-                @Override
-                protected void onCreate(Bundle savedInstanceState) {
-                    super.onCreate(savedInstanceState);
-                    setContentView(R.layout.${page.layoutResourceName});
-                }
-            }
-        """.trimIndent()
-
-        ProjectLanguage.FLUTTER -> """
-            import 'package:flutter/material.dart';
-
-            /// Screen linked to XML page: ${page.xmlFileName}
-            class ${page.activityName} extends StatelessWidget {
-              const ${page.activityName}({super.key});
-
-              @override
-              Widget build(BuildContext context) {
-                return Scaffold(
-                  appBar: AppBar(
-                    title: const Text('${project.name} - ${page.activityName}'),
-                  ),
-                  body: const Center(
-                    child: Text('Layout: ${page.xmlFileName} (${page.activityName})'),
-                  ),
-                );
-              }
-            }
-        """.trimIndent()
+        ProjectLanguage.KOTLIN -> defaultKotlinActivityContent(project, page)
+        ProjectLanguage.JAVA -> defaultJavaActivityContent(project, page)
+        ProjectLanguage.FLUTTER -> defaultKotlinActivityContent(project, page)
     }
 
     /**
