@@ -6578,8 +6578,8 @@ private data class IdeViewEventOption(
 private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption> = when (type) {
     // 1. Text Widgets — Every Text widget has its own distinct events!
     IdeWidgetType.TEXT_VIEW -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On TextView clicked • عند الضغط على النص"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On TextView long clicked • عند الضغط المطوّل"),
+        IdeViewEventOption("onTextClick", "OnText\nClick", "onTextClick", "On TextView clicked • عند الضغط على النص"),
+        IdeViewEventOption("onTextLongClick", "OnText\nLongClick", "onTextLongClick", "On TextView long clicked • عند الضغط المطوّل"),
         IdeViewEventOption("onTextLinkClick", "OnLink\nClick", "onTextLinkClick", "On link/URL clicked inside TextView"),
         IdeViewEventOption("onTextCopied", "OnText\nCopied", "onTextCopied", "On TextView text copied"),
     )
@@ -6592,94 +6592,110 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
     )
     IdeWidgetType.AUTO_COMPLETE_TEXT -> listOf(
         IdeViewEventOption("onSuggestionClick", "OnItem\nSelect", "onSuggestionClick", "On autocomplete suggestion item selected"),
-        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On AutoComplete query text changed"),
+        IdeViewEventOption("onQueryFilter", "OnQuery\nFilter", "onQueryFilter", "On AutoComplete filter query updated"),
+        IdeViewEventOption("onDropdownShow", "OnPopup\nShow", "onDropdownShow", "On suggestions dropdown shown"),
         IdeViewEventOption("onDropdownDismiss", "OnPopup\nDismiss", "onDropdownDismiss", "On suggestions dropdown dismissed"),
         IdeViewEventOption("onThresholdReached", "OnFilter\nReady", "onThresholdReached", "On completion threshold reached"),
     )
     IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> listOf(
         IdeViewEventOption("onTokenAdded", "OnToken\nAdded", "onTokenAdded", "On comma-separated token added"),
         IdeViewEventOption("onTokenRemoved", "OnToken\nRemoved", "onTokenRemoved", "On token removed from field"),
-        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On MultiAutoComplete text changed"),
-        IdeViewEventOption("onDropdownDismiss", "OnPopup\nDismiss", "onDropdownDismiss", "On suggestions popup dismissed"),
+        IdeViewEventOption("onTokenizerSplit", "OnToken\nSplit", "onTokenizerSplit", "On MultiAutoComplete tokenizer split"),
+        IdeViewEventOption("onMultiPopupDismiss", "OnMulti\nDismiss", "onMultiPopupDismiss", "On MultiAutoComplete popup dismissed"),
     )
     IdeWidgetType.CHECKED_TEXT_VIEW -> listOf(
-        IdeViewEventOption("onCheckedChanged", "OnCheck\nChanged", "onCheckedChanged", "On CheckedTextView check state toggled"),
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On CheckedTextView clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On CheckedTextView long clicked"),
+        IdeViewEventOption("onCheckedChanged", "OnCheck\nToggle", "onCheckedChanged", "On CheckedTextView check state toggled"),
+        IdeViewEventOption("onCheckMarkTap", "OnMark\nTap", "onCheckMarkTap", "On CheckedTextView checkmark icon tapped"),
+        IdeViewEventOption("onCheckedStateRead", "OnCheck\nRead", "onCheckedStateRead", "On CheckedTextView checked state read"),
     )
     IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> listOf(
-        IdeViewEventOption("onTextChanged", "OnText\nChanged", "onTextChanged", "On TextInputEditText text changed"),
+        IdeViewEventOption("onInputTextChanged", "OnInput\nChanged", "onInputTextChanged", "On TextInputEditText input changed"),
         IdeViewEventOption("onEndIconClick", "OnEndIcon\nClick", "onEndIconClick", "On clear/password toggle icon clicked"),
+        IdeViewEventOption("onStartIconClick", "OnStartIcon\nClick", "onStartIconClick", "On leading start icon clicked"),
         IdeViewEventOption("onErrorChanged", "OnError\nState", "onErrorChanged", "On validation error state changed"),
-        IdeViewEventOption("onEditorAction", "OnEditor\nAction", "onEditorAction", "On keyboard IME action pressed"),
-        IdeViewEventOption("onFocusChange", "OnFocus\nChange", "onFocusChange", "On TextInput focus changed"),
+        IdeViewEventOption("onCounterOverflow", "OnMax\nLength", "onCounterOverflow", "On character counter max length exceeded"),
     )
 
-    // 2. Layouts — Each Layout has its own events
+    // 2. Layouts — Each Layout has its own completely distinct events!
     IdeWidgetType.LINEAR_H -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On Horizontal LinearLayout clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On Horizontal LinearLayout long clicked"),
-        IdeViewEventOption("onChildAdded", "OnChild\nAdded", "onChildAdded", "On child view added to Linear(H)"),
-        IdeViewEventOption("onChildRemoved", "OnChild\nRemoved", "onChildRemoved", "On child view removed from Linear(H)"),
+        IdeViewEventOption("onLinearHClick", "OnRow\nClick", "onLinearHClick", "On Horizontal LinearLayout row clicked"),
+        IdeViewEventOption("onChildAddedH", "OnChild\nAdded", "onChildAddedH", "On child view added to Linear(H)"),
+        IdeViewEventOption("onChildRemovedH", "OnChild\nRemoved", "onChildRemovedH", "On child view removed from Linear(H)"),
+        IdeViewEventOption("onWeightSumChange", "OnWeight\nChange", "onWeightSumChange", "On horizontal weight distribution updated"),
     )
     IdeWidgetType.LINEAR_V -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On Vertical LinearLayout clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On Vertical LinearLayout long clicked"),
-        IdeViewEventOption("onChildAdded", "OnChild\nAdded", "onChildAdded", "On child view added to Linear(V)"),
-        IdeViewEventOption("onLayoutChange", "OnLayout\nChange", "onLayoutChange", "On Linear(V) bounds changed"),
+        IdeViewEventOption("onLinearVClick", "OnColumn\nClick", "onLinearVClick", "On Vertical LinearLayout column clicked"),
+        IdeViewEventOption("onChildAddedV", "OnItem\nAdded", "onChildAddedV", "On child view added to Linear(V)"),
+        IdeViewEventOption("onLayoutBoundsChange", "OnBounds\nChange", "onLayoutBoundsChange", "On Linear(V) layout bounds changed"),
+        IdeViewEventOption("onDividerDraw", "OnDivider\nChanged", "onDividerDraw", "On vertical divider state updated"),
     )
     IdeWidgetType.SCROLL_H -> listOf(
-        IdeViewEventOption("onScrollChange", "OnScroll\nChange", "onScrollChange", "On vertical ScrollView scroll position changed"),
+        IdeViewEventOption("onScrollYChange", "OnScrollY\nChange", "onScrollYChange", "On vertical ScrollView scroll Y changed"),
         IdeViewEventOption("onReachBottom", "OnReach\nBottom", "onReachBottom", "On ScrollView scrolled to bottom"),
         IdeViewEventOption("onReachTop", "OnReach\nTop", "onReachTop", "On ScrollView scrolled to top"),
-        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On ScrollView touch event"),
+        IdeViewEventOption("onFlingVertical", "OnFling\nScroll", "onFlingVertical", "On ScrollView vertical fling gesture"),
     )
     IdeWidgetType.SCROLL_V -> listOf(
-        IdeViewEventOption("onHorizontalScroll", "OnHoriz\nScroll", "onHorizontalScroll", "On HorizontalScrollView scroll X changed"),
-        IdeViewEventOption("onReachEnd", "OnReach\nEnd", "onReachEnd", "On HorizontalScrollView reached end"),
-        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On HorizontalScrollView touch event"),
+        IdeViewEventOption("onScrollXChange", "OnScrollX\nChange", "onScrollXChange", "On HorizontalScrollView scroll X changed"),
+        IdeViewEventOption("onReachRightEnd", "OnReach\nRight", "onReachRightEnd", "On HorizontalScrollView reached right end"),
+        IdeViewEventOption("onReachLeftStart", "OnReach\nLeft", "onReachLeftStart", "On HorizontalScrollView reached left start"),
+        IdeViewEventOption("onFlingHorizontal", "OnHoriz\nFling", "onFlingHorizontal", "On HorizontalScrollView fling gesture"),
     )
 
-    // 3. Image Widgets — Distinct events per Image widget
+    // 3. Image Widgets — Every single Image widget has its own 100% distinct events (كل عنصر غير أحداث الآخر)!
     IdeWidgetType.IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageView clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ImageView long clicked"),
-        IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On ImageView touched"),
+        IdeViewEventOption("onImageClick", "OnImage\nClick", "onImageClick", "On ImageView clicked • عند الضغط على الصورة"),
+        IdeViewEventOption("onImageLongClick", "OnImage\nLongClick", "onImageLongClick", "On ImageView long clicked • عند الضغط المطوّل على الصورة"),
+        IdeViewEventOption("onImageLoaded", "OnImage\nLoaded", "onImageLoaded", "On bitmap/drawable loaded into ImageView"),
+        IdeViewEventOption("onImageLoadError", "OnLoad\nError", "onImageLoadError", "On ImageView resource load failed"),
+        IdeViewEventOption("onScaleTypeChange", "OnScale\nType", "onScaleTypeChange", "On ImageView scaleType changed"),
     )
     IdeWidgetType.CIRCLE_IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onAvatarClick", "OnAvatar\nClick", "onAvatarClick", "On CircleImageView avatar clicked"),
-        IdeViewEventOption("onBorderClick", "OnBorder\nClick", "onBorderClick", "On CircleImageView border tapped"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On CircleImageView long clicked"),
+        IdeViewEventOption("onAvatarTap", "OnAvatar\nTap", "onAvatarTap", "On CircleImageView avatar tapped"),
+        IdeViewEventOption("onAvatarDoubleTap", "OnAvatar\nDoubleTap", "onAvatarDoubleTap", "On CircleImageView avatar double tapped"),
+        IdeViewEventOption("onBorderColorChange", "OnBorder\nColor", "onBorderColorChange", "On CircleImageView border color changed"),
+        IdeViewEventOption("onBorderWidthChange", "OnBorder\nWidth", "onBorderWidthChange", "On CircleImageView border width changed"),
+        IdeViewEventOption("onCircleCropReady", "OnCircle\nReady", "onCircleCropReady", "On circular bitmap crop completed"),
     )
     IdeWidgetType.IMAGE_BUTTON -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageButton clicked"),
-        IdeViewEventOption("onPressState", "OnPress\nState", "onPressState", "On ImageButton pressed/released"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ImageButton long clicked"),
+        IdeViewEventOption("onBtnPressDown", "OnBtn\nPress", "onBtnPressDown", "On ImageButton pressed down"),
+        IdeViewEventOption("onBtnReleaseUp", "OnBtn\nRelease", "onBtnReleaseUp", "On ImageButton released"),
+        IdeViewEventOption("onRippleTrigger", "OnRipple\nEffect", "onRippleTrigger", "On ImageButton ripple animation triggered"),
+        IdeViewEventOption("onIconStateChange", "OnIcon\nState", "onIconStateChange", "On ImageButton active/disabled icon changed"),
+        IdeViewEventOption("onHoldRepeat", "OnHold\nRepeat", "onHoldRepeat", "On ImageButton held down repeat action"),
     )
     IdeWidgetType.ROUNDED_IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On RoundedImageView clicked"),
-        IdeViewEventOption("onCornerChange", "OnCorner\nChange", "onCornerChange", "On corner radius changed"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On RoundedImageView long clicked"),
+        IdeViewEventOption("onCornerRadiusChange", "OnCorner\nRadius", "onCornerRadiusChange", "On RoundedImageView corner radius changed"),
+        IdeViewEventOption("onRoundedCardTap", "OnRounded\nTap", "onRoundedCardTap", "On RoundedImageView card tapped"),
+        IdeViewEventOption("onTopCornersClip", "OnTop\nCorners", "onTopCornersClip", "On top corners rounded clip applied"),
+        IdeViewEventOption("onBottomCornersClip", "OnBottom\nCorners", "onBottomCornersClip", "On bottom corners rounded clip applied"),
+        IdeViewEventOption("onShadowElevation", "OnShadow\nElevation", "onShadowElevation", "On RoundedImageView shadow elevation changed"),
     )
     IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On ShapeableImageView clicked"),
-        IdeViewEventOption("onShapeChanged", "OnShape\nChange", "onShapeChanged", "On ShapeAppearanceModel updated"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ShapeableImageView long clicked"),
+        IdeViewEventOption("onShapeModelChange", "OnShape\nModel", "onShapeModelChange", "On ShapeAppearanceModel changed (Cut/Rounded/Diamond)"),
+        IdeViewEventOption("onStrokeOutlineTap", "OnStroke\nOutline", "onStrokeOutlineTap", "On ShapeableImageView stroke outline updated"),
+        IdeViewEventOption("onCornerFamilySwitch", "OnCorner\nFamily", "onCornerFamilySwitch", "On corner family switched (Rounded vs Cut)"),
+        IdeViewEventOption("onMaskPathUpdate", "OnMask\nPath", "onMaskPathUpdate", "On custom shape mask path recalculated"),
     )
     IdeWidgetType.ZOOM_IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onZoomChanged", "OnZoom\nChange", "onZoomChanged", "On pinch zoom scale changed"),
-        IdeViewEventOption("onDoubleTapZoom", "OnDouble\nTapZoom", "onDoubleTapZoom", "On double-tap zoom triggered"),
-        IdeViewEventOption("onSingleTap", "OnSingle\nTap", "onSingleTap", "On ZoomImageView single tapped"),
+        IdeViewEventOption("onPinchZoom", "OnPinch\nZoom", "onPinchZoom", "On pinch-to-zoom scale factor changed (scaleFactor)"),
+        IdeViewEventOption("onDoubleTapZoom", "OnDouble\nTapZoom", "onDoubleTapZoom", "On double-tap zoom in/out toggled"),
+        IdeViewEventOption("onPanDrag", "OnPan\nDrag", "onPanDrag", "On zoomed image panned/dragged (dx, dy)"),
+        IdeViewEventOption("onZoomReset", "OnZoom\nReset", "onZoomReset", "On zoom returned to 1.0x original scale"),
+        IdeViewEventOption("onMaxZoomReached", "OnMax\nZoom", "onMaxZoomReached", "On maximum zoom limit reached"),
     )
     IdeWidgetType.ASPECT_IMAGE_VIEW -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On AspectImageView clicked"),
-        IdeViewEventOption("onRatioChanged", "OnRatio\nChange", "onRatioChanged", "On aspect ratio updated"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On AspectImageView long clicked"),
+        IdeViewEventOption("onAspectRatioChange", "OnRatio\nChanged", "onAspectRatioChange", "On aspect ratio changed (16:9 / 4:3 / 1:1)"),
+        IdeViewEventOption("onMeasureBounds", "OnBounds\nMeasure", "onMeasureBounds", "On AspectImageView width/height measured"),
+        IdeViewEventOption("onCropFrameUpdate", "OnCrop\nFrame", "onCropFrameUpdate", "On aspect crop viewport updated"),
+        IdeViewEventOption("onRatioFlip", "OnRatio\nFlip", "onRatioFlip", "On aspect ratio flipped portrait/landscape"),
     )
     IdeWidgetType.IMAGE_FILTER_VIEW -> listOf(
-        IdeViewEventOption("onFilterChanged", "OnFilter\nChange", "onFilterChanged", "On saturation/warmth/contrast changed"),
-        IdeViewEventOption("onCrossfadeUpdate", "OnCross\nFade", "onCrossfadeUpdate", "On image crossfade progress changed"),
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On ImageFilterView clicked"),
+        IdeViewEventOption("onSaturationChange", "OnSaturate\nChange", "onSaturationChange", "On image saturation filter changed"),
+        IdeViewEventOption("onContrastChange", "OnContrast\nChange", "onContrastChange", "On image contrast filter changed"),
+        IdeViewEventOption("onWarmthChange", "OnWarmth\nChange", "onWarmthChange", "On image warmth/temperature changed"),
+        IdeViewEventOption("onCrossfadeProgress", "OnCross\nFade", "onCrossfadeProgress", "On altSrc crossfade progress (0.0..1.0)"),
+        IdeViewEventOption("onBrightnessChange", "OnBright\nChange", "onBrightnessChange", "On image brightness filter updated"),
     )
 
     // 4. Button Widgets — Distinct events per Button widget
@@ -6689,57 +6705,64 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onTouch", "OnTouch", "onTouch", "On Button touch event"),
     )
     IdeWidgetType.MATERIAL_BUTTON -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On MaterialButton clicked"),
-        IdeViewEventOption("onCheckedChanged", "OnCheck\nChange", "onCheckedChanged", "On MaterialButton check state changed"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On MaterialButton long clicked"),
+        IdeViewEventOption("onMaterialClick", "OnMaterial\nClick", "onMaterialClick", "On MaterialButton clicked"),
+        IdeViewEventOption("onIconGravityTap", "OnIcon\nTap", "onIconGravityTap", "On MaterialButton icon tapped"),
+        IdeViewEventOption("onCornerMorph", "OnCorner\nMorph", "onCornerMorph", "On MaterialButton corner radius morphed"),
+        IdeViewEventOption("onStrokeWidthChange", "OnStroke\nChange", "onStrokeWidthChange", "On MaterialButton stroke updated"),
     )
     IdeWidgetType.OUTLINED_BUTTON -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On OutlinedButton clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On OutlinedButton long clicked"),
-        IdeViewEventOption("onHoverChange", "OnHover\nChange", "onHoverChange", "On OutlinedButton hover/press state"),
+        IdeViewEventOption("onOutlineClick", "OnOutline\nClick", "onOutlineClick", "On OutlinedButton clicked"),
+        IdeViewEventOption("onBorderPress", "OnBorder\nPress", "onBorderPress", "On OutlinedButton border pressed"),
+        IdeViewEventOption("onHoverChange", "OnHover\nState", "onHoverChange", "On OutlinedButton hover state changed"),
     )
     IdeWidgetType.TEXT_BUTTON -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On TextButton clicked"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On TextButton long clicked"),
+        IdeViewEventOption("onTextBtnTap", "OnTextBtn\nTap", "onTextBtnTap", "On TextButton tapped"),
+        IdeViewEventOption("onRippleSpread", "OnRipple\nSpread", "onRippleSpread", "On TextButton ripple spread finished"),
+        IdeViewEventOption("onLinkAction", "OnLink\nAction", "onLinkAction", "On TextButton secondary action triggered"),
     )
     IdeWidgetType.FAB_BUTTON -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On FAB clicked"),
-        IdeViewEventOption("onShowHide", "OnShow\nHide", "onShowHide", "On FAB shown or hidden"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On FAB long clicked"),
+        IdeViewEventOption("onFabClick", "OnFab\nClick", "onFabClick", "On FloatingActionButton clicked"),
+        IdeViewEventOption("onFabShown", "OnFab\nShown", "onFabShown", "On FAB show animation finished"),
+        IdeViewEventOption("onFabHidden", "OnFab\nHidden", "onFabHidden", "On FAB hide animation finished"),
+        IdeViewEventOption("onFabRotate", "OnFab\nRotate", "onFabRotate", "On FAB icon rotated"),
     )
     IdeWidgetType.EXTENDED_FAB -> listOf(
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On ExtendedFAB clicked"),
-        IdeViewEventOption("onExtend", "OnExtend", "onExtend", "On ExtendedFAB expanded"),
-        IdeViewEventOption("onShrink", "OnShrink", "onShrink", "On ExtendedFAB collapsed to icon"),
-        IdeViewEventOption("onLongClick", "OnLong\nClick", "onLongClick", "On ExtendedFAB long clicked"),
+        IdeViewEventOption("onExtFabClick", "OnExtFab\nClick", "onExtFabClick", "On ExtendedFAB clicked"),
+        IdeViewEventOption("onExtend", "OnExtend", "onExtend", "On ExtendedFAB expanded with text"),
+        IdeViewEventOption("onShrink", "OnShrink", "onShrink", "On ExtendedFAB collapsed to icon only"),
+        IdeViewEventOption("onSlideBehavior", "OnScroll\nSlide", "onSlideBehavior", "On ExtendedFAB auto-shrink on scroll"),
     )
     IdeWidgetType.TOGGLE_BUTTON -> listOf(
-        IdeViewEventOption("onCheckedChange", "OnToggle\nChange", "onCheckedChange", "On ToggleButton switched ON/OFF"),
+        IdeViewEventOption("onToggleChange", "OnToggle\nChange", "onToggleChange", "On ToggleButton switched ON/OFF"),
         IdeViewEventOption("onToggleOn", "OnTurn\nON", "onToggleOn", "When ToggleButton becomes ON"),
         IdeViewEventOption("onToggleOff", "OnTurn\nOFF", "onToggleOff", "When ToggleButton becomes OFF"),
     )
     IdeWidgetType.CHIP_BUTTON -> listOf(
         IdeViewEventOption("onChipClick", "OnChip\nClick", "onChipClick", "On Chip clicked"),
         IdeViewEventOption("onCloseIconClick", "OnClose\nIcon", "onCloseIconClick", "On Chip close (X) icon clicked"),
-        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On Chip selection changed"),
+        IdeViewEventOption("onChipChecked", "OnChip\nCheck", "onChipChecked", "On Chip filter selection changed"),
     )
 
     // 5. Choose Widgets — Distinct events per Choose widget
     IdeWidgetType.CHECK_BOX -> listOf(
-        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On CheckBox checked/unchecked (isChecked)"),
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On CheckBox clicked"),
+        IdeViewEventOption("onCheckBoxChange", "OnBox\nChecked", "onCheckBoxChange", "On CheckBox checked/unchecked (isChecked)"),
+        IdeViewEventOption("onIndeterminate", "OnTri\nState", "onIndeterminate", "On CheckBox indeterminate state changed"),
+        IdeViewEventOption("onCheckBoxTap", "OnBox\nTap", "onCheckBoxTap", "On CheckBox label tapped"),
     )
     IdeWidgetType.RADIO_BUTTON -> listOf(
         IdeViewEventOption("onRadioSelected", "OnRadio\nSelect", "onRadioSelected", "On RadioButton selected"),
-        IdeViewEventOption("onCheckedChange", "OnCheck\nChange", "onCheckedChange", "On RadioButton state changed"),
+        IdeViewEventOption("onRadioDeselected", "OnRadio\nUnselect", "onRadioDeselected", "On RadioButton unselected in group"),
+        IdeViewEventOption("onGroupChange", "OnGroup\nChange", "onGroupChange", "On RadioGroup checkedId changed"),
     )
     IdeWidgetType.SWITCH -> listOf(
-        IdeViewEventOption("onCheckedChange", "OnSwitch\nChange", "onCheckedChange", "On Switch toggled ON/OFF (isChecked)"),
+        IdeViewEventOption("onSwitchToggle", "OnSwitch\nToggle", "onSwitchToggle", "On Switch toggled ON/OFF (isChecked)"),
         IdeViewEventOption("onSlideThumb", "OnSlide\nThumb", "onSlideThumb", "On Switch thumb dragged"),
+        IdeViewEventOption("onTrackColorChange", "OnTrack\nChange", "onTrackColorChange", "On Switch track state updated"),
     )
     IdeWidgetType.SPINNER -> listOf(
-        IdeViewEventOption("onItemSelected", "OnItem\nSelected", "onItemSelected", "On Spinner option selected (position)"),
+        IdeViewEventOption("onItemSelected", "OnSpinner\nSelect", "onItemSelected", "On Spinner option selected (position)"),
         IdeViewEventOption("onNothingSelected", "OnNothing\nSelected", "onNothingSelected", "When Spinner selection cleared"),
+        IdeViewEventOption("onSpinnerPopupOpen", "OnMenu\nOpen", "onSpinnerPopupOpen", "On Spinner dropdown menu opened"),
     )
 
     // 6. Web Widgets — Distinct events per Web widget
@@ -6761,25 +6784,25 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
     )
     IdeWidgetType.AD_WEB_VIEW -> listOf(
         IdeViewEventOption("onAdBlocked", "OnAd\nBlocked", "onAdBlocked", "When an ad request is blocked (blockedUrl)"),
-        IdeViewEventOption("onPageStarted", "OnPage\nStarted", "onPageStarted", "On AdBlockWebView page started"),
-        IdeViewEventOption("onPageFinished", "OnPage\nFinished", "onPageFinished", "On AdBlockWebView page finished"),
+        IdeViewEventOption("onTrackerBlocked", "OnTracker\nBlocked", "onTrackerBlocked", "When a tracking script is blocked"),
+        IdeViewEventOption("onPopupBlocked", "OnPopup\nBlocked", "onPopupBlocked", "When an ad popup window is blocked"),
     )
     IdeWidgetType.SWIPE_WEB_VIEW -> listOf(
         IdeViewEventOption("onSwipeRefresh", "OnPull\nRefresh", "onSwipeRefresh", "On pull-to-refresh gesture triggered"),
-        IdeViewEventOption("onPageFinished", "OnPage\nFinished", "onPageFinished", "On SwipeWebView page finished"),
+        IdeViewEventOption("onReloadComplete", "OnReload\nDone", "onReloadComplete", "On SwipeWebView refresh completed"),
         IdeViewEventOption("onProgressChanged", "OnLoad\nProgress", "onProgressChanged", "On page loading progress (0..100)"),
     )
 
     // 7. List Widgets — Distinct events per List widget
     IdeWidgetType.GRID_VIEW -> listOf(
-        IdeViewEventOption("onItemClick", "OnCell\nClick", "onItemClick", "On GridView cell clicked (position)"),
-        IdeViewEventOption("onItemLongClick", "OnCell\nLongClick", "onItemLongClick", "On GridView cell long clicked (position)"),
-        IdeViewEventOption("onScroll", "OnGrid\nScroll", "onScroll", "On GridView scrolled"),
+        IdeViewEventOption("onGridCellClick", "OnCell\nClick", "onGridCellClick", "On GridView cell clicked (position)"),
+        IdeViewEventOption("onGridCellLongClick", "OnCell\nLongClick", "onGridCellLongClick", "On GridView cell long clicked (position)"),
+        IdeViewEventOption("onGridScroll", "OnGrid\nScroll", "onGridScroll", "On GridView scrolled"),
     )
     IdeWidgetType.LIST_VIEW -> listOf(
-        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On ListView row clicked (position)"),
-        IdeViewEventOption("onItemLongClick", "OnItem\nLongClick", "onItemLongClick", "On ListView row long clicked (position)"),
-        IdeViewEventOption("onScrollChange", "OnList\nScroll", "onScrollChange", "On ListView scroll state changed"),
+        IdeViewEventOption("onListRowClick", "OnRow\nTap", "onListRowClick", "On ListView row clicked (position)"),
+        IdeViewEventOption("onListRowLongClick", "OnRow\nLongTap", "onListRowLongClick", "On ListView row long clicked (position)"),
+        IdeViewEventOption("onListScrollChange", "OnList\nScroll", "onListScrollChange", "On ListView scroll state changed"),
     )
     IdeWidgetType.TREE_VIEW -> listOf(
         IdeViewEventOption("onNodeClick", "OnNode\nClick", "onNodeClick", "On TreeView node clicked"),
@@ -6787,14 +6810,14 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onNodeCollapse", "OnNode\nCollapse", "onNodeCollapse", "On TreeView branch collapsed"),
     )
     IdeWidgetType.RECYCLER_VIEW -> listOf(
-        IdeViewEventOption("onBindCustomView", "OnBind\nView", "onBindCustomView", "On RecyclerView ViewHolder bound (position)"),
-        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On RecyclerView item clicked"),
-        IdeViewEventOption("onScrollStateChanged", "OnScroll\nState", "onScrollStateChanged", "On RecyclerView scroll state changed"),
+        IdeViewEventOption("onBindCustomView", "OnBind\nHolder", "onBindCustomView", "On RecyclerView ViewHolder bound (position)"),
+        IdeViewEventOption("onHolderRecycled", "OnView\nRecycled", "onHolderRecycled", "On RecyclerView ViewHolder recycled"),
+        IdeViewEventOption("onScrollStateChanged", "OnRecycler\nScroll", "onScrollStateChanged", "On RecyclerView scroll state changed"),
     )
     IdeWidgetType.VIEW_PAGER -> listOf(
         IdeViewEventOption("onPageSelected", "OnPage\nSelected", "onPageSelected", "On ViewPager page selected (position)"),
         IdeViewEventOption("onPageScrolled", "OnPage\nScrolled", "onPageScrolled", "On ViewPager page scrolling"),
-        IdeViewEventOption("onPageScrollState", "OnScroll\nState", "onPageScrollState", "On ViewPager scroll state changed"),
+        IdeViewEventOption("onPageScrollState", "OnPager\nState", "onPageScrollState", "On ViewPager scroll state changed"),
     )
     IdeWidgetType.EXPANDABLE_LIST_VIEW -> listOf(
         IdeViewEventOption("onGroupClick", "OnGroup\nClick", "onGroupClick", "On ExpandableList group header clicked"),
@@ -6808,28 +6831,28 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onSpanChanged", "OnSpan\nChange", "onSpanChanged", "On staggered span layout changed"),
     )
     IdeWidgetType.HORIZONTAL_LIST_VIEW -> listOf(
-        IdeViewEventOption("onHorizItemClick", "OnCard\nClick", "onHorizItemClick", "On HorizontalList item clicked"),
-        IdeViewEventOption("onHorizScrollEnd", "OnReach\nEnd", "onHorizScrollEnd", "On HorizontalList scrolled to end"),
+        IdeViewEventOption("onHorizItemClick", "OnHoriz\nItemTap", "onHorizItemClick", "On HorizontalList item clicked"),
+        IdeViewEventOption("onHorizScrollEnd", "OnHoriz\nEnd", "onHorizScrollEnd", "On HorizontalList scrolled to end"),
     )
     IdeWidgetType.CAROUSEL_VIEW -> listOf(
         IdeViewEventOption("onCarouselSnap", "OnCard\nSnap", "onCarouselSnap", "On CarouselView card snapped to center"),
-        IdeViewEventOption("onCarouselClick", "OnCard\nClick", "onCarouselClick", "On CarouselView active card clicked"),
+        IdeViewEventOption("onCarouselClick", "OnCenter\nTap", "onCarouselClick", "On CarouselView active card clicked"),
     )
     IdeWidgetType.SWIPE_LIST_VIEW -> listOf(
-        IdeViewEventOption("onSwipeRefresh", "OnPull\nRefresh", "onSwipeRefresh", "On SwipeListView pull-to-refresh"),
-        IdeViewEventOption("onItemDismissed", "OnSwipe\nDismiss", "onItemDismissed", "On row swiped left/right"),
-        IdeViewEventOption("onItemClick", "OnItem\nClick", "onItemClick", "On SwipeListView item clicked"),
+        IdeViewEventOption("onSwipeDismissLeft", "OnSwipe\nLeft", "onSwipeDismissLeft", "On row swiped left"),
+        IdeViewEventOption("onSwipeDismissRight", "OnSwipe\nRight", "onSwipeDismissRight", "On row swiped right"),
+        IdeViewEventOption("onUndoSwipe", "OnSwipe\nUndo", "onUndoSwipe", "On swipe dismissal undone"),
     )
 
     // 8. Date & Time Widgets — Distinct events per Date/Time widget
     IdeWidgetType.ANALOG_CLOCK -> listOf(
-        IdeViewEventOption("onTimeTick", "OnMinute\nTick", "onTimeTick", "On AnalogClock minute hand tick"),
+        IdeViewEventOption("onMinuteHandTick", "OnMinute\nTick", "onMinuteHandTick", "On AnalogClock minute hand tick"),
         IdeViewEventOption("onHourChime", "OnHour\nChime", "onHourChime", "On AnalogClock full hour reached"),
-        IdeViewEventOption("onClick", "OnClick", "onClick", "On AnalogClock clicked"),
+        IdeViewEventOption("onDialFaceTap", "OnDial\nTap", "onDialFaceTap", "On AnalogClock dial face tapped"),
     )
     IdeWidgetType.DIGITAL_CLOCK -> listOf(
         IdeViewEventOption("onSecondTick", "OnSecond\nTick", "onSecondTick", "On DigitalClock second updated"),
-        IdeViewEventOption("onFormatChange", "OnFormat\nChange", "onFormatChange", "On 12h/24h format switched"),
+        IdeViewEventOption("onFormatChange", "OnFormat\n24h/12h", "onFormatChange", "On 12h/24h format switched"),
     )
     IdeWidgetType.TIME_PICKER -> listOf(
         IdeViewEventOption("onTimeChanged", "OnTime\nChanged", "onTimeChanged", "On TimePicker time changed (hourOfDay, minute)"),
@@ -6844,7 +6867,7 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onMonthChanged", "OnMonth\nChanged", "onMonthChanged", "On CalendarView month swiped"),
     )
     IdeWidgetType.TEXT_CLOCK -> listOf(
-        IdeViewEventOption("onTimeTick", "OnClock\nTick", "onTimeTick", "On TextClock formatted time updated"),
+        IdeViewEventOption("onClockPatternTick", "OnClock\nTick", "onClockPatternTick", "On TextClock formatted time updated"),
         IdeViewEventOption("onTimeZoneChanged", "OnZone\nChange", "onTimeZoneChanged", "On TextClock timeZone changed"),
     )
     IdeWidgetType.CHRONOMETER -> listOf(
@@ -7029,44 +7052,44 @@ private fun IdeLogicEventWorkspace(
             }
         }
 
-        // 3. Rounded-Square Floating Action Button (+) at Bottom-End (exact match to screenshot!)
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 18.dp, bottom = 18.dp)
-                .size(58.dp)
-                .shadow(10.dp, RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF283A75), Color(0xFF364F9C)),
-                    ),
+        // 3. Rounded-Square Floating Action Button (+) at Bottom-End
+        // Hidden in VIEW section because View events are toggled directly from each widget's Event tab in View!
+        if (activeSection != IdeLogicSection.VIEW) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 18.dp, bottom = 18.dp)
+                    .size(58.dp)
+                    .shadow(10.dp, RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF283A75), Color(0xFF364F9C)),
+                        ),
+                    )
+                    .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                    .clickable {
+                        when (activeSection) {
+                            IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
+                            IdeLogicSection.FUNCTIONS -> {
+                                editingFunctionItem = null
+                                showFunctionSheet = true
+                            }
+                            IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
+                                showAddComponentOrDrawerSheet = true
+                            }
+                            IdeLogicSection.VIEW -> {}
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Add Event or Function",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
                 )
-                .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-                .clickable {
-                    when (activeSection) {
-                        IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
-                        IdeLogicSection.VIEW -> {
-                            preselectedViewNodeForSheet = null
-                            showAddViewSheet = true
-                        }
-                        IdeLogicSection.FUNCTIONS -> {
-                            editingFunctionItem = null
-                            showFunctionSheet = true
-                        }
-                        IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
-                            showAddComponentOrDrawerSheet = true
-                        }
-                    }
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = "Add Event or Function",
-                tint = Color.White,
-                modifier = Modifier.size(26.dp),
-            )
+            }
         }
     }
 
