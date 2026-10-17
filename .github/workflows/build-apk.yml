@@ -103,24 +103,39 @@ jobs:
       - name: Verify APK signatures
         run: |
           SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          echo "build-tools: $(ls "$SDK/build-tools" 2>/dev/null | tr '\n' ' ')"
+          APKSIGNER="$(find "$SDK/build-tools" -maxdepth 2 -type f -name apksigner 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error title=Signing::apksigner was not found in the Android SDK"
+            exit 1
+          fi
           echo "apksigner: $APKSIGNER"
+
           DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
           RELEASE_APK=app/build/outputs/apk/release/app-release.apk
 
-          for apk in "$DEBUG_APK" "$RELEASE_APK"; do
-            echo "== $apk"
-            "$APKSIGNER" verify --print-certs "$apk" | grep -E 'Signer #1 certificate (DN|SHA-256)'
-          done
+          DEBUG_OUT="$("$APKSIGNER" verify --print-certs "$DEBUG_APK" 2>&1 || true)"
+          RELEASE_OUT="$("$APKSIGNER" verify --print-certs "$RELEASE_APK" 2>&1 || true)"
 
-          DEBUG_SHA=$("$APKSIGNER" verify --print-certs "$DEBUG_APK" | grep 'SHA-256 digest' | head -1 | awk '{print $NF}')
-          RELEASE_SHA=$("$APKSIGNER" verify --print-certs "$RELEASE_APK" | grep 'SHA-256 digest' | head -1 | awk '{print $NF}')
+          echo "--- debug ---"
+          echo "$DEBUG_OUT"
+          echo "--- release ---"
+          echo "$RELEASE_OUT"
+
+          DEBUG_SHA="$(printf '%s\n' "$DEBUG_OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          RELEASE_SHA="$(printf '%s\n' "$RELEASE_OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
           echo "debug=$DEBUG_SHA"
           echo "release=$RELEASE_SHA"
-          if [ "$DEBUG_SHA" != "$RELEASE_SHA" ]; then
-            echo "::error title=Signing::Debug and release APKs are signed with different keys"
+
+          if [ -z "$DEBUG_SHA" ] || [ -z "$RELEASE_SHA" ]; then
+            echo "::error title=Signing::Could not read the certificate digest from one of the APKs"
             exit 1
           fi
+          if [ "$DEBUG_SHA" != "$RELEASE_SHA" ]; then
+            echo "::error title=Signing::Debug ($DEBUG_SHA) and release ($RELEASE_SHA) use different keys"
+            exit 1
+          fi
+
           {
             echo ""
             echo "Signing certificate SHA-256: \`$DEBUG_SHA\`"
