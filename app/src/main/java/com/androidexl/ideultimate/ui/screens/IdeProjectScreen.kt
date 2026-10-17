@@ -1,13 +1,13 @@
 package com.androidexl.ideultimate.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,10 +37,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -74,13 +73,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -98,7 +101,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.CodeEditorFlavor
-import com.androidexl.ideultimate.data.IdeWidgetCategory
 import com.androidexl.ideultimate.data.IdeWidgetNode
 import com.androidexl.ideultimate.data.IdeWidgetType
 import com.androidexl.ideultimate.data.ProjectLanguage
@@ -118,6 +120,7 @@ import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.VioletSoft
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private enum class IdeProjectTab(val title: String) {
@@ -220,11 +223,23 @@ fun IdeProjectScreen(
     var showAddXmlDialog by rememberSaveable { mutableStateOf(false) }
     var showTempRunScreen by rememberSaveable { mutableStateOf(false) }
 
+    var selectedWidgetUid by remember(project.id, selectedXmlPage.xmlFileName) {
+        mutableStateOf<String?>(null)
+    }
+    var isDraggingWidget by remember { mutableStateOf(false) }
+    var editingTextViewNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
+    var editingIdNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
+    var editingSizeNode by remember { mutableStateOf<Pair<IdeWidgetNode, Boolean>?>(null) } // true = width, false = height
+
+    val selectedNode = remember(widgetNodes, selectedWidgetUid) {
+        selectedWidgetUid?.let { findNodeByUid(widgetNodes, it) }
+    }
+
     BackHandler {
-        if (showTempRunScreen) {
-            showTempRunScreen = false
-        } else {
-            onBack()
+        when {
+            showTempRunScreen -> showTempRunScreen = false
+            selectedWidgetUid != null -> selectedWidgetUid = null
+            else -> onBack()
         }
     }
 
@@ -263,7 +278,10 @@ fun IdeProjectScreen(
             // 2. 3-Tabs Bar (View | Logic | Emulator) with active bottom indicator line
             IdeSketchTabsBar(
                 activeTab = activeTab,
-                onSelectTab = { tab -> activeTabName = tab.name },
+                onSelectTab = { tab ->
+                    selectedWidgetUid = null
+                    activeTabName = tab.name
+                },
             )
 
             // 3. Main Content Area
@@ -278,6 +296,10 @@ fun IdeProjectScreen(
                             project = project,
                             xmlPage = selectedXmlPage,
                             widgetNodes = widgetNodes,
+                            selectedWidgetUid = selectedWidgetUid,
+                            onSelectWidgetUid = { selectedWidgetUid = it },
+                            onDraggingStateChange = { isDraggingWidget = it },
+                            onRequestEditTextView = { editingTextViewNode = it },
                             onUpdateWidgets = { updateWidgetNodes(it) },
                         )
                     }
@@ -317,15 +339,123 @@ fun IdeProjectScreen(
                 }
             }
 
-            // 4. Bottom Bar matching screenshot: Left XML/Activity Selector Pill + Right Run Split Button
-            IdeSketchBottomBar(
-                activeTab = activeTab,
-                xmlPage = selectedXmlPage,
-                onOpenPageSelector = { showXmlBottomSheet = true },
-                onRunClick = { showTempRunScreen = true },
-                bottomBarPadding = bottomBarPadding,
-            )
+            // 4. Bottom Bar:
+            // When a widget is dropped or selected in View tab (and not actively dragging),
+            // show the Sketchware-style Bottom Widget Property Panel (matching video frames 1.3s-1.7s & 5.4s-6.2s).
+            // Otherwise show the XML/Activity Selector Pill + Split Run Button.
+            if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
+                IdeWidgetPropertyBottomPanel(
+                    node = selectedNode,
+                    allWidgets = flattenAllNodes(widgetNodes),
+                    onSelectOtherWidget = { selectedWidgetUid = it.uid },
+                    onMoveUp = {
+                        updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
+                    },
+                    onCollapse = { selectedWidgetUid = null },
+                    onDelete = {
+                        updateWidgetNodes(removeNodeByUid(widgetNodes, selectedNode.uid))
+                        selectedWidgetUid = null
+                    },
+                    onSave = {
+                        repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
+                    },
+                    onEditIdOrCustomAttr = { editingIdNode = selectedNode },
+                    onConvertWidget = {
+                        val convertedType = when (selectedNode.type) {
+                            IdeWidgetType.LINEAR_H -> IdeWidgetType.LINEAR_V
+                            IdeWidgetType.LINEAR_V -> IdeWidgetType.LINEAR_H
+                            IdeWidgetType.SCROLL_H -> IdeWidgetType.SCROLL_V
+                            IdeWidgetType.SCROLL_V -> IdeWidgetType.SCROLL_H
+                            IdeWidgetType.TEXT_VIEW -> IdeWidgetType.TEXT_VIEW
+                        }
+                        if (convertedType != selectedNode.type) {
+                            updateWidgetNodes(
+                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(type = convertedType) },
+                            )
+                        } else {
+                            editingTextViewNode = selectedNode
+                        }
+                    },
+                    onEditWidth = { editingSizeNode = selectedNode to true },
+                    onEditHeight = { editingSizeNode = selectedNode to false },
+                    onEditText = { editingTextViewNode = selectedNode },
+                    onCycleTextSize = {
+                        val sizes = listOf(12, 14, 16, 18, 20, 24)
+                        val nextSize = sizes[(sizes.indexOf(selectedNode.textSizeSp) + 1) % sizes.size]
+                        updateWidgetNodes(
+                            updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(textSizeSp = nextSize) },
+                        )
+                    },
+                    onCyclePadding = {
+                        val pads = listOf(0, 4, 8, 12, 16)
+                        val nextPad = pads[(pads.indexOf(selectedNode.paddingDp) + 1) % pads.size]
+                        updateWidgetNodes(
+                            updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(paddingDp = nextPad) },
+                        )
+                    },
+                    onOpenLogicEvent = {
+                        selectedWidgetUid = null
+                        activeTabName = IdeProjectTab.LOGIC.name
+                    },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            } else {
+                IdeSketchBottomBar(
+                    activeTab = activeTab,
+                    xmlPage = selectedXmlPage,
+                    onOpenPageSelector = { showXmlBottomSheet = true },
+                    onRunClick = { showTempRunScreen = true },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
         }
+    }
+
+    val editingNode = editingTextViewNode
+    if (editingNode != null) {
+        EditTextViewDialog(
+            initialText = editingNode.text,
+            viewId = editingNode.viewId,
+            onDismiss = { editingTextViewNode = null },
+            onConfirm = { newText ->
+                updateWidgetNodes(updateNodeText(widgetNodes, editingNode.uid, newText))
+                editingTextViewNode = null
+            },
+        )
+    }
+
+    val idNode = editingIdNode
+    if (idNode != null) {
+        EditWidgetIdDialog(
+            initialId = idNode.viewId,
+            widgetType = idNode.type,
+            onDismiss = { editingIdNode = null },
+            onConfirm = { newId ->
+                updateWidgetNodes(
+                    updateNodeByUid(widgetNodes, idNode.uid) { it.copy(viewId = newId) },
+                )
+                editingIdNode = null
+            },
+        )
+    }
+
+    val sizeDialogPair = editingSizeNode
+    if (sizeDialogPair != null) {
+        val (targetNode, isWidth) = sizeDialogPair
+        EditWidgetDimensionDialog(
+            viewId = targetNode.viewId,
+            isWidth = isWidth,
+            currentValue = if (isWidth) targetNode.layoutWidth else targetNode.layoutHeight,
+            onDismiss = { editingSizeNode = null },
+            onSelectValue = { chosen ->
+                updateWidgetNodes(
+                    updateNodeByUid(widgetNodes, targetNode.uid) {
+                        if (isWidth) it.copy(layoutWidth = chosen) else it.copy(layoutHeight = chosen)
+                    },
+                )
+                editingSizeNode = null
+            },
+        )
     }
 
     // Bottom Sheet showing all XML layout pages & their corresponding Activities
@@ -660,6 +790,8 @@ private fun IdeSketchTabsBar(
 
 // ============================================================================
 // 2. VIEW Tab: Left Compact Widgets Column + Right Rectangular White Phone Frame
+//    with Sketchware-exact Drag-and-Drop (#D6D6D6 live placeholder, floating pill,
+//    #C2E4E8 cyan-teal selection fill, and Bottom Property Panel)
 // ============================================================================
 
 @Composable
@@ -667,54 +799,135 @@ private fun IdeViewDesigner(
     project: WorkspaceItem,
     xmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
+    selectedWidgetUid: String?,
+    onSelectWidgetUid: (String?) -> Unit,
+    onDraggingStateChange: (Boolean) -> Unit,
+    onRequestEditTextView: (IdeWidgetNode) -> Unit,
     onUpdateWidgets: (List<IdeWidgetNode>) -> Unit,
 ) {
+    val density = LocalDensity.current
     var rootBounds by remember { mutableStateOf(Rect.Zero) }
     var phoneCanvasBounds by remember { mutableStateOf(Rect.Zero) }
     val containerBoundsMap = remember { mutableStateMapOf<String, Rect>() }
+    val widgetBoundsMap = remember { mutableStateMapOf<String, Rect>() }
 
     var draggingType by remember { mutableStateOf<IdeWidgetType?>(null) }
+    var draggingExistingNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
     var dragFingerInRoot by remember { mutableStateOf(Offset.Zero) }
-    var selectedWidgetUid by remember { mutableStateOf<String?>(null) }
-    var editingTextViewNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
 
-    val hoveredContainerUid: String? = remember(draggingType, dragFingerInRoot, containerBoundsMap.toMap()) {
-        if (draggingType == null) {
+    LaunchedEffect(draggingType) {
+        onDraggingStateChange(draggingType != null)
+    }
+
+    // Active when dragging and finger has entered or is approaching the phone canvas
+    val isDragOverPhone = remember(draggingType, dragFingerInRoot, phoneCanvasBounds) {
+        draggingType != null &&
+            !phoneCanvasBounds.isEmpty &&
+            dragFingerInRoot.x >= phoneCanvasBounds.left - 28f &&
+            dragFingerInRoot.x <= phoneCanvasBounds.right + 28f &&
+            dragFingerInRoot.y >= phoneCanvasBounds.top - 16f &&
+            dragFingerInRoot.y <= phoneCanvasBounds.bottom + 24f
+    }
+
+    // Innermost container under the user's finger (excluding any container currently being moved)
+    val hoveredContainerUid: String? = remember(
+        draggingType,
+        draggingExistingNode,
+        dragFingerInRoot,
+        isDragOverPhone,
+        containerBoundsMap.toMap(),
+        widgetNodes,
+    ) {
+        if (!isDragOverPhone || draggingType == null) {
             null
         } else {
+            val movingUid = draggingExistingNode?.uid
             containerBoundsMap.entries
-                .filter { (_, rect) -> !rect.isEmpty && rect.contains(dragFingerInRoot) }
+                .filter { (uid, rect) ->
+                    uid != movingUid &&
+                        findNodeByUid(widgetNodes, uid)?.type?.isContainer == true &&
+                        (movingUid == null || !containsDescendantUid(findNodeByUid(widgetNodes, movingUid), uid)) &&
+                        !rect.isEmpty &&
+                        rect.contains(dragFingerInRoot)
+                }
                 .minByOrNull { (_, rect) -> rect.width * rect.height }
                 ?.key
         }
     }
 
-    val isHoveringPhoneCanvas = remember(draggingType, dragFingerInRoot, phoneCanvasBounds) {
-        draggingType != null && !phoneCanvasBounds.isEmpty && phoneCanvasBounds.contains(dragFingerInRoot)
+    // Compute exact insertion index inside the target container (or root canvas)
+    val dropInsertIndex: Int = remember(
+        draggingType,
+        draggingExistingNode,
+        dragFingerInRoot,
+        isDragOverPhone,
+        hoveredContainerUid,
+        widgetBoundsMap.toMap(),
+        widgetNodes,
+    ) {
+        if (!isDragOverPhone || draggingType == null) {
+            -1
+        } else {
+            val movingUid = draggingExistingNode?.uid
+            if (hoveredContainerUid != null) {
+                val containerNode = findNodeByUid(widgetNodes, hoveredContainerUid)
+                val children = containerNode?.children?.filter { it.uid != movingUid }.orEmpty()
+                val isHorizontal = containerNode?.type == IdeWidgetType.LINEAR_H ||
+                    containerNode?.type == IdeWidgetType.SCROLL_H
+                computeInsertIndex(children, widgetBoundsMap, dragFingerInRoot, isHorizontal)
+            } else {
+                val rootChildren = widgetNodes.filter { it.uid != movingUid }
+                computeInsertIndex(rootChildren, widgetBoundsMap, dragFingerInRoot, isHorizontal = false)
+            }
+        }
     }
 
     fun nextViewIdFor(type: IdeWidgetType): String {
-        val total = countNodesOfType(widgetNodes, type) + 1
-        return "${type.idPrefix}_$total"
+        val existingIds = flattenAllNodes(widgetNodes).map { it.viewId }.toSet()
+        var index = countNodesOfPrefix(widgetNodes, type.idPrefix) + 1
+        while ("${type.idPrefix}$index" in existingIds) {
+            index++
+        }
+        return "${type.idPrefix}$index"
     }
 
-    fun addWidgetToTarget(type: IdeWidgetType, targetContainerUid: String?) {
-        val newNode = IdeWidgetNode(
+    fun commitDrop(type: IdeWidgetType) {
+        val existingMoving = draggingExistingNode
+        if (!isDragOverPhone) {
+            draggingType = null
+            draggingExistingNode = null
+            return
+        }
+
+        val nodeToInsert = existingMoving ?: IdeWidgetNode(
             viewId = nextViewIdFor(type),
             type = type,
             text = if (type == IdeWidgetType.TEXT_VIEW) "TextView" else type.displayName,
         )
-        val updated = if (targetContainerUid != null) {
-            insertChildIntoContainer(widgetNodes, targetContainerUid, newNode)
-        } else {
-            widgetNodes + newNode
-        }
-        onUpdateWidgets(updated)
-        selectedWidgetUid = newNode.uid
-    }
 
-    val selectedNode = remember(widgetNodes, selectedWidgetUid) {
-        selectedWidgetUid?.let { findNodeByUid(widgetNodes, it) }
+        val baseTree = if (existingMoving != null) {
+            removeNodeByUid(widgetNodes, existingMoving.uid)
+        } else {
+            widgetNodes
+        }
+
+        val targetContainer = hoveredContainerUid
+        val updated = if (targetContainer != null) {
+            insertChildIntoContainerAt(
+                nodes = baseTree,
+                containerUid = targetContainer,
+                newChild = nodeToInsert,
+                insertIndex = dropInsertIndex,
+            )
+        } else {
+            val safeIndex = if (dropInsertIndex < 0) baseTree.size else dropInsertIndex.coerceIn(0, baseTree.size)
+            baseTree.toMutableList().apply { add(safeIndex, nodeToInsert) }
+        }
+
+        onUpdateWidgets(updated)
+        onSelectWidgetUid(nodeToInsert.uid)
+        draggingType = null
+        draggingExistingNode = null
     }
 
     Box(
@@ -727,79 +940,99 @@ private fun IdeViewDesigner(
         Row(
             modifier = Modifier.fillMaxSize(),
         ) {
-            // Left Palette Column: exact width & spacing as screenshot (~120.dp)
+            // Left Palette Column: exact width & spacing as video (~120.dp)
             WidgetsPaletteColumn(
                 onStartDrag = { type, startRootPos ->
+                    onSelectWidgetUid(null)
+                    draggingExistingNode = null
                     draggingType = type
                     dragFingerInRoot = startRootPos
                 },
-                onDragBy = { delta ->
-                    dragFingerInRoot += delta
+                onUpdateDragRootPos = { currentRootPos ->
+                    dragFingerInRoot = currentRootPos
                 },
                 onEndDrag = {
                     val droppedType = draggingType
                     if (droppedType != null) {
-                        when {
-                            hoveredContainerUid != null -> {
-                                addWidgetToTarget(droppedType, hoveredContainerUid)
-                            }
-                            isHoveringPhoneCanvas || dragFingerInRoot.x >= phoneCanvasBounds.left - 20f -> {
-                                val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
-                                addWidgetToTarget(droppedType, targetContainer)
-                            }
-                        }
+                        commitDrop(droppedType)
                     }
                     draggingType = null
+                    draggingExistingNode = null
                 },
                 onCancelDrag = {
                     draggingType = null
+                    draggingExistingNode = null
+                },
+                onPaletteTouchOrScroll = {
+                    if (selectedWidgetUid != null) {
+                        onSelectWidgetUid(null)
+                    }
                 },
                 onTapAdd = { type ->
+                    val selectedNode = selectedWidgetUid?.let { findNodeByUid(widgetNodes, it) }
                     val targetContainer = selectedNode?.takeIf { it.type.isContainer }?.uid
-                    addWidgetToTarget(type, targetContainer)
+                    val newNode = IdeWidgetNode(
+                        viewId = nextViewIdFor(type),
+                        type = type,
+                        text = if (type == IdeWidgetType.TEXT_VIEW) "TextView" else type.displayName,
+                    )
+                    val updated = if (targetContainer != null) {
+                        insertChildIntoContainer(widgetNodes, targetContainer, newNode)
+                    } else {
+                        widgetNodes + newNode
+                    }
+                    onUpdateWidgets(updated)
+                    onSelectWidgetUid(newNode.uid)
                 },
                 modifier = Modifier
                     .width(120.dp)
                     .fillMaxHeight(),
             )
 
-            // Right Phone Frame Area: exact padding & frame proportions as screenshot
+            // Right Phone Frame Area: stays in fixed position (no top bar pushing it down)
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 18.dp),
+                    .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 14.dp),
             ) {
-                if (selectedNode != null) {
-                    SelectedWidgetBar(
-                        node = selectedNode,
-                        onEditText = {
-                            if (selectedNode.type == IdeWidgetType.TEXT_VIEW) {
-                                editingTextViewNode = selectedNode
-                            }
-                        },
-                        onDelete = {
-                            onUpdateWidgets(removeNodeByUid(widgetNodes, selectedNode.uid))
-                            containerBoundsMap.remove(selectedNode.uid)
-                            selectedWidgetUid = null
-                        },
-                        onDeselect = { selectedWidgetUid = null },
-                    )
-                    Spacer(Modifier.height(6.dp))
-                }
-
                 PhoneFrameWhiteCanvas(
                     project = project,
                     xmlPage = xmlPage,
                     widgetNodes = widgetNodes,
                     selectedWidgetUid = selectedWidgetUid,
+                    draggingType = draggingType,
+                    draggingExistingUid = draggingExistingNode?.uid,
+                    isDragOverPhone = isDragOverPhone,
                     hoveredContainerUid = hoveredContainerUid,
-                    isPhoneHighlighted = isHoveringPhoneCanvas && hoveredContainerUid == null,
-                    onSelectWidget = { node -> selectedWidgetUid = node.uid },
-                    onDoubleTapTextView = { node -> editingTextViewNode = node },
+                    dropInsertIndex = dropInsertIndex,
+                    onSelectWidget = { node -> onSelectWidgetUid(node.uid) },
+                    onDoubleTapTextView = { node -> onRequestEditTextView(node) },
+                    onStartMoveExistingWidget = { node, startRootPos ->
+                        onSelectWidgetUid(null)
+                        draggingExistingNode = node
+                        draggingType = node.type
+                        dragFingerInRoot = startRootPos
+                    },
+                    onUpdateMoveDragPos = { currentRootPos ->
+                        dragFingerInRoot = currentRootPos
+                    },
+                    onEndMoveExistingWidget = {
+                        val droppedType = draggingType
+                        if (droppedType != null) {
+                            commitDrop(droppedType)
+                        }
+                        draggingType = null
+                        draggingExistingNode = null
+                    },
+                    onCancelMoveExistingWidget = {
+                        draggingType = null
+                        draggingExistingNode = null
+                    },
                     onPhoneCanvasPositioned = { rect -> phoneCanvasBounds = rect },
                     onContainerPositioned = { uid, rect -> containerBoundsMap[uid] = rect },
-                    onTapEmptyWhiteArea = { selectedWidgetUid = null },
+                    onWidgetPositioned = { uid, rect -> widgetBoundsMap[uid] = rect },
+                    onTapEmptyWhiteArea = { onSelectWidgetUid(null) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -807,61 +1040,65 @@ private fun IdeViewDesigner(
             }
         }
 
-        // Floating Drag Preview Badge while dragging from Widgets into the White Phone Frame
+        // Semi-transparent Floating Drag Pill following the user's finger (exact match to video)
         val activeDrag = draggingType
         if (activeDrag != null && !rootBounds.isEmpty) {
-            val localX = (dragFingerInRoot.x - rootBounds.left).roundToInt() - 48
-            val localY = (dragFingerInRoot.y - rootBounds.top).roundToInt() - 18
+            val offsetX = with(density) {
+                (dragFingerInRoot.x - rootBounds.left - 78.dp.toPx()).roundToInt()
+            }
+            val offsetY = with(density) {
+                (dragFingerInRoot.y - rootBounds.top - 14.dp.toPx()).roundToInt()
+            }
             Row(
                 modifier = Modifier
-                    .offset { IntOffset(localX, localY) }
-                    .shadow(8.dp, RoundedCornerShape(6.dp))
+                    .offset { IntOffset(offsetX, offsetY) }
+                    .width(108.dp)
+                    .height(28.dp)
+                    .graphicsLayer(alpha = 0.62f)
+                    .shadow(4.dp, RoundedCornerShape(6.dp))
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF151E42))
-                    .border(1.2.dp, Cyan, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                    .background(Color(0xFF1A2448))
+                    .border(1.dp, Cyan.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                SketchWidgetIcon(type = activeDrag, tint = Cyan)
+                SketchWidgetIcon(type = activeDrag, tint = Ink)
                 Text(
                     text = sketchWidgetLabel(activeDrag),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                     ),
                     color = Ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-    }
-
-    val editingNode = editingTextViewNode
-    if (editingNode != null) {
-        EditTextViewDialog(
-            initialText = editingNode.text,
-            viewId = editingNode.viewId,
-            onDismiss = { editingTextViewNode = null },
-            onConfirm = { newText ->
-                onUpdateWidgets(updateNodeText(widgetNodes, editingNode.uid, newText))
-                editingTextViewNode = null
-            },
-        )
     }
 }
 
 @Composable
 private fun WidgetsPaletteColumn(
     onStartDrag: (IdeWidgetType, Offset) -> Unit,
-    onDragBy: (Offset) -> Unit,
+    onUpdateDragRootPos: (Offset) -> Unit,
     onEndDrag: () -> Unit,
     onCancelDrag: () -> Unit,
+    onPaletteTouchOrScroll: () -> Unit,
     onTapAdd: (IdeWidgetType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scrollState = rememberScrollState()
+    LaunchedEffect(scrollState.isScrollInProgress) {
+        if (scrollState.isScrollInProgress) {
+            onPaletteTouchOrScroll()
+        }
+    }
+
     Column(
         modifier = modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
         // Top mini-switcher strip matching screenshot (Palette active tab + Bookmark icon)
@@ -938,7 +1175,7 @@ private fun WidgetsPaletteColumn(
                 DraggableWidgetPaletteItem(
                     type = widgetType,
                     onStartDrag = onStartDrag,
-                    onDragBy = onDragBy,
+                    onUpdateDragRootPos = onUpdateDragRootPos,
                     onEndDrag = onEndDrag,
                     onCancelDrag = onCancelDrag,
                     onTap = { onTapAdd(widgetType) },
@@ -963,7 +1200,7 @@ private fun WidgetsPaletteColumn(
             DraggableWidgetPaletteItem(
                 type = IdeWidgetType.TEXT_VIEW,
                 onStartDrag = onStartDrag,
-                onDragBy = onDragBy,
+                onUpdateDragRootPos = onUpdateDragRootPos,
                 onEndDrag = onEndDrag,
                 onCancelDrag = onCancelDrag,
                 onTap = { onTapAdd(IdeWidgetType.TEXT_VIEW) },
@@ -984,7 +1221,7 @@ private fun sketchWidgetLabel(type: IdeWidgetType): String = when (type) {
 private fun DraggableWidgetPaletteItem(
     type: IdeWidgetType,
     onStartDrag: (IdeWidgetType, Offset) -> Unit,
-    onDragBy: (Offset) -> Unit,
+    onUpdateDragRootPos: (Offset) -> Unit,
     onEndDrag: () -> Unit,
     onCancelDrag: () -> Unit,
     onTap: () -> Unit,
@@ -992,7 +1229,7 @@ private fun DraggableWidgetPaletteItem(
     var itemBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
     val shape = RoundedCornerShape(6.dp)
 
-    // Compact height & spacing matching screenshot (`height = 28.dp`, rounded pill-rect)
+    // Supports BOTH hold-to-drag (~140ms) AND immediate horizontal drag toward the phone canvas
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1003,23 +1240,86 @@ private fun DraggableWidgetPaletteItem(
             .clip(shape)
             .background(Color(0xFF161E3C))
             .border(1.dp, Color(0x2EFFFFFF), shape)
-            .clickable(onClick = onTap)
             .pointerInput(type) {
-                detectDragGestures(
-                    onDragStart = { localOffset ->
-                        val startInRoot = Offset(
-                            x = itemBoundsInRoot.left + localOffset.x,
-                            y = itemBoundsInRoot.top + localOffset.y,
-                        )
-                        onStartDrag(type, startInRoot)
-                    },
-                    onDrag = { change, dragAmount ->
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val downPos = down.position
+                    val downTime = System.currentTimeMillis()
+                    var dragging = false
+                    var latestPos = downPos
+
+                    // Phase 1: Wait until hold threshold (140ms) or finger movement
+                    while (!dragging) {
+                        val event = withTimeoutOrNull(140L) {
+                            awaitPointerEvent(PointerEventPass.Main)
+                        }
+                        if (event == null) {
+                            // Finger held for 140ms -> start drag immediately like Sketchware!
+                            dragging = true
+                            val rootPos = Offset(
+                                x = itemBoundsInRoot.left + latestPos.x,
+                                y = itemBoundsInRoot.top + latestPos.y,
+                            )
+                            onStartDrag(type, rootPos)
+                            break
+                        }
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                        if (change == null || !change.pressed) {
+                            // Released quickly -> treat as a tap if within tap slop
+                            if (System.currentTimeMillis() - downTime < 220L &&
+                                (latestPos - downPos).getDistance() < viewConfiguration.touchSlop
+                            ) {
+                                onTap()
+                            }
+                            return@awaitEachGesture
+                        }
+                        latestPos = change.position
+                        val dx = latestPos.x - downPos.x
+                        val dy = latestPos.y - downPos.y
+                        if (abs(dx) > 6f && abs(dx) >= abs(dy) * 0.65f) {
+                            // Immediate horizontal drag toward the canvas!
+                            change.consume()
+                            dragging = true
+                            val rootPos = Offset(
+                                x = itemBoundsInRoot.left + latestPos.x,
+                                y = itemBoundsInRoot.top + latestPos.y,
+                            )
+                            onStartDrag(type, rootPos)
+                        } else if (abs(dy) > viewConfiguration.touchSlop && abs(dy) > abs(dx) * 1.4f) {
+                            // Vertical scroll of the palette -> let parent verticalScroll handle it
+                            return@awaitEachGesture
+                        } else if (System.currentTimeMillis() - downTime >= 140L) {
+                            change.consume()
+                            dragging = true
+                            val rootPos = Offset(
+                                x = itemBoundsInRoot.left + latestPos.x,
+                                y = itemBoundsInRoot.top + latestPos.y,
+                            )
+                            onStartDrag(type, rootPos)
+                        }
+                    }
+
+                    // Phase 2: Track drag on Initial pass so parent verticalScroll never steals the gesture
+                    while (dragging) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                        if (change == null) {
+                            onCancelDrag()
+                            break
+                        }
+                        if (!change.pressed) {
+                            change.consume()
+                            onEndDrag()
+                            break
+                        }
                         change.consume()
-                        onDragBy(dragAmount)
-                    },
-                    onDragEnd = { onEndDrag() },
-                    onDragCancel = { onCancelDrag() },
-                )
+                        val currentRootPos = Offset(
+                            x = itemBoundsInRoot.left + change.position.x,
+                            y = itemBoundsInRoot.top + change.position.y,
+                        )
+                        onUpdateDragRootPos(currentRootPos)
+                    }
+                }
             }
             .padding(horizontal = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1123,112 +1423,35 @@ private fun SketchWidgetIcon(
     }
 }
 
+/**
+ * Solid `#D6D6D6` gray drop-target placeholder bar/box shown inside the Phone Frame
+ * while dragging a widget (matches video frames 1.28s-1.45s & 3.52s-4.10s).
+ */
 @Composable
-private fun SelectedWidgetBar(
-    node: IdeWidgetNode,
-    onEditText: () -> Unit,
-    onDelete: () -> Unit,
-    onDeselect: () -> Unit,
+private fun SketchDropPlaceholder(
+    type: IdeWidgetType,
+    inHorizontalParent: Boolean,
 ) {
-    Row(
-        modifier = Modifier
+    val placeholderModifier = if (type.isContainer && !inHorizontalParent) {
+        Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF141C3A))
-            .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.weight(1f),
-        ) {
-            SketchWidgetIcon(type = node.type, tint = Cyan)
-            Text(
-                text = "@+id/${node.viewId}",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = JetBrainsMono,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                color = Cyan,
-                maxLines = 1,
-            )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            if (node.type == IdeWidgetType.TEXT_VIEW) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Cyan.copy(alpha = 0.18f))
-                        .clickable(onClick = onEditText)
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Create,
-                            contentDescription = null,
-                            tint = Cyan,
-                            modifier = Modifier.size(11.dp),
-                        )
-                        Spacer(Modifier.width(3.dp))
-                        Text(
-                            text = "Text",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Cyan,
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0x28FF5C5C))
-                    .clickable(onClick = onDelete)
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = null,
-                    tint = Color(0xFFFF8080),
-                    modifier = Modifier.size(13.dp),
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0x1FFFFFFF))
-                    .clickable(onClick = onDeselect)
-                    .padding(horizontal = 5.dp, vertical = 3.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = null,
-                    tint = Muted,
-                    modifier = Modifier.size(13.dp),
-                )
-            }
-        }
+            .height(24.dp)
+            .background(Color(0xFFD6D6D6))
+    } else {
+        Modifier
+            .width(44.dp)
+            .height(22.dp)
+            .background(Color(0xFFD6D6D6))
     }
+    Box(modifier = placeholderModifier)
 }
 
 /**
- * Clean rectangular Phone Screen Frame matching the screenshot's exact proportions:
+ * Clean rectangular Phone Screen Frame matching the video's exact proportions & behavior:
  * - Top Status Bar (`xmlPage.xmlFileName` on left, signal bars + battery + `1:37` on right)
  * - Toolbar strip (`Toolbar`) below status bar
- * - Pure WHITE (`#FFFFFF`) interior screen below Toolbar
+ * - Pure WHITE (`#FFFFFF`) interior screen below Toolbar with edge-to-edge layout rendering
+ *   and live `#D6D6D6` drop placeholder during drag.
  */
 @Composable
 private fun PhoneFrameWhiteCanvas(
@@ -1236,24 +1459,32 @@ private fun PhoneFrameWhiteCanvas(
     xmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
     selectedWidgetUid: String?,
+    draggingType: IdeWidgetType?,
+    draggingExistingUid: String?,
+    isDragOverPhone: Boolean,
     hoveredContainerUid: String?,
-    isPhoneHighlighted: Boolean,
+    dropInsertIndex: Int,
     onSelectWidget: (IdeWidgetNode) -> Unit,
     onDoubleTapTextView: (IdeWidgetNode) -> Unit,
+    onStartMoveExistingWidget: (IdeWidgetNode, Offset) -> Unit,
+    onUpdateMoveDragPos: (Offset) -> Unit,
+    onEndMoveExistingWidget: () -> Unit,
+    onCancelMoveExistingWidget: () -> Unit,
     onPhoneCanvasPositioned: (Rect) -> Unit,
     onContainerPositioned: (String, Rect) -> Unit,
+    onWidgetPositioned: (String, Rect) -> Unit,
     onTapEmptyWhiteArea: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val frameShape = RoundedCornerShape(3.dp)
+    val frameShape = RoundedCornerShape(2.dp)
     Column(
         modifier = modifier
             .shadow(6.dp, frameShape)
             .clip(frameShape)
             .background(Color.White)
             .border(
-                width = if (isPhoneHighlighted) 2.dp else 1.dp,
-                color = if (isPhoneHighlighted) Cyan else Color(0x33FFFFFF),
+                width = 1.dp,
+                color = Color(0x33FFFFFF),
                 shape = frameShape,
             )
             .onGloballyPositioned { coords ->
@@ -1338,23 +1569,52 @@ private fun PhoneFrameWhiteCanvas(
         }
 
         // 3. Pure WHITE Screen Interior ("جوه الفريم ابيض")
+        val visibleRootNodes = remember(widgetNodes, draggingExistingUid) {
+            widgetNodes.filter { it.uid != draggingExistingUid }
+        }
+        val showRootPlaceholder = isDragOverPhone && draggingType != null && hoveredContainerUid == null
+        val safeRootInsertIndex = if (showRootPlaceholder) {
+            dropInsertIndex.coerceIn(0, visibleRootNodes.size)
+        } else {
+            -1
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .background(Color.White)
-                .verticalScroll(rememberScrollState())
-                .padding(6.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.Top,
         ) {
-            widgetNodes.forEach { node ->
+            visibleRootNodes.forEachIndexed { index, node ->
+                if (showRootPlaceholder && index == safeRootInsertIndex && draggingType != null) {
+                    SketchDropPlaceholder(
+                        type = draggingType,
+                        inHorizontalParent = false,
+                    )
+                }
                 RenderWidgetNodeOnPhone(
                     node = node,
                     selectedWidgetUid = selectedWidgetUid,
+                    draggingType = draggingType,
+                    draggingExistingUid = draggingExistingUid,
                     hoveredContainerUid = hoveredContainerUid,
+                    dropInsertIndex = dropInsertIndex,
                     onSelectWidget = onSelectWidget,
                     onDoubleTapTextView = onDoubleTapTextView,
+                    onStartMoveExistingWidget = onStartMoveExistingWidget,
+                    onUpdateMoveDragPos = onUpdateMoveDragPos,
+                    onEndMoveExistingWidget = onEndMoveExistingWidget,
+                    onCancelMoveExistingWidget = onCancelMoveExistingWidget,
                     onContainerPositioned = onContainerPositioned,
+                    onWidgetPositioned = onWidgetPositioned,
+                )
+            }
+            if (showRootPlaceholder && safeRootInsertIndex == visibleRootNodes.size && draggingType != null) {
+                SketchDropPlaceholder(
+                    type = draggingType,
+                    inHorizontalParent = false,
                 )
             }
         }
@@ -1365,229 +1625,215 @@ private fun PhoneFrameWhiteCanvas(
 private fun RenderWidgetNodeOnPhone(
     node: IdeWidgetNode,
     selectedWidgetUid: String?,
+    draggingType: IdeWidgetType?,
+    draggingExistingUid: String?,
     hoveredContainerUid: String?,
+    dropInsertIndex: Int,
     onSelectWidget: (IdeWidgetNode) -> Unit,
     onDoubleTapTextView: (IdeWidgetNode) -> Unit,
+    onStartMoveExistingWidget: (IdeWidgetNode, Offset) -> Unit,
+    onUpdateMoveDragPos: (Offset) -> Unit,
+    onEndMoveExistingWidget: () -> Unit,
+    onCancelMoveExistingWidget: () -> Unit,
     onContainerPositioned: (String, Rect) -> Unit,
+    onWidgetPositioned: (String, Rect) -> Unit,
 ) {
     val isSelected = node.uid == selectedWidgetUid
     val isHoveredDropTarget = node.uid == hoveredContainerUid
+    var nodeBoundsInRoot by remember(node.uid) { mutableStateOf(Rect.Zero) }
+
+    // Sketchware's signature light cyan-teal selection fill (#C2E4E8) and #757575 outline border
+    val selectedFill = Color(0xFFC2E4E8)
+    val layoutOutlineColor = Color(0xFF757575)
+
+    val visibleChildren = remember(node.children, draggingExistingUid) {
+        node.children.filter { it.uid != draggingExistingUid }
+    }
+    val safeChildInsertIndex = if (isHoveredDropTarget && draggingType != null) {
+        dropInsertIndex.coerceIn(0, visibleChildren.size)
+    } else {
+        -1
+    }
+
+    val widthModifier = if (node.layoutWidth == "match_parent") {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier.wrapContentWidth()
+    }
+    val visualPad = (node.paddingDp / 2).coerceIn(2, 12).dp
 
     when (node.type) {
-        IdeWidgetType.LINEAR_H -> {
-            val borderColor = when {
-                isHoveredDropTarget -> Color(0xFF00D4FF)
-                isSelected -> Color(0xFF2563EB)
-                else -> Color(0xFF93C5FD)
-            }
-            val bgColor = when {
-                isHoveredDropTarget -> Color(0xFFE0F2FE)
-                isSelected -> Color(0xFFEFF6FF)
-                else -> Color(0xFFF8FAFC)
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .onGloballyPositioned { coords ->
-                        onContainerPositioned(node.uid, coords.boundsInRoot())
-                    }
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(bgColor)
-                    .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(4.dp),
+        IdeWidgetType.LINEAR_H, IdeWidgetType.SCROLL_H -> {
+            val isEmpty = visibleChildren.isEmpty() && !isHoveredDropTarget
+            Row(
+                modifier = widthModifier
+                    .then(
+                        if (isEmpty) {
+                            Modifier.height(28.dp)
+                        } else {
+                            Modifier.heightIn(min = 28.dp)
+                        },
                     )
-                    .clickable { onSelectWidget(node) }
-                    .padding(5.dp),
-            ) {
-                ContainerBadgeLabel(
-                    label = "Linear(H) • ${node.viewId}",
-                    color = Color(0xFF1D4ED8),
-                )
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    node.children.forEach { child ->
-                        Box(Modifier.widthIn(min = 56.dp)) {
-                            RenderWidgetNodeOnPhone(
-                                node = child,
-                                selectedWidgetUid = selectedWidgetUid,
-                                hoveredContainerUid = hoveredContainerUid,
-                                onSelectWidget = onSelectWidget,
-                                onDoubleTapTextView = onDoubleTapTextView,
-                                onContainerPositioned = onContainerPositioned,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        IdeWidgetType.LINEAR_V -> {
-            val borderColor = when {
-                isHoveredDropTarget -> Color(0xFF00D4FF)
-                isSelected -> Color(0xFF4F46E5)
-                else -> Color(0xFFA5B4FC)
-            }
-            val bgColor = when {
-                isHoveredDropTarget -> Color(0xFFE0F2FE)
-                isSelected -> Color(0xFFEEF2FF)
-                else -> Color(0xFFF8FAFC)
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
                     .onGloballyPositioned { coords ->
-                        onContainerPositioned(node.uid, coords.boundsInRoot())
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        onContainerPositioned(node.uid, rect)
+                        onWidgetPositioned(node.uid, rect)
                     }
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(bgColor)
-                    .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(4.dp),
-                    )
+                    .background(if (isSelected) selectedFill else Color.Transparent)
+                    .border(0.8.dp, layoutOutlineColor, RectangleShape)
                     .clickable { onSelectWidget(node) }
-                    .padding(5.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                onStartMoveExistingWidget(
+                                    node,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                onUpdateMoveDragPos(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = onEndMoveExistingWidget,
+                            onDragCancel = onCancelMoveExistingWidget,
+                        )
+                    }
+                    .padding(if (isEmpty) 0.dp else visualPad),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
             ) {
-                ContainerBadgeLabel(
-                    label = "Linear(V) • ${node.viewId}",
-                    color = Color(0xFF4338CA),
-                )
-                node.children.forEach { child ->
+                visibleChildren.forEachIndexed { index, child ->
+                    if (isHoveredDropTarget && index == safeChildInsertIndex && draggingType != null) {
+                        SketchDropPlaceholder(
+                            type = draggingType,
+                            inHorizontalParent = true,
+                        )
+                    }
                     RenderWidgetNodeOnPhone(
                         node = child,
                         selectedWidgetUid = selectedWidgetUid,
+                        draggingType = draggingType,
+                        draggingExistingUid = draggingExistingUid,
                         hoveredContainerUid = hoveredContainerUid,
+                        dropInsertIndex = dropInsertIndex,
                         onSelectWidget = onSelectWidget,
                         onDoubleTapTextView = onDoubleTapTextView,
+                        onStartMoveExistingWidget = onStartMoveExistingWidget,
+                        onUpdateMoveDragPos = onUpdateMoveDragPos,
+                        onEndMoveExistingWidget = onEndMoveExistingWidget,
+                        onCancelMoveExistingWidget = onCancelMoveExistingWidget,
                         onContainerPositioned = onContainerPositioned,
+                        onWidgetPositioned = onWidgetPositioned,
+                    )
+                }
+                if (isHoveredDropTarget && safeChildInsertIndex == visibleChildren.size && draggingType != null) {
+                    SketchDropPlaceholder(
+                        type = draggingType,
+                        inHorizontalParent = true,
                     )
                 }
             }
         }
 
-        IdeWidgetType.SCROLL_V -> {
-            val borderColor = when {
-                isHoveredDropTarget -> Color(0xFF00D4FF)
-                isSelected -> Color(0xFF0284C7)
-                else -> Color(0xFF7DD3FC)
-            }
-            val bgColor = when {
-                isHoveredDropTarget -> Color(0xFFE0F2FE)
-                isSelected -> Color(0xFFF0F9FF)
-                else -> Color(0xFFF8FAFC)
-            }
+        IdeWidgetType.LINEAR_V, IdeWidgetType.SCROLL_V -> {
+            val isEmpty = visibleChildren.isEmpty() && !isHoveredDropTarget
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 54.dp)
-                    .onGloballyPositioned { coords ->
-                        onContainerPositioned(node.uid, coords.boundsInRoot())
-                    }
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(bgColor)
-                    .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(4.dp),
+                modifier = widthModifier
+                    .then(
+                        if (isEmpty) {
+                            Modifier.height(28.dp)
+                        } else {
+                            Modifier.heightIn(min = 28.dp)
+                        },
                     )
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        onContainerPositioned(node.uid, rect)
+                        onWidgetPositioned(node.uid, rect)
+                    }
+                    .background(if (isSelected) selectedFill else Color.Transparent)
+                    .border(0.8.dp, layoutOutlineColor, RectangleShape)
                     .clickable { onSelectWidget(node) }
-                    .padding(5.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                onStartMoveExistingWidget(
+                                    node,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                onUpdateMoveDragPos(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = onEndMoveExistingWidget,
+                            onDragCancel = onCancelMoveExistingWidget,
+                        )
+                    }
+                    .padding(if (isEmpty) 0.dp else visualPad),
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.Start,
             ) {
-                ContainerBadgeLabel(
-                    label = "Scroll(V) • ${node.viewId}",
-                    color = Color(0xFF0369A1),
-                )
-                node.children.forEach { child ->
+                visibleChildren.forEachIndexed { index, child ->
+                    if (isHoveredDropTarget && index == safeChildInsertIndex && draggingType != null) {
+                        SketchDropPlaceholder(
+                            type = draggingType,
+                            inHorizontalParent = false,
+                        )
+                    }
                     RenderWidgetNodeOnPhone(
                         node = child,
                         selectedWidgetUid = selectedWidgetUid,
+                        draggingType = draggingType,
+                        draggingExistingUid = draggingExistingUid,
                         hoveredContainerUid = hoveredContainerUid,
+                        dropInsertIndex = dropInsertIndex,
                         onSelectWidget = onSelectWidget,
                         onDoubleTapTextView = onDoubleTapTextView,
+                        onStartMoveExistingWidget = onStartMoveExistingWidget,
+                        onUpdateMoveDragPos = onUpdateMoveDragPos,
+                        onEndMoveExistingWidget = onEndMoveExistingWidget,
+                        onCancelMoveExistingWidget = onCancelMoveExistingWidget,
                         onContainerPositioned = onContainerPositioned,
+                        onWidgetPositioned = onWidgetPositioned,
                     )
                 }
-            }
-        }
-
-        IdeWidgetType.SCROLL_H -> {
-            val borderColor = when {
-                isHoveredDropTarget -> Color(0xFF00D4FF)
-                isSelected -> Color(0xFF059669)
-                else -> Color(0xFF6EE7B7)
-            }
-            val bgColor = when {
-                isHoveredDropTarget -> Color(0xFFE0F2FE)
-                isSelected -> Color(0xFFECFDF5)
-                else -> Color(0xFFF8FAFC)
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 50.dp)
-                    .onGloballyPositioned { coords ->
-                        onContainerPositioned(node.uid, coords.boundsInRoot())
-                    }
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(bgColor)
-                    .border(
-                        width = if (isSelected || isHoveredDropTarget) 1.6.dp else 1.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(4.dp),
+                if (isHoveredDropTarget && safeChildInsertIndex == visibleChildren.size && draggingType != null) {
+                    SketchDropPlaceholder(
+                        type = draggingType,
+                        inHorizontalParent = false,
                     )
-                    .clickable { onSelectWidget(node) }
-                    .padding(5.dp),
-            ) {
-                ContainerBadgeLabel(
-                    label = "Scroll(H) • ${node.viewId}",
-                    color = Color(0xFF047857),
-                )
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    node.children.forEach { child ->
-                        Box(Modifier.widthIn(min = 56.dp)) {
-                            RenderWidgetNodeOnPhone(
-                                node = child,
-                                selectedWidgetUid = selectedWidgetUid,
-                                hoveredContainerUid = hoveredContainerUid,
-                                onSelectWidget = onSelectWidget,
-                                onDoubleTapTextView = onDoubleTapTextView,
-                                onContainerPositioned = onContainerPositioned,
-                            )
-                        }
-                    }
                 }
             }
         }
 
         IdeWidgetType.TEXT_VIEW -> {
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (isSelected) Color(0xFFDBEAFE) else Color(0xFFF3F4F6))
-                    .border(
-                        width = if (isSelected) 1.4.dp else 1.dp,
-                        color = if (isSelected) Color(0xFF2563EB) else Color(0xFFD1D5DB),
-                        shape = RoundedCornerShape(4.dp),
-                    )
+                modifier = widthModifier
+                    .onGloballyPositioned { coords ->
+                        val rect = coords.boundsInRoot()
+                        nodeBoundsInRoot = rect
+                        onWidgetPositioned(node.uid, rect)
+                    }
+                    .background(if (isSelected) selectedFill else Color.Transparent)
                     .clickable {
                         if (isSelected) {
                             onDoubleTapTextView(node)
@@ -1595,35 +1841,481 @@ private fun RenderWidgetNodeOnPhone(
                             onSelectWidget(node)
                         }
                     }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                onStartMoveExistingWidget(
+                                    node,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                onUpdateMoveDragPos(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = onEndMoveExistingWidget,
+                            onDragCancel = onCancelMoveExistingWidget,
+                        )
+                    }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = node.text,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = (node.textSizeSp - 1).coerceIn(10, 22).sp,
+                        fontWeight = FontWeight.Normal,
                     ),
-                    color = Color(0xFF111827),
+                    color = Color(0xFF222222),
                 )
             }
         }
     }
 }
 
+// ============================================================================
+// 2B. Bottom Widget Property Panel (Slides up when a widget is dropped/selected
+//     matching video frames 1.3s-1.7s & 5.4s-6.2s)
+// ============================================================================
+
+private enum class WidgetPropTab(val label: String) {
+    BASIC("Basic"),
+    RECENT("Recent"),
+    EVENT("Event"),
+}
+
 @Composable
-private fun ContainerBadgeLabel(
-    label: String,
-    color: Color,
+private fun IdeWidgetPropertyBottomPanel(
+    node: IdeWidgetNode,
+    allWidgets: List<IdeWidgetNode>,
+    onSelectOtherWidget: (IdeWidgetNode) -> Unit,
+    onMoveUp: () -> Unit,
+    onCollapse: () -> Unit,
+    onDelete: () -> Unit,
+    onSave: () -> Unit,
+    onEditIdOrCustomAttr: () -> Unit,
+    onConvertWidget: () -> Unit,
+    onEditWidth: () -> Unit,
+    onEditHeight: () -> Unit,
+    onEditText: () -> Unit,
+    onCycleTextSize: () -> Unit,
+    onCyclePadding: () -> Unit,
+    onOpenLogicEvent: () -> Unit,
+    bottomBarPadding: Dp = 0.dp,
 ) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontFamily = JetBrainsMono,
-            fontSize = 8.sp,
-            fontWeight = FontWeight.Bold,
-        ),
-        color = color,
-    )
+    var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
+    var showWidgetPickerMenu by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0D142E))
+            .border(width = 1.dp, color = Color(0x28FFFFFF))
+            .navigationBarsPadding()
+            .padding(bottom = 8.dp + bottomBarPadding),
+    ) {
+        // 1. Header Row: [Icon] viewId ▼   ...   ^   v   Trash   Save
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        if (allWidgets.size > 1) {
+                            showWidgetPickerMenu = !showWidgetPickerMenu
+                        } else {
+                            onEditIdOrCustomAttr()
+                        }
+                    }
+                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SketchWidgetIcon(type = node.type, tint = Ink)
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = node.viewId,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = Ink,
+                )
+                Spacer(Modifier.width(24.dp))
+                Icon(
+                    imageVector = Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    tint = Ink,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Up chevron (Move widget up)
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = null,
+                    tint = Muted,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onMoveUp)
+                        .padding(2.dp),
+                )
+
+                // Down chevron (Collapse bottom property sheet)
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Muted,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onCollapse)
+                        .padding(2.dp),
+                )
+
+                // Trash icon (Delete widget)
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = Ink,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDelete)
+                        .padding(2.dp),
+                )
+
+                // Floppy Save icon
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onSave),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(Modifier.size(18.dp)) {
+                        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        drawRoundRect(
+                            color = Ink,
+                            topLeft = Offset(size.width * 0.12f, size.height * 0.12f),
+                            size = Size(size.width * 0.76f, size.height * 0.76f),
+                            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                            style = stroke,
+                        )
+                        drawRect(
+                            color = Ink,
+                            topLeft = Offset(size.width * 0.28f, size.height * 0.12f),
+                            size = Size(size.width * 0.36f, size.height * 0.24f),
+                            style = stroke,
+                        )
+                        drawCircle(
+                            color = Ink,
+                            radius = size.width * 0.12f,
+                            center = Offset(size.width * 0.50f, size.height * 0.62f),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showWidgetPickerMenu && allWidgets.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                allWidgets.forEach { item ->
+                    val isCurrent = item.uid == node.uid
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (isCurrent) Cyan.copy(alpha = 0.22f) else Color(0xFF161E3C))
+                            .border(
+                                1.dp,
+                                if (isCurrent) Cyan else Color(0x28FFFFFF),
+                                RoundedCornerShape(50),
+                            )
+                            .clickable {
+                                onSelectOtherWidget(item)
+                                showWidgetPickerMenu = false
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        SketchWidgetIcon(type = item.type, tint = if (isCurrent) Cyan else Ink)
+                        Text(
+                            text = item.viewId,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = if (isCurrent) Cyan else Ink,
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Category Pills Row: Basic | Recent | Event
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            WidgetPropTab.entries.forEach { tab ->
+                val selected = tab == activePropTab
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(
+                            if (selected) Color(0xFF213163) else Color(0xFF172042),
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) Cyan.copy(alpha = 0.55f) else Color(0x22FFFFFF),
+                            shape = RoundedCornerShape(percent = 50),
+                        )
+                        .clickable { activePropTab = tab }
+                        .padding(horizontal = 15.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.5.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        ),
+                        color = if (selected) Cyan else Ink.copy(alpha = 0.85f),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // 3. Horizontal Scrollable Row of Rounded Property Cards (matches video: Custom attributes, Convert, Width, See All, etc.)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (activePropTab == WidgetPropTab.EVENT) {
+                SketchPropertySquareCard(
+                    label = "onClick",
+                    highlighted = false,
+                    onClick = onOpenLogicEvent,
+                ) { tint ->
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            } else {
+                // Card 1: Custom attributes (< >)
+                SketchPropertySquareCard(
+                    label = "Custom\nattributes",
+                    highlighted = false,
+                    onClick = onEditIdOrCustomAttr,
+                ) { tint ->
+                    Canvas(Modifier.size(18.dp)) {
+                        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        val left = Path().apply {
+                            moveTo(size.width * 0.36f, size.height * 0.25f)
+                            lineTo(size.width * 0.14f, size.height * 0.50f)
+                            lineTo(size.width * 0.36f, size.height * 0.75f)
+                        }
+                        val right = Path().apply {
+                            moveTo(size.width * 0.64f, size.height * 0.25f)
+                            lineTo(size.width * 0.86f, size.height * 0.50f)
+                            lineTo(size.width * 0.64f, size.height * 0.75f)
+                        }
+                        drawPath(left, tint, style = stroke)
+                        drawPath(right, tint, style = stroke)
+                    }
+                }
+
+                // Card 2: Convert
+                SketchPropertySquareCard(
+                    label = "Convert",
+                    highlighted = false,
+                    onClick = onConvertWidget,
+                ) { tint ->
+                    Canvas(Modifier.size(18.dp)) {
+                        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        drawLine(tint, Offset(size.width * 0.18f, size.height * 0.34f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.64f, size.height * 0.18f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.64f, size.height * 0.50f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+
+                        drawLine(tint, Offset(size.width * 0.82f, size.height * 0.68f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.36f, size.height * 0.52f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.36f, size.height * 0.84f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+                    }
+                }
+
+                // Card 3: Width ([<->])
+                SketchPropertySquareCard(
+                    label = "Width",
+                    highlighted = false,
+                    onClick = onEditWidth,
+                ) { tint ->
+                    Canvas(Modifier.size(18.dp)) {
+                        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        drawRoundRect(
+                            color = tint,
+                            topLeft = Offset(1.5f, 2.5f),
+                            size = Size(size.width - 3f, size.height - 5f),
+                            cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                            style = stroke,
+                        )
+                        val cy = size.height * 0.50f
+                        drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.42f, cy - 3f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.42f, cy + 3f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.58f, cy - 3f), stroke.width)
+                        drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.58f, cy + 3f), stroke.width)
+                    }
+                }
+
+                // Card 4: See All (••• highlighted in soft blue-cyan like video)
+                SketchPropertySquareCard(
+                    label = "See All",
+                    highlighted = true,
+                    onClick = {
+                        if (node.type == IdeWidgetType.TEXT_VIEW) {
+                            onEditText()
+                        } else {
+                            onEditWidth()
+                        }
+                    },
+                ) { tint ->
+                    Canvas(Modifier.size(18.dp)) {
+                        val r = 2.dp.toPx()
+                        val cy = size.height * 0.50f
+                        drawCircle(tint, r, Offset(size.width * 0.22f, cy))
+                        drawCircle(tint, r, Offset(size.width * 0.50f, cy))
+                        drawCircle(tint, r, Offset(size.width * 0.78f, cy))
+                    }
+                }
+
+                // Extra cards when scrolling right: Height, Text, Text size, Padding
+                SketchPropertySquareCard(
+                    label = "Height",
+                    highlighted = false,
+                    onClick = onEditHeight,
+                ) { tint ->
+                    Canvas(Modifier.size(18.dp)) {
+                        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        drawRoundRect(
+                            color = tint,
+                            topLeft = Offset(2.5f, 1.5f),
+                            size = Size(size.width - 5f, size.height - 3f),
+                            cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                            style = stroke,
+                        )
+                        val cx = size.width * 0.50f
+                        drawLine(tint, Offset(cx, size.height * 0.24f), Offset(cx - 3f, size.height * 0.42f), stroke.width)
+                        drawLine(tint, Offset(cx, size.height * 0.24f), Offset(cx + 3f, size.height * 0.42f), stroke.width)
+                        drawLine(tint, Offset(cx, size.height * 0.76f), Offset(cx - 3f, size.height * 0.58f), stroke.width)
+                        drawLine(tint, Offset(cx, size.height * 0.76f), Offset(cx + 3f, size.height * 0.58f), stroke.width)
+                    }
+                }
+
+                if (node.type == IdeWidgetType.TEXT_VIEW) {
+                    SketchPropertySquareCard(
+                        label = "Text",
+                        highlighted = false,
+                        onClick = onEditText,
+                    ) { tint ->
+                        SketchWidgetIcon(type = IdeWidgetType.TEXT_VIEW, tint = tint)
+                    }
+
+                    SketchPropertySquareCard(
+                        label = "Text size\n(${node.textSizeSp}sp)",
+                        highlighted = false,
+                        onClick = onCycleTextSize,
+                    ) { tint ->
+                        SketchWidgetIcon(type = IdeWidgetType.TEXT_VIEW, tint = tint)
+                    }
+                }
+
+                SketchPropertySquareCard(
+                    label = "Padding\n(${node.paddingDp}dp)",
+                    highlighted = false,
+                    onClick = onCyclePadding,
+                ) { tint ->
+                    SketchWidgetIcon(type = IdeWidgetType.LINEAR_H, tint = tint)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SketchPropertySquareCard(
+    label: String,
+    highlighted: Boolean,
+    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val bgColor = if (highlighted) Color(0xFF1F3166) else Color(0xFF161F40)
+    val borderColor = if (highlighted) Cyan.copy(alpha = 0.55f) else Color(0x24FFFFFF)
+    val contentTint = if (highlighted) Cyan else Ink.copy(alpha = 0.90f)
+
+    Column(
+        modifier = Modifier
+            .width(80.dp)
+            .height(74.dp)
+            .clip(shape)
+            .background(bgColor)
+            .border(1.dp, borderColor, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon(contentTint)
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.5.sp,
+                lineHeight = 12.sp,
+                fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = contentTint,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 // ============================================================================
@@ -2323,6 +3015,138 @@ private fun EditTextViewDialog(
 }
 
 @Composable
+private fun EditWidgetIdDialog(
+    initialId: String,
+    widgetType: IdeWidgetType,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var rawId by remember { mutableStateOf(initialId) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF0D1230),
+        titleContentColor = Ink,
+        textContentColor = Ink,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text(
+                text = "${sketchWidgetLabel(widgetType)} (@+id/$initialId)",
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono),
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = rawId,
+                onValueChange = { rawId = it },
+                singleLine = true,
+                label = { Text("android:id") },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    color = Ink,
+                ),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Ink,
+                    unfocusedTextColor = Ink,
+                    cursorColor = Cyan,
+                    focusedBorderColor = Cyan,
+                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    focusedContainerColor = Color(0x14FFFFFF),
+                    unfocusedContainerColor = Color(0x0AFFFFFF),
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val cleaned = rawId.trim()
+                        .replace(Regex("[^a-zA-Z0-9_]+"), "_")
+                        .ifBlank { initialId }
+                    onConfirm(cleaned)
+                },
+            ) {
+                Text(stringResource(R.string.dialog_save), color = Cyan)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dialog_cancel), color = Muted)
+            }
+        },
+    )
+}
+
+@Composable
+private fun EditWidgetDimensionDialog(
+    viewId: String,
+    isWidth: Boolean,
+    currentValue: String,
+    onDismiss: () -> Unit,
+    onSelectValue: (String) -> Unit,
+) {
+    val options = listOf("match_parent", "wrap_content")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF0D1230),
+        titleContentColor = Ink,
+        textContentColor = Ink,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text(
+                text = "${if (isWidth) "Width" else "Height"} (@+id/$viewId)",
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono),
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { opt ->
+                    val selected = opt == currentValue
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) Cyan.copy(alpha = 0.18f) else Color(0x14FFFFFF))
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) Cyan else Color(0x28FFFFFF),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .clickable { onSelectValue(opt) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = opt,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            ),
+                            color = if (selected) Cyan else Ink,
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = Cyan,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dialog_cancel), color = Muted)
+            }
+        },
+    )
+}
+
+@Composable
 private fun TemporaryRunScreen(
     project: WorkspaceItem,
     activeXmlPage: ProjectXmlPage,
@@ -2423,9 +3247,8 @@ private fun TemporaryRunScreen(
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Color.White)
                                 .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
-                                .verticalScroll(rememberScrollState())
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.Top,
                         ) {
                             if (widgetNodes.isEmpty()) {
                                 Text(
@@ -2434,16 +3257,25 @@ private fun TemporaryRunScreen(
                                         fontWeight = FontWeight.Bold,
                                     ),
                                     color = Color(0xFF111827),
+                                    modifier = Modifier.padding(12.dp),
                                 )
                             } else {
                                 widgetNodes.forEach { node ->
                                     RenderWidgetNodeOnPhone(
                                         node = node,
                                         selectedWidgetUid = null,
+                                        draggingType = null,
+                                        draggingExistingUid = null,
                                         hoveredContainerUid = null,
+                                        dropInsertIndex = -1,
                                         onSelectWidget = {},
                                         onDoubleTapTextView = {},
+                                        onStartMoveExistingWidget = { _, _ -> },
+                                        onUpdateMoveDragPos = {},
+                                        onEndMoveExistingWidget = {},
+                                        onCancelMoveExistingWidget = {},
                                         onContainerPositioned = { _, _ -> },
+                                        onWidgetPositioned = { _, _ -> },
                                     )
                                 }
                             }
@@ -2466,11 +3298,45 @@ private fun TemporaryRunScreen(
 // Widget Tree Helper Functions
 // ============================================================================
 
-private fun countNodesOfType(nodes: List<IdeWidgetNode>, type: IdeWidgetType): Int {
+private fun computeInsertIndex(
+    siblings: List<IdeWidgetNode>,
+    widgetBoundsMap: Map<String, Rect>,
+    fingerInRoot: Offset,
+    isHorizontal: Boolean,
+): Int {
+    if (siblings.isEmpty()) return 0
+    for (i in siblings.indices) {
+        val rect = widgetBoundsMap[siblings[i].uid] ?: continue
+        if (rect.isEmpty) continue
+        val midpoint = if (isHorizontal) rect.center.x else rect.center.y
+        val fingerCoord = if (isHorizontal) fingerInRoot.x else fingerInRoot.y
+        if (fingerCoord < midpoint) {
+            return i
+        }
+    }
+    return siblings.size
+}
+
+private fun containsDescendantUid(node: IdeWidgetNode?, targetUid: String): Boolean {
+    if (node == null) return false
+    if (node.uid == targetUid) return true
+    return node.children.any { containsDescendantUid(it, targetUid) }
+}
+
+private fun flattenAllNodes(nodes: List<IdeWidgetNode>): List<IdeWidgetNode> {
+    val result = mutableListOf<IdeWidgetNode>()
+    nodes.forEach { node ->
+        result.add(node)
+        result.addAll(flattenAllNodes(node.children))
+    }
+    return result
+}
+
+private fun countNodesOfPrefix(nodes: List<IdeWidgetNode>, idPrefix: String): Int {
     var count = 0
     nodes.forEach { node ->
-        if (node.type == type) count += 1
-        count += countNodesOfType(node.children, type)
+        if (node.type.idPrefix == idPrefix) count += 1
+        count += countNodesOfPrefix(node.children, idPrefix)
     }
     return count
 }
@@ -2488,13 +3354,46 @@ private fun insertChildIntoContainer(
     nodes: List<IdeWidgetNode>,
     containerUid: String,
     newChild: IdeWidgetNode,
+): List<IdeWidgetNode> = insertChildIntoContainerAt(nodes, containerUid, newChild, -1)
+
+private fun insertChildIntoContainerAt(
+    nodes: List<IdeWidgetNode>,
+    containerUid: String,
+    newChild: IdeWidgetNode,
+    insertIndex: Int,
 ): List<IdeWidgetNode> = nodes.map { node ->
     when {
-        node.uid == containerUid && node.type.isContainer ->
-            node.copy(children = node.children + newChild)
+        node.uid == containerUid && node.type.isContainer -> {
+            val idx = if (insertIndex < 0) node.children.size else insertIndex.coerceIn(0, node.children.size)
+            val updatedChildren = node.children.toMutableList().apply { add(idx, newChild) }
+            node.copy(children = updatedChildren)
+        }
         node.children.isNotEmpty() ->
-            node.copy(children = insertChildIntoContainer(node.children, containerUid, newChild))
+            node.copy(children = insertChildIntoContainerAt(node.children, containerUid, newChild, insertIndex))
         else -> node
+    }
+}
+
+private fun moveNodeInParent(
+    nodes: List<IdeWidgetNode>,
+    targetUid: String,
+    direction: Int,
+): List<IdeWidgetNode> {
+    val index = nodes.indexOfFirst { it.uid == targetUid }
+    if (index >= 0) {
+        val newIndex = (index + direction).coerceIn(0, nodes.lastIndex)
+        if (newIndex == index) return nodes
+        val mutable = nodes.toMutableList()
+        val item = mutable.removeAt(index)
+        mutable.add(newIndex, item)
+        return mutable
+    }
+    return nodes.map { node ->
+        if (node.children.isEmpty()) {
+            node
+        } else {
+            node.copy(children = moveNodeInParent(node.children, targetUid, direction))
+        }
     }
 }
 
@@ -2511,14 +3410,20 @@ private fun removeNodeByUid(
         }
     }
 
+private fun updateNodeByUid(
+    nodes: List<IdeWidgetNode>,
+    targetUid: String,
+    transform: (IdeWidgetNode) -> IdeWidgetNode,
+): List<IdeWidgetNode> = nodes.map { node ->
+    when {
+        node.uid == targetUid -> transform(node)
+        node.children.isNotEmpty() -> node.copy(children = updateNodeByUid(node.children, targetUid, transform))
+        else -> node
+    }
+}
+
 private fun updateNodeText(
     nodes: List<IdeWidgetNode>,
     targetUid: String,
     newText: String,
-): List<IdeWidgetNode> = nodes.map { node ->
-    when {
-        node.uid == targetUid -> node.copy(text = newText)
-        node.children.isNotEmpty() -> node.copy(children = updateNodeText(node.children, targetUid, newText))
-        else -> node
-    }
-}
+): List<IdeWidgetNode> = updateNodeByUid(nodes, targetUid) { it.copy(text = newText) }

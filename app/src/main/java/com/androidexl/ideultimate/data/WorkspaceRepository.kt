@@ -70,35 +70,35 @@ enum class IdeWidgetType(
     val isContainer: Boolean,
 ) {
     LINEAR_H(
-        displayName = "Linear Layout H",
+        displayName = "Linear(H)",
         shortTag = "H",
-        idPrefix = "linear_h",
+        idPrefix = "linear",
         category = IdeWidgetCategory.LAYOUT,
         isContainer = true,
     ),
     LINEAR_V(
-        displayName = "Linear Layout V",
+        displayName = "Linear(V)",
         shortTag = "V",
-        idPrefix = "linear_v",
+        idPrefix = "linear",
         category = IdeWidgetCategory.LAYOUT,
         isContainer = true,
     ),
     SCROLL_V(
-        displayName = "Scroll V",
+        displayName = "Scroll(V)",
         shortTag = "SV",
-        idPrefix = "scroll_v",
+        idPrefix = "vscroll",
         category = IdeWidgetCategory.LAYOUT,
         isContainer = true,
     ),
     SCROLL_H(
-        displayName = "Scroll H",
+        displayName = "Scroll(H)",
         shortTag = "SH",
-        idPrefix = "scroll_h",
+        idPrefix = "hscroll",
         category = IdeWidgetCategory.LAYOUT,
         isContainer = true,
     ),
     TEXT_VIEW(
-        displayName = "Text View",
+        displayName = "TextView",
         shortTag = "Ab",
         idPrefix = "textview",
         category = IdeWidgetCategory.TEXT,
@@ -111,6 +111,10 @@ data class IdeWidgetNode(
     val viewId: String,
     val type: IdeWidgetType,
     val text: String = "TextView",
+    val layoutWidth: String = if (type.isContainer) "match_parent" else "wrap_content",
+    val layoutHeight: String = "wrap_content",
+    val paddingDp: Int = if (type.isContainer) 8 else 4,
+    val textSizeSp: Int = 12,
     val children: List<IdeWidgetNode> = emptyList(),
 )
 
@@ -762,6 +766,10 @@ class WorkspaceRepository(context: Context) {
                 put("viewId", node.viewId)
                 put("type", node.type.name)
                 put("text", node.text)
+                put("layoutWidth", node.layoutWidth)
+                put("layoutHeight", node.layoutHeight)
+                put("paddingDp", node.paddingDp)
+                put("textSizeSp", node.textSizeSp)
                 put("children", serializeWidgetNodes(node.children))
             }
             arr.put(obj)
@@ -776,12 +784,18 @@ class WorkspaceRepository(context: Context) {
             val type = runCatching { IdeWidgetType.valueOf(obj.getString("type")) }
                 .getOrDefault(IdeWidgetType.TEXT_VIEW)
             val childrenArr = obj.optJSONArray("children") ?: JSONArray()
+            val defaultW = if (type.isContainer) "match_parent" else "wrap_content"
+            val defaultPad = if (type.isContainer) 8 else 4
             list.add(
                 IdeWidgetNode(
                     uid = obj.optString("uid").ifBlank { UUID.randomUUID().toString() },
-                    viewId = obj.optString("viewId").ifBlank { "${type.idPrefix}_${i + 1}" },
+                    viewId = obj.optString("viewId").ifBlank { "${type.idPrefix}${i + 1}" },
                     type = type,
                     text = obj.optString("text", "TextView"),
+                    layoutWidth = obj.optString("layoutWidth", defaultW).ifBlank { defaultW },
+                    layoutHeight = obj.optString("layoutHeight", "wrap_content").ifBlank { "wrap_content" },
+                    paddingDp = obj.optInt("paddingDp", defaultPad),
+                    textSizeSp = obj.optInt("textSizeSp", 12),
                     children = parseWidgetNodes(childrenArr),
                 ),
             )
@@ -803,7 +817,6 @@ class WorkspaceRepository(context: Context) {
         sb.appendLine("""    android:layout_height="match_parent"""")
         sb.appendLine("""    android:orientation="vertical"""")
         sb.appendLine("""    android:background="#FFFFFF"""")
-        sb.appendLine("""    android:padding="8dp"""")
         sb.appendLine("""    tools:context=".${page.activityName}">""")
         nodes.forEach { node ->
             sb.appendLine()
@@ -820,13 +833,13 @@ class WorkspaceRepository(context: Context) {
                 val orientation = if (node.type == IdeWidgetType.LINEAR_H) "horizontal" else "vertical"
                 sb.appendLine("""$indent<LinearLayout""")
                 sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="match_parent"""")
-                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
+                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
                 sb.appendLine("""$indent    android:orientation="$orientation"""")
                 if (node.children.isEmpty()) {
-                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
-                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp">""")
                     node.children.forEach { child ->
                         appendWidgetXml(sb, child, "$indent    ")
                     }
@@ -837,12 +850,12 @@ class WorkspaceRepository(context: Context) {
             IdeWidgetType.SCROLL_V -> {
                 sb.appendLine("""$indent<ScrollView""")
                 sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="match_parent"""")
-                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
+                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
                 if (node.children.isEmpty()) {
-                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
-                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp">""")
                     node.children.forEach { child ->
                         appendWidgetXml(sb, child, "$indent    ")
                     }
@@ -853,12 +866,12 @@ class WorkspaceRepository(context: Context) {
             IdeWidgetType.SCROLL_H -> {
                 sb.appendLine("""$indent<HorizontalScrollView""")
                 sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="match_parent"""")
-                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
+                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
+                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
                 if (node.children.isEmpty()) {
-                    sb.appendLine("""$indent    android:padding="8dp" />""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
-                    sb.appendLine("""$indent    android:padding="8dp">""")
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp">""")
                     node.children.forEach { child ->
                         appendWidgetXml(sb, child, "$indent    ")
                     }
@@ -874,12 +887,12 @@ class WorkspaceRepository(context: Context) {
                     .replace("\"", "&quot;")
                 sb.appendLine("""$indent<TextView""")
                 sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="wrap_content"""")
-                sb.appendLine("""$indent    android:layout_height="wrap_content"""")
-                sb.appendLine("""$indent    android:padding="4dp"""")
+                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
+                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
                 sb.appendLine("""$indent    android:text="$safeText"""")
-                sb.appendLine("""$indent    android:textColor="#111827"""")
-                sb.appendLine("""$indent    android:textSize="14sp" />""")
+                sb.appendLine("""$indent    android:textColor="#000000"""")
+                sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
             }
         }
     }
