@@ -136,130 +136,136 @@ private enum class IdeProjectTab(val title: String) {
 
 private enum class IdeBuildMethod(
     val title: String,
-    val descriptionAr: String,
+    val subtitle: String,
+    val badge: String,
     val badgeColor: Color,
-    val commandPreview: String,
 ) {
     GRADLE(
         title = "Gradle",
-        descriptionAr = "بناء المشروع الكامل عبر محرك Android Gradle الرسمي (:app:assembleDebug)",
+        subtitle = "Android Gradle Wrapper (:app:assembleDebug) • بناء كامل عبر محرك Gradle",
+        badge = "./gradlew assembleDebug",
         badgeColor = Color(0xFF34D399),
-        commandPreview = "./gradlew :app:assembleDebug --parallel",
     ),
     GITHUB_ACTIONS(
         title = "GitHub Actions",
-        descriptionAr = "بناء سحابي متكامل عبر سير عمل GitHub Actions CI/CD",
+        subtitle = "Cloud CI/CD Workflow (build-apk.yml) • بناء سحابي عبر GitHub Actions",
+        badge = "Cloud CI/CD",
         badgeColor = Color(0xFF38BDF8),
-        commandPreview = "gh workflow run build-apk.yml --ref main",
     ),
     SIMPLE(
         title = "Simple",
-        descriptionAr = "بناء سريع خفيف ومعاينة فورية مباشرة داخل IDE Ultimate",
+        subtitle = "Fast Local Compiler & Instant Preview • بناء سريع ومباشر داخل IDE",
+        badge = "Fast Build",
         badgeColor = Color(0xFFA78BFA),
-        commandPreview = "ide-simple-compiler --fast-preview",
     ),
+    ;
+
+    companion object {
+        fun fromName(raw: String): IdeBuildMethod =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: GRADLE
+    }
 }
 
 private enum class IdeSideMenuItem(
     val title: String,
-    val subtitleAr: String,
-    val badgeText: String,
+    val subtitle: String,
+    val badge: String,
     val accentColor: Color,
 ) {
     LIBRARY_MANAGER(
         title = "Library Manager",
-        subtitleAr = "إدارة مكتبات AndroidX و Material و AppCompat",
-        badgeText = "LIB",
+        subtitle = "إدارة مكتبات AndroidX و Material و AppCompat",
+        badge = "LIB",
         accentColor = Color(0xFF38BDF8),
     ),
     ICON_MANAGER(
         title = "Icon Manager",
-        subtitleAr = "إدارة أيقونات التطبيق و Vector Drawables",
-        badgeText = "ICO",
+        subtitle = "إدارة أيقونات التطبيق و Vector Drawables",
+        badge = "ICO",
         accentColor = Color(0xFFF472B6),
     ),
     SOUND_MANAGER(
         title = "Sound Manager",
-        subtitleAr = "إدارة الملفات الصوتية والمؤثرات داخل res/raw",
-        badgeText = "SND",
+        subtitle = "إدارة الملفات الصوتية والمؤثرات داخل res/raw",
+        badge = "SND",
         accentColor = Color(0xFFFBBF24),
     ),
     FONT_MANAGER(
         title = "Font Manager",
-        subtitleAr = "إدارة خطوط التطبيق المخصصة داخل res/font",
-        badgeText = "FNT",
+        subtitle = "إدارة خطوط التطبيق المخصصة داخل res/font",
+        badge = "FNT",
         accentColor = Color(0xFFA78BFA),
     ),
     RESOURCES_MANAGER(
         title = "Resources Manager",
-        subtitleAr = "إدارة كافة موارد المشروع (drawable / raw / mipmap)",
-        badgeText = "RES",
+        subtitle = "إدارة كافة موارد المشروع (drawable / raw / mipmap)",
+        badge = "RES",
         accentColor = Color(0xFF34D399),
     ),
     TERMINAL_ANDROID(
         title = "Terminal Android",
-        subtitleAr = "طرفية أوامر Android Shell و Gradle المدمجة",
-        badgeText = "SH",
+        subtitle = "طرفية أوامر Android Shell و Gradle المدمجة",
+        badge = "SH",
         accentColor = Color(0xFF2DD4BF),
     ),
     ACTIVITY_MANAGER(
         title = "Activity Manager",
-        subtitleAr = "إدارة صفحات النشاطات (Activities) وملفات XML",
-        badgeText = "ACT",
+        subtitle = "إدارة صفحات النشاطات (Activities) وملفات XML",
+        badge = "ACT",
         accentColor = Color(0xFF60A5FA),
     ),
     ANDROID_MANIFEST_MANAGER(
         title = "Android Menifaset Manager",
-        subtitleAr = "تحرير ومعاينة ملف AndroidManifest.xml للمشروع",
-        badgeText = "XML",
+        subtitle = "تحرير ومعاينة ملف AndroidManifest.xml للمشروع",
+        badge = "XML",
         accentColor = Color(0xFFFB923C),
     ),
     PERMISSION_MANAGER(
         title = "Permission Manager",
-        subtitleAr = "إدارة أذونات وصلاحيات النظام (uses-permission)",
-        badgeText = "PRM",
+        subtitle = "إدارة أذونات وصلاحيات النظام (uses-permission)",
+        badge = "PRM",
         accentColor = Color(0xFFF87171),
     ),
     SECURITY_MANAGER(
         title = "Security Manager",
-        subtitleAr = "إدارة التوقيع الرقمي Keystore وقواعد الحماية ProGuard",
-        badgeText = "SEC",
+        subtitle = "إدارة التوقيع الرقمي Keystore وقواعد الحماية ProGuard",
+        badge = "SEC",
         accentColor = Color(0xFF10B981),
     ),
     FILES_MANAGER(
         title = "Files Manager",
-        subtitleAr = "متصفح ملفات ومجلدات المشروع على الذاكرة",
-        badgeText = "DIR",
+        subtitle = "متصفح ملفات ومجلدات المشروع على الذاكرة",
+        badge = "DIR",
         accentColor = Color(0xFF38BDF8),
     ),
     STRINGS_TRANSLATION(
         title = "Strings Translation",
-        subtitleAr = "إدارة النصوص والترجمات متعدّدة اللغات strings.xml",
-        badgeText = "STR",
+        subtitle = "إدارة النصوص والترجمات متعدّدة اللغات strings.xml",
+        badge = "STR",
         accentColor = Color(0xFFE879F9),
     ),
     VALUES_MANAGER(
         title = "Values Manager",
-        subtitleAr = "إدارة الألوان والأبعاد والأنماط (colors / styles / dimens)",
-        badgeText = "VAL",
+        subtitle = "إدارة الألوان والأبعاد والأنماط (colors / styles / dimens)",
+        badge = "VAL",
         accentColor = Color(0xFF818CF8),
     ),
     LOGCAT_READER_APP(
         title = "Logcat Reder App",
-        subtitleAr = "قارئ سجلات التطبيق المباشر (Application Logcat)",
-        badgeText = "LOG",
+        subtitle = "قارئ سجلات التطبيق المباشر (Application Logcat)",
+        badge = "LOG",
         accentColor = Color(0xFF22D3EE),
     ),
     LOGCAT_SYSTEM(
         title = "Logcat System",
-        subtitleAr = "سجلات النظام الكاملة وتتبع الأعطال (System Logcat)",
-        badgeText = "SYS",
+        subtitle = "سجلات النظام الكاملة وتتبع الأعطال (System Logcat)",
+        badge = "SYS",
         accentColor = Color(0xFFF59E0B),
     ),
     COLLECTION_MANAGER(
         title = "Collection Manager",
-        subtitleAr = "مجموعات العناصر والبلوكات والأكواد المحفوظة",
-        badgeText = "COL",
+        subtitle = "مجموعات العناصر والبلوكات والأكواد المحفوظة",
+        badge = "COL",
         accentColor = Color(0xFFC084FC),
     ),
 }
@@ -3438,11 +3444,7 @@ private fun TemporaryRunScreen(
     modifier: Modifier = Modifier,
 ) {
     val langAccent = languageColor(project.language)
-    val methodAccent = when (buildMethod) {
-        IdeBuildMethod.GRADLE -> Teal
-        IdeBuildMethod.GITHUB_ACTIONS -> Cyan
-        IdeBuildMethod.SIMPLE -> Amber
-    }
+    val methodAccent = buildMethod.badgeColor
 
     Column(
         modifier = modifier
@@ -3561,11 +3563,7 @@ private fun TemporaryRunScreen(
                 ) {
                     IdeBuildMethod.entries.forEach { method ->
                         val active = method == buildMethod
-                        val chipColor = when (method) {
-                            IdeBuildMethod.GRADLE -> Teal
-                            IdeBuildMethod.GITHUB_ACTIONS -> Cyan
-                            IdeBuildMethod.SIMPLE -> Amber
-                        }
+                        val chipColor = method.badgeColor
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -3767,11 +3765,7 @@ private fun BuildMethodBottomSheet(
 
                 IdeBuildMethod.entries.forEach { method ->
                     val isSelected = method == selectedMethod
-                    val methodAccent = when (method) {
-                        IdeBuildMethod.GRADLE -> Teal
-                        IdeBuildMethod.GITHUB_ACTIONS -> Cyan
-                        IdeBuildMethod.SIMPLE -> Amber
-                    }
+                    val methodAccent = method.badgeColor
 
                     Row(
                         modifier = Modifier
@@ -3978,13 +3972,8 @@ private fun IdeProjectSideDrawer(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                IdeSideMenuItem.entries.forEachIndexed { index, item ->
-                    val accent = when (index % 4) {
-                        0 -> Cyan
-                        1 -> Teal
-                        2 -> Violet
-                        else -> Amber
-                    }
+                IdeSideMenuItem.entries.forEach { item ->
+                    val accent = item.accentColor
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
