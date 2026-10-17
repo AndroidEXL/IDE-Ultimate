@@ -119,6 +119,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.CodeEditorFlavor
+import com.androidexl.ideultimate.data.IdeFunctionParam
+import com.androidexl.ideultimate.data.IdeLogicItem
+import com.androidexl.ideultimate.data.IdeLogicSection
 import com.androidexl.ideultimate.data.IdeWidgetNode
 import com.androidexl.ideultimate.data.IdeWidgetType
 import com.androidexl.ideultimate.data.ProjectImageItem
@@ -347,9 +350,19 @@ fun IdeProjectScreen(
         mutableStateOf(repository.readCodeForFlavor(project, selectedXmlPage, activeFlavor))
     }
 
+    var logicItems by remember(project.id, selectedXmlPage.xmlFileName) {
+        mutableStateOf(repository.loadLogicItemsForXmlPage(project, selectedXmlPage))
+    }
+
     LaunchedEffect(project.id, selectedXmlPage.xmlFileName, activeFlavor, activeTab) {
         widgetNodes = repository.loadWidgetsForXmlPage(project, selectedXmlPage)
+        logicItems = repository.loadLogicItemsForXmlPage(project, selectedXmlPage)
         codeText = repository.readCodeForFlavor(project, selectedXmlPage, activeFlavor)
+    }
+
+    fun updateLogicItems(newItems: List<IdeLogicItem>) {
+        logicItems = newItems
+        repository.saveLogicItemsForXmlPage(project, selectedXmlPage, newItems)
     }
 
     fun updateWidgetNodes(newNodes: List<IdeWidgetNode>, recordHistory: Boolean = true) {
@@ -556,26 +569,23 @@ fun IdeProjectScreen(
                         }
 
                         IdeProjectTab.LOGIC -> {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                            ) {
-                                IdeLogicCodeEditor(
-                                    project = project,
-                                    xmlPage = selectedXmlPage,
-                                    activeFlavor = activeFlavor,
-                                    onSelectFlavor = { flavor ->
-                                        activeFlavorName = flavor.name
-                                        codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
-                                    },
-                                    code = codeText,
-                                    onCodeChange = { updated ->
-                                        codeText = updated
-                                        repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
-                                    },
-                                )
-                            }
+                            IdeLogicEventWorkspace(
+                                project = project,
+                                xmlPage = selectedXmlPage,
+                                widgetNodes = widgetNodes,
+                                logicItems = logicItems,
+                                onUpdateLogicItems = { updateLogicItems(it) },
+                                activeFlavor = activeFlavor,
+                                onSelectFlavor = { flavor ->
+                                    activeFlavorName = flavor.name
+                                    codeText = repository.readCodeForFlavor(project, selectedXmlPage, flavor)
+                                },
+                                code = codeText,
+                                onCodeChange = { updated ->
+                                    codeText = updated
+                                    repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
+                                },
+                            )
                         }
 
                         IdeProjectTab.EMULATOR -> {
@@ -2888,17 +2898,19 @@ private fun IdeWidgetPropertyBottomPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (activePropTab == WidgetPropTab.EVENT) {
-                SketchPropertySquareCard(
-                    label = "onClick",
-                    highlighted = false,
-                    onClick = onOpenLogicEvent,
-                ) { tint ->
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = tint,
-                        modifier = Modifier.size(20.dp),
-                    )
+                listOf("On Click", "On Click\nLong", "On Touch").forEach { eventLabel ->
+                    SketchPropertySquareCard(
+                        label = eventLabel,
+                        highlighted = false,
+                        onClick = onOpenLogicEvent,
+                    ) { tint ->
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             } else {
                 displayedProperties.forEach { prop ->
@@ -3579,8 +3591,1896 @@ private fun IdeSketchBottomBar(
 }
 
 // ============================================================================
-// 4. LOGIC Tab: Android Code Editor (Java Android | Kotlin Android | xml Android)
+// 4. LOGIC Tab: Event & Functions Manager (Activity | View | Component | Drawer | Functions)
+//    Matches Screenshot Layout + All Activity Events + View (OnClick / OnClickLong / OnTouch)
+//    + Functions (Name, Return Type, Typed Parameters, Private Variable)
+//    + Long-Press Bottom Sheet (Reset / Rename / Delete)
 // ============================================================================
+
+private data class IdeActivityEventTemplate(
+    val name: String,
+    val subtitle: String,
+    val defaultCode: String,
+)
+
+private val ALL_ACTIVITY_EVENT_TEMPLATES = listOf(
+    IdeActivityEventTemplate("onCreate", "On activity create", "// On activity create\nsetContentView(R.layout.activity_main)\ninitializeLogic()"),
+    IdeActivityEventTemplate("Import", "Custom imports (import ...)", "import android.view.View\nimport android.widget.Toast"),
+    IdeActivityEventTemplate("OnRename", "On activity rename / state update", "// OnRename logic"),
+    IdeActivityEventTemplate("initializeLogic", "On activity create", "// Initialize logic here"),
+    IdeActivityEventTemplate("onStart", "On activity start", "// On activity start"),
+    IdeActivityEventTemplate("onResume", "On activity resume", "// On activity resume"),
+    IdeActivityEventTemplate("onPause", "On activity pause", "// On activity pause"),
+    IdeActivityEventTemplate("onStop", "On activity stop", "// On activity stop"),
+    IdeActivityEventTemplate("onDestroy", "On activity destroy", "// On activity destroy"),
+    IdeActivityEventTemplate("onRestart", "On activity restart", "// On activity restart"),
+    IdeActivityEventTemplate("onBackPressed", "On back button pressed", "// On back button pressed"),
+    IdeActivityEventTemplate("onPostCreate", "On activity post create", "// On activity post create"),
+    IdeActivityEventTemplate("onSaveInstanceState", "On save instance state", "// Save instance state"),
+    IdeActivityEventTemplate("onRestoreInstanceState", "On restore instance state", "// Restore instance state"),
+    IdeActivityEventTemplate("onActivityResult", "On activity result", "// Handle activity result"),
+    IdeActivityEventTemplate("onRequestPermissionsResult", "On request permissions result", "// Handle permission result"),
+    IdeActivityEventTemplate("onConfigurationChanged", "On configuration changed", "// Handle configuration change"),
+    IdeActivityEventTemplate("onCreateOptionsMenu", "On create options menu", "// Inflate options menu"),
+    IdeActivityEventTemplate("onOptionsItemSelected", "On options item selected", "// Handle menu item click"),
+    IdeActivityEventTemplate("onUserLeaveHint", "On user leave hint", "// On user leave hint"),
+    IdeActivityEventTemplate("onWindowFocusChanged", "On window focus changed", "// On window focus changed"),
+    IdeActivityEventTemplate("onTrimMemory", "On trim memory", "// On trim memory"),
+    IdeActivityEventTemplate("onLowMemory", "On low memory", "// On low memory"),
+    IdeActivityEventTemplate("onNewIntent", "On new intent received", "// On new intent received"),
+)
+
+private data class IdeViewEventOption(
+    val eventKey: String,
+    val title: String,
+    val subtitle: String,
+)
+
+private val VIEW_EVENT_OPTIONS = listOf(
+    IdeViewEventOption(
+        eventKey = "onClick",
+        title = "onClick",
+        subtitle = "On Click • عند الضغط على العنصر",
+    ),
+    IdeViewEventOption(
+        eventKey = "onLongClick",
+        title = "onLongClick (On Click Long)",
+        subtitle = "On Click Long • عند الضغط المطوّل على العنصر",
+    ),
+    IdeViewEventOption(
+        eventKey = "onTouch",
+        title = "onTouch (On Touch)",
+        subtitle = "On Touch • عند لمس العنصر",
+    ),
+)
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun IdeLogicEventWorkspace(
+    project: WorkspaceItem,
+    xmlPage: ProjectXmlPage,
+    widgetNodes: List<IdeWidgetNode>,
+    logicItems: List<IdeLogicItem>,
+    onUpdateLogicItems: (List<IdeLogicItem>) -> Unit,
+    activeFlavor: CodeEditorFlavor,
+    onSelectFlavor: (CodeEditorFlavor) -> Unit,
+    code: String,
+    onCodeChange: (String) -> Unit,
+) {
+    var activeSection by rememberSaveable { mutableStateOf(IdeLogicSection.ACTIVITY) }
+    var showAddActivitySheet by remember { mutableStateOf(false) }
+    var showAddViewSheet by remember { mutableStateOf(false) }
+    var preselectedViewNodeForSheet by remember { mutableStateOf<IdeWidgetNode?>(null) }
+    var showAddComponentOrDrawerSheet by remember { mutableStateOf(false) }
+    var showFunctionSheet by remember { mutableStateOf(false) }
+    var editingFunctionItem by remember { mutableStateOf<IdeLogicItem?>(null) }
+
+    var longPressedItem by remember { mutableStateOf<IdeLogicItem?>(null) }
+    var renameDialogItem by remember { mutableStateOf<IdeLogicItem?>(null) }
+    var renameDialogText by remember { mutableStateOf("") }
+
+    var editingCodeItem by remember { mutableStateOf<IdeLogicItem?>(null) }
+    var showImportOrFullCodeSheet by remember { mutableStateOf(false) }
+
+    val allViewWidgets = remember(widgetNodes) { flattenAllNodes(widgetNodes) }
+    val filteredItems = remember(logicItems, activeSection) {
+        logicItems.filter { it.section == activeSection }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepNavy),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            // 1. Left Vertical Category Rail (matches screenshot: Activity | View | Component | Drawer | Functions)
+            Column(
+                modifier = Modifier
+                    .width(90.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFF0A1026))
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 18.dp, horizontal = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(22.dp),
+            ) {
+                IdeLogicSection.entries.forEach { section ->
+                    val selected = section == activeSection
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                activeSection = section
+                                when (section) {
+                                    IdeLogicSection.VIEW -> {
+                                        preselectedViewNodeForSheet = null
+                                        showAddViewSheet = true
+                                    }
+                                    IdeLogicSection.FUNCTIONS -> {
+                                        if (logicItems.none { it.section == IdeLogicSection.FUNCTIONS }) {
+                                            editingFunctionItem = null
+                                            showFunctionSheet = true
+                                        }
+                                    }
+                                    else -> {}
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        // Pill highlight around active icon (exact match to screenshot's Activity icon pill!)
+                        Box(
+                            modifier = Modifier
+                                .width(56.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(
+                                    if (selected) Color(0xFF23326A) else Color.Transparent,
+                                )
+                                .then(
+                                    if (selected) {
+                                        Modifier.border(
+                                            width = 1.dp,
+                                            color = Cyan.copy(alpha = 0.55f),
+                                            shape = RoundedCornerShape(percent = 50),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            IdeLogicRailIcon(
+                                section = section,
+                                tint = if (selected) Cyan else Ink.copy(alpha = 0.78f),
+                            )
+                        }
+
+                        Text(
+                            text = section.title,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            ),
+                            color = if (selected) Cyan else Ink.copy(alpha = 0.80f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
+            // Subtle vertical divider
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color(0x1FFFFFFF)),
+            )
+
+            // 2. Right Content Area (matches screenshot: Import Code pill + Event/Function cards)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 92.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Top Pill Button: "Import Code" (in Activity) or Section Action Pill
+                val topPillText = when (activeSection) {
+                    IdeLogicSection.ACTIVITY -> "Import Code"
+                    IdeLogicSection.VIEW -> "Select View Events (On Click / On Click Long / On Touch)"
+                    IdeLogicSection.FUNCTIONS -> "Add Function • إضافة دالة جديدة"
+                    IdeLogicSection.COMPONENT -> "Add Component Event"
+                    IdeLogicSection.DRAWER -> "Add Drawer Event"
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(Color(0xFF151F44))
+                        .border(
+                            width = 1.dp,
+                            color = Color(0x38FFFFFF),
+                            shape = RoundedCornerShape(percent = 50),
+                        )
+                        .clickable {
+                            when (activeSection) {
+                                IdeLogicSection.ACTIVITY -> showImportOrFullCodeSheet = true
+                                IdeLogicSection.VIEW -> {
+                                    preselectedViewNodeForSheet = null
+                                    showAddViewSheet = true
+                                }
+                                IdeLogicSection.FUNCTIONS -> {
+                                    editingFunctionItem = null
+                                    showFunctionSheet = true
+                                }
+                                IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
+                                    showAddComponentOrDrawerSheet = true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = topPillText,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Ink,
+                    )
+                }
+
+                // If in View section, also show quick chips for every widget in View so tapping any widget opens its 3 events sheet
+                if (activeSection == IdeLogicSection.VIEW && allViewWidgets.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF101836))
+                            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(16.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "عناصر View الحالية (اضغط على أي عنصر لإضافة On Click / On Click Long / On Touch):",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = Cyan,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            allViewWidgets.forEach { wNode ->
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color(0xFF1B2854))
+                                        .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                        .clickable {
+                                            preselectedViewNodeForSheet = wNode
+                                            showAddViewSheet = true
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    SketchWidgetIcon(type = wNode.type, tint = Cyan)
+                                    Text(
+                                        text = wNode.viewId,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Ink,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Event / Function Cards List (exact card style from screenshot!)
+                if (filteredItems.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color(0xFF121B3C))
+                            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(18.dp))
+                            .clickable {
+                                when (activeSection) {
+                                    IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
+                                    IdeLogicSection.VIEW -> {
+                                        preselectedViewNodeForSheet = null
+                                        showAddViewSheet = true
+                                    }
+                                    IdeLogicSection.FUNCTIONS -> {
+                                        editingFunctionItem = null
+                                        showFunctionSheet = true
+                                    }
+                                    IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
+                                        showAddComponentOrDrawerSheet = true
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 18.dp, vertical = 28.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = Cyan,
+                                modifier = Modifier.size(28.dp),
+                            )
+                            Text(
+                                text = when (activeSection) {
+                                    IdeLogicSection.ACTIVITY -> "لا توجد أحداث Activity مضافة — اضغط على (+) لإضافة حدث"
+                                    IdeLogicSection.VIEW -> "اضغط هنا أو على زر (+) لاختيار عنصر وإضافة onClick / onLongClick / onTouch"
+                                    IdeLogicSection.FUNCTIONS -> "لا توجد دوال في Functions بعد — اضغط لإضافة دالة جديدة للمشروع"
+                                    IdeLogicSection.COMPONENT -> "اضغط على زر (+) لإضافة حدث Component"
+                                    IdeLogicSection.DRAWER -> "اضغط على زر (+) لإضافة حدث Drawer"
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = Ink,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                } else {
+                    filteredItems.forEach { item ->
+                        IdeLogicEventCard(
+                            item = item,
+                            onClick = { editingCodeItem = item },
+                            onLongClick = { longPressedItem = item },
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Rounded-Square Floating Action Button (+) at Bottom-End (exact match to screenshot!)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = 18.dp)
+                .size(58.dp)
+                .shadow(10.dp, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF283A75), Color(0xFF364F9C)),
+                    ),
+                )
+                .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                .clickable {
+                    when (activeSection) {
+                        IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
+                        IdeLogicSection.VIEW -> {
+                            preselectedViewNodeForSheet = null
+                            showAddViewSheet = true
+                        }
+                        IdeLogicSection.FUNCTIONS -> {
+                            editingFunctionItem = null
+                            showFunctionSheet = true
+                        }
+                        IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
+                            showAddComponentOrDrawerSheet = true
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Add Event or Function",
+                tint = Color.White,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+    }
+
+    // ========================================================================
+    // Bottom Sheet 1: Add Activity Event (All Activity Events: OnCreate, Import, OnRename, etc.)
+    // ========================================================================
+    if (showAddActivitySheet) {
+        AddActivityEventBottomSheet(
+            existingItems = logicItems.filter { it.section == IdeLogicSection.ACTIVITY },
+            onAddEvent = { template ->
+                val alreadyExists = logicItems.any {
+                    it.section == IdeLogicSection.ACTIVITY && it.name.equals(template.name, ignoreCase = true)
+                }
+                if (!alreadyExists) {
+                    val newItem = IdeLogicItem(
+                        section = IdeLogicSection.ACTIVITY,
+                        name = template.name,
+                        subtitle = template.subtitle,
+                        bodyCode = template.defaultCode,
+                    )
+                    onUpdateLogicItems(logicItems + newItem)
+                }
+                showAddActivitySheet = false
+            },
+            onAddAllMissing = {
+                val existingNames = logicItems
+                    .filter { it.section == IdeLogicSection.ACTIVITY }
+                    .map { it.name.lowercase() }
+                    .toSet()
+                val newOnes = ALL_ACTIVITY_EVENT_TEMPLATES
+                    .filter { it.name.lowercase() !in existingNames }
+                    .map { tpl ->
+                        IdeLogicItem(
+                            section = IdeLogicSection.ACTIVITY,
+                            name = tpl.name,
+                            subtitle = tpl.subtitle,
+                            bodyCode = tpl.defaultCode,
+                        )
+                    }
+                if (newOnes.isNotEmpty()) {
+                    onUpdateLogicItems(logicItems + newOnes)
+                }
+                showAddActivitySheet = false
+            },
+            onDismiss = { showAddActivitySheet = false },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 2: View Events Bottom Sheet (On Click, On Click Long, On Touch for every widget in View)
+    // ========================================================================
+    if (showAddViewSheet) {
+        AddViewEventBottomSheet(
+            allViewWidgets = allViewWidgets,
+            preselectedWidget = preselectedViewNodeForSheet,
+            existingViewItems = logicItems.filter { it.section == IdeLogicSection.VIEW },
+            onToggleOrOpenViewEvent = { widgetNode, eventOpt ->
+                val existing = logicItems.firstOrNull {
+                    it.section == IdeLogicSection.VIEW &&
+                        it.targetViewId == widgetNode.viewId &&
+                        it.name == "${widgetNode.viewId}: ${eventOpt.eventKey}"
+                }
+                if (existing != null) {
+                    showAddViewSheet = false
+                    editingCodeItem = existing
+                } else {
+                    val defaultBody = when (eventOpt.eventKey) {
+                        "onClick" -> "// ${widgetNode.viewId} onClick\n"
+                        "onLongClick" -> "// ${widgetNode.viewId} onLongClick (On Click Long)\ntrue"
+                        "onTouch" -> "// ${widgetNode.viewId} onTouch (On Touch)\nfalse"
+                        else -> ""
+                    }
+                    val newItem = IdeLogicItem(
+                        section = IdeLogicSection.VIEW,
+                        name = "${widgetNode.viewId}: ${eventOpt.eventKey}",
+                        subtitle = "${widgetNode.type.displayName} (@+id/${widgetNode.viewId}) • ${eventOpt.subtitle}",
+                        targetViewId = widgetNode.viewId,
+                        bodyCode = defaultBody,
+                    )
+                    onUpdateLogicItems(logicItems + newItem)
+                }
+            },
+            onDismiss = {
+                showAddViewSheet = false
+                preselectedViewNodeForSheet = null
+            },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 3: Functions (MoreBlock renamed to Functions) Bottom Sheet
+    //   1. الاسم (Function Name)
+    //   2. نوع الدالة (Return Type)
+    //   3. متغيرات الدالة مع تحديد نوعها (Parameters + Type)
+    //   4. متغير خاص (Private Variable + Type + Initial Value)
+    // ========================================================================
+    if (showFunctionSheet) {
+        CreateOrEditFunctionBottomSheet(
+            initialItem = editingFunctionItem,
+            onSaveFunction = { funcName, returnType, params, privName, privType, privVal ->
+                val paramsSummary = if (params.isEmpty()) {
+                    "No params"
+                } else {
+                    params.joinToString(", ") { "${it.name}: ${it.type}" }
+                }
+                val privSummary = if (privName.isBlank()) {
+                    ""
+                } else {
+                    " • متغير خاص: $privName ($privType${if (privVal.isNotBlank()) " = $privVal" else ""})"
+                }
+                val sub = "نوع الدالة: $returnType • ($paramsSummary)$privSummary"
+
+                val existingEditing = editingFunctionItem
+                if (existingEditing != null) {
+                    val updatedList = logicItems.map { item ->
+                        if (item.id == existingEditing.id) {
+                            item.copy(
+                                name = funcName,
+                                subtitle = sub,
+                                returnType = returnType,
+                                parameters = params,
+                                privateVarName = privName,
+                                privateVarType = privType,
+                                privateVarValue = privVal,
+                            )
+                        } else {
+                            item
+                        }
+                    }
+                    onUpdateLogicItems(updatedList)
+                } else {
+                    val defaultPrivLine = if (privName.isNotBlank()) {
+                        val defaultInit = privVal.ifBlank {
+                            when (privType) {
+                                "Int", "Long" -> "0"
+                                "Double", "Float" -> "0.0"
+                                "Boolean" -> "false"
+                                "String" -> "\"\""
+                                else -> "null"
+                            }
+                        }
+                        "var $privName: $privType = $defaultInit\n"
+                    } else {
+                        ""
+                    }
+                    val newFunc = IdeLogicItem(
+                        section = IdeLogicSection.FUNCTIONS,
+                        name = funcName,
+                        subtitle = sub,
+                        returnType = returnType,
+                        parameters = params,
+                        privateVarName = privName,
+                        privateVarType = privType,
+                        privateVarValue = privVal,
+                        bodyCode = "${defaultPrivLine}// كود الدالة $funcName هنا",
+                    )
+                    onUpdateLogicItems(logicItems + newFunc)
+                }
+                showFunctionSheet = false
+                editingFunctionItem = null
+            },
+            onDismiss = {
+                showFunctionSheet = false
+                editingFunctionItem = null
+            },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 4: Component / Drawer Event Picker
+    // ========================================================================
+    if (showAddComponentOrDrawerSheet) {
+        AddComponentOrDrawerEventBottomSheet(
+            section = activeSection,
+            onAddItem = { title, sub, body ->
+                val newItem = IdeLogicItem(
+                    section = activeSection,
+                    name = title,
+                    subtitle = sub,
+                    bodyCode = body,
+                )
+                onUpdateLogicItems(logicItems + newItem)
+                showAddComponentOrDrawerSheet = false
+            },
+            onDismiss = { showAddComponentOrDrawerSheet = false },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 5: Long-Press on ANY Item in Logic:
+    //   - Reset (مسح محتوى الدالة كاملة)
+    //   - تعديل الاسم (Edit Name / Edit Function in Functions)
+    //   - حذف (Delete)
+    // ========================================================================
+    val activeLongPress = longPressedItem
+    if (activeLongPress != null) {
+        IdeLogicItemLongPressBottomSheet(
+            item = activeLongPress,
+            onResetBody = {
+                // Reset: مسح محتوى الدالة كاملة
+                val updated = logicItems.map {
+                    if (it.id == activeLongPress.id) it.copy(bodyCode = "") else it
+                }
+                onUpdateLogicItems(updated)
+                longPressedItem = null
+            },
+            onEditName = {
+                val target = activeLongPress
+                longPressedItem = null
+                if (target.section == IdeLogicSection.FUNCTIONS) {
+                    editingFunctionItem = target
+                    showFunctionSheet = true
+                } else {
+                    renameDialogText = target.name
+                    renameDialogItem = target
+                }
+            },
+            onDelete = {
+                onUpdateLogicItems(logicItems.filterNot { it.id == activeLongPress.id })
+                longPressedItem = null
+            },
+            onDismiss = { longPressedItem = null },
+        )
+    }
+
+    // Rename Dialog for non-Function Logic items
+    val currentRenameItem = renameDialogItem
+    if (currentRenameItem != null) {
+        AlertDialog(
+            onDismissRequest = { renameDialogItem = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = renameDialogText,
+                    onValueChange = { renameDialogText = it },
+                    singleLine = true,
+                    label = { Text("Name / الاسم") },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        color = Ink,
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink,
+                        cursorColor = Cyan,
+                        focusedBorderColor = Cyan,
+                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        focusedContainerColor = Color(0x14FFFFFF),
+                        unfocusedContainerColor = Color(0x0AFFFFFF),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameDialogText.trim()
+                        if (newName.isNotEmpty()) {
+                            onUpdateLogicItems(
+                                logicItems.map {
+                                    if (it.id == currentRenameItem.id) it.copy(name = newName) else it
+                                },
+                            )
+                        }
+                        renameDialogItem = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameDialogItem = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 6: Tapping a Card in Logic -> Edit Event/Function Body Code
+    // ========================================================================
+    val currentEditingCodeItem = editingCodeItem
+    if (currentEditingCodeItem != null) {
+        IdeLogicItemEditorBottomSheet(
+            item = currentEditingCodeItem,
+            onSaveBodyCode = { updatedBody ->
+                onUpdateLogicItems(
+                    logicItems.map {
+                        if (it.id == currentEditingCodeItem.id) it.copy(bodyCode = updatedBody) else it
+                    },
+                )
+                editingCodeItem = null
+            },
+            onResetBodyCode = {
+                onUpdateLogicItems(
+                    logicItems.map {
+                        if (it.id == currentEditingCodeItem.id) it.copy(bodyCode = "") else it
+                    },
+                )
+                editingCodeItem = editingCodeItem?.copy(bodyCode = "")
+            },
+            onDismiss = { editingCodeItem = null },
+        )
+    }
+
+    // ========================================================================
+    // Bottom Sheet 7: Import Code / Full Activity Source Editor
+    // ========================================================================
+    if (showImportOrFullCodeSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showImportOrFullCodeSheet = false },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(520.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Import Code & Full Activity Source",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = JetBrainsMono,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Ink,
+                    )
+                    TextButton(onClick = { showImportOrFullCodeSheet = false }) {
+                        Text(stringResource(R.string.dialog_save), color = Cyan)
+                    }
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    IdeLogicCodeEditor(
+                        project = project,
+                        xmlPage = xmlPage,
+                        activeFlavor = activeFlavor,
+                        onSelectFlavor = onSelectFlavor,
+                        code = code,
+                        onCodeChange = onCodeChange,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IdeLogicRailIcon(
+    section: IdeLogicSection,
+    tint: Color,
+) {
+    Canvas(Modifier.size(20.dp)) {
+        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        when (section) {
+            IdeLogicSection.ACTIVITY -> {
+                // Recycle / 3-arrow lifecycle icon matching screenshot
+                val cx = size.width * 0.50f
+                val cy = size.height * 0.50f
+                val r = size.width * 0.36f
+                drawArc(
+                    color = tint,
+                    startAngle = -75f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    topLeft = Offset(cx - r, cy - r),
+                    size = Size(r * 2, r * 2),
+                    style = stroke,
+                )
+                drawArc(
+                    color = tint,
+                    startAngle = 45f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    topLeft = Offset(cx - r, cy - r),
+                    size = Size(r * 2, r * 2),
+                    style = stroke,
+                )
+                drawArc(
+                    color = tint,
+                    startAngle = 165f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    topLeft = Offset(cx - r, cy - r),
+                    size = Size(r * 2, r * 2),
+                    style = stroke,
+                )
+            }
+
+            IdeLogicSection.VIEW -> {
+                // Stacked 3-row rectangle matching screenshot
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.20f, size.height * 0.14f),
+                    size = Size(size.width * 0.60f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.20f, size.height * 0.38f), Offset(size.width * 0.80f, size.height * 0.38f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.20f, size.height * 0.62f), Offset(size.width * 0.80f, size.height * 0.62f), stroke.width)
+            }
+
+            IdeLogicSection.COMPONENT -> {
+                // Box with top lid & slot matching screenshot
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.14f, size.height * 0.16f),
+                    size = Size(size.width * 0.72f, size.height * 0.20f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.20f, size.height * 0.36f),
+                    size = Size(size.width * 0.60f, size.height * 0.48f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.38f, size.height * 0.54f), Offset(size.width * 0.62f, size.height * 0.54f), stroke.width)
+            }
+
+            IdeLogicSection.DRAWER -> {
+                // Split drawer rectangle matching screenshot
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.16f, size.height * 0.16f),
+                    size = Size(size.width * 0.68f, size.height * 0.68f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    style = stroke,
+                )
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.16f, size.height * 0.16f),
+                    size = Size(size.width * 0.32f, size.height * 0.68f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                )
+            }
+
+            IdeLogicSection.FUNCTIONS -> {
+                // Puzzle block icon matching screenshot
+                val path = Path().apply {
+                    moveTo(size.width * 0.14f, size.height * 0.36f)
+                    lineTo(size.width * 0.36f, size.height * 0.36f)
+                    lineTo(size.width * 0.42f, size.height * 0.44f)
+                    lineTo(size.width * 0.58f, size.height * 0.44f)
+                    lineTo(size.width * 0.64f, size.height * 0.36f)
+                    lineTo(size.width * 0.86f, size.height * 0.36f)
+                    lineTo(size.width * 0.86f, size.height * 0.68f)
+                    lineTo(size.width * 0.14f, size.height * 0.68f)
+                    close()
+                }
+                drawPath(path, color = tint)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun IdeLogicEventCard(
+    item: IdeLogicItem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val titleDisplay = if (item.section == IdeLogicSection.FUNCTIONS) {
+        val paramsStr = item.parameters.joinToString(", ") { "${it.name}: ${it.type}" }
+        "${item.name}($paramsStr): ${item.returnType}"
+    } else {
+        item.name
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color(0xFF151E42))
+            .border(1.dp, Color(0x2EFFFFFF), shape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // Left "< >" Code Brackets Icon matching screenshot
+        Canvas(Modifier.size(22.dp)) {
+            val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val left = Path().apply {
+                moveTo(size.width * 0.36f, size.height * 0.26f)
+                lineTo(size.width * 0.12f, size.height * 0.50f)
+                lineTo(size.width * 0.36f, size.height * 0.74f)
+            }
+            val right = Path().apply {
+                moveTo(size.width * 0.64f, size.height * 0.26f)
+                lineTo(size.width * 0.88f, size.height * 0.50f)
+                lineTo(size.width * 0.64f, size.height * 0.74f)
+            }
+            drawPath(left, color = Cyan, style = stroke)
+            drawPath(right, color = Cyan, style = stroke)
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = titleDisplay,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (item.bodyCode.isBlank()) {
+                    "${item.subtitle} • (فارغ / Reset)"
+                } else {
+                    item.subtitle
+                },
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                ),
+                color = Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Icon(
+            imageVector = Icons.Filled.ArrowDropDown,
+            contentDescription = null,
+            tint = Ink.copy(alpha = 0.80f),
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddActivityEventBottomSheet(
+    existingItems: List<IdeLogicItem>,
+    onAddEvent: (IdeActivityEventTemplate) -> Unit,
+    onAddAllMissing: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val existingNames = remember(existingItems) {
+        existingItems.map { it.name.lowercase() }.toSet()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Add Activity Event • كل أحداث Activity",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "OnCreate, Import, OnRename & all lifecycle events",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = Cyan,
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Cyan.copy(alpha = 0.16f))
+                            .border(1.dp, Cyan.copy(alpha = 0.50f), RoundedCornerShape(50))
+                            .clickable(onClick = onAddAllMissing)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "+ إضافة الكل",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ALL_ACTIVITY_EVENT_TEMPLATES.forEach { tpl ->
+                        val isAdded = tpl.name.lowercase() in existingNames
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (isAdded) Cyan.copy(alpha = 0.14f) else Color(0xFF141E42),
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isAdded) Cyan.copy(alpha = 0.55f) else Color(0x26FFFFFF),
+                                    shape = RoundedCornerShape(14.dp),
+                                )
+                                .clickable { onAddEvent(tpl) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = tpl.name,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = if (isAdded) Cyan else Ink,
+                                )
+                                Text(
+                                    text = tpl.subtitle,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = Muted,
+                                )
+                            }
+
+                            if (isAdded) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Ink,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddViewEventBottomSheet(
+    allViewWidgets: List<IdeWidgetNode>,
+    preselectedWidget: IdeWidgetNode?,
+    existingViewItems: List<IdeLogicItem>,
+    onToggleOrOpenViewEvent: (IdeWidgetNode, IdeViewEventOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val widgetsToShow = remember(allViewWidgets, preselectedWidget) {
+        if (preselectedWidget != null) {
+            listOf(preselectedWidget) + allViewWidgets.filter { it.uid != preselectedWidget.uid }
+        } else {
+            allViewWidgets
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "View Events • أحداث عناصر View",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+                Text(
+                    text = "اختر On Click أو On Click Long أو On Touch لأي عنصر في View",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                    color = Cyan,
+                )
+
+                if (widgetsToShow.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF141E42))
+                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "لا توجد عناصر في صفحة View حالياً — أضف عناصر في تبويب View أولاً لتظهر هنا مع أحداث On Click و On Click Long و On Touch.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Ink,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        widgetsToShow.forEach { wNode ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF131C3E))
+                                    .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    SketchWidgetIcon(type = wNode.type, tint = Cyan)
+                                    Text(
+                                        text = "${wNode.viewId} (${wNode.type.displayName})",
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Cyan,
+                                    )
+                                }
+
+                                VIEW_EVENT_OPTIONS.forEach { evOpt ->
+                                    val isAdded = existingViewItems.any {
+                                        it.targetViewId == wNode.viewId &&
+                                            it.name == "${wNode.viewId}: ${evOpt.eventKey}"
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                if (isAdded) Cyan.copy(alpha = 0.16f) else Color(0xFF1B2752),
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isAdded) Cyan else Color(0x26FFFFFF),
+                                                shape = RoundedCornerShape(12.dp),
+                                            )
+                                            .clickable { onToggleOrOpenViewEvent(wNode, evOpt) }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                text = evOpt.title,
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = if (isAdded) Cyan else Ink,
+                                            )
+                                            Text(
+                                                text = evOpt.subtitle,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                                color = Muted,
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
+                                            contentDescription = null,
+                                            tint = if (isAdded) Cyan else Ink,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateOrEditFunctionBottomSheet(
+    initialItem: IdeLogicItem?,
+    onSaveFunction: (
+        funcName: String,
+        returnType: String,
+        params: List<IdeFunctionParam>,
+        privName: String,
+        privType: String,
+        privVal: String,
+    ) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var funcName by remember(initialItem?.id) {
+        mutableStateOf(initialItem?.name ?: "")
+    }
+    var returnType by remember(initialItem?.id) {
+        mutableStateOf(initialItem?.returnType ?: "void")
+    }
+    val params = remember(initialItem?.id) {
+        mutableStateListOf<IdeFunctionParam>().apply {
+            if (initialItem != null) {
+                addAll(initialItem.parameters)
+            }
+        }
+    }
+    var newParamName by remember { mutableStateOf("") }
+    var newParamType by remember { mutableStateOf("String") }
+
+    var privateVarName by remember(initialItem?.id) {
+        mutableStateOf(initialItem?.privateVarName ?: "")
+    }
+    var privateVarType by remember(initialItem?.id) {
+        mutableStateOf(initialItem?.privateVarType ?: "String")
+    }
+    var privateVarValue by remember(initialItem?.id) {
+        mutableStateOf(initialItem?.privateVarValue ?: "")
+    }
+
+    val returnTypes = listOf(
+        "void",
+        "String",
+        "Int",
+        "Boolean",
+        "Double",
+        "Float",
+        "Long",
+        "List<String>",
+        "Map<String, Any>",
+        "Any",
+    )
+    val varTypes = listOf(
+        "String",
+        "Int",
+        "Boolean",
+        "Double",
+        "Float",
+        "Long",
+        "View",
+        "Any",
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = if (initialItem == null) {
+                        "Functions • إضافة دالة جديدة للمشروع"
+                    } else {
+                        "Functions • تعديل الدالة (${initialItem.name})"
+                    },
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+
+                // 1. الاسم (Function Name)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "1. الاسم (Function Name):",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Cyan,
+                    )
+                    DialogTextField(
+                        value = funcName,
+                        onValueChange = { funcName = it },
+                        label = "اسم الدالة (مثال: calculateTotal)",
+                    )
+                }
+
+                // 2. نوع الدالة (Function Return Type)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "2. نوع الدالة (Function Return Type):",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Cyan,
+                    )
+                    DialogPresetChipsGrid(
+                        presets = returnTypes,
+                        selectedValue = returnType,
+                        suffix = "",
+                        onSelect = { returnType = it },
+                    )
+                }
+
+                // 3. متغيرات الدالة مع تحديد نوعها (Function Variables / Parameters + Type)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF131C3E))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "3. متغيرات الدالة مع تحديد نوعها (Parameters):",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Cyan,
+                    )
+
+                    if (params.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            params.forEachIndexed { idx, p ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF1C2959))
+                                        .border(1.dp, Cyan.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = "${p.name} : ${p.type}",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Ink,
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Remove Parameter",
+                                        tint = Color(0xFFFDA4AF),
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clickable { params.removeAt(idx) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    DialogTextField(
+                        value = newParamName,
+                        onValueChange = { newParamName = it },
+                        label = "اسم متغير الدالة (Parameter Name)",
+                    )
+
+                    Text(
+                        text = "نوع متغير الدالة (Parameter Type):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                    DialogPresetChipsGrid(
+                        presets = varTypes,
+                        selectedValue = newParamType,
+                        suffix = "",
+                        onSelect = { newParamType = it },
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Cyan.copy(alpha = 0.18f))
+                            .border(1.dp, Cyan, RoundedCornerShape(12.dp))
+                            .clickable {
+                                val cleanParam = newParamName.trim().replace(Regex("[^a-zA-Z0-9_]+"), "_")
+                                if (cleanParam.isNotEmpty()) {
+                                    params.add(IdeFunctionParam(name = cleanParam, type = newParamType))
+                                    newParamName = ""
+                                }
+                            }
+                            .padding(vertical = 9.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = Cyan,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "إضافة متغير للدالة • Add Parameter",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Cyan,
+                        )
+                    }
+                }
+
+                // 4. متغير خاص (Private / Local Variable)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF131C3E))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "4. متغير خاص بالدالة (Private Variable):",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Cyan,
+                    )
+                    DialogTextField(
+                        value = privateVarName,
+                        onValueChange = { privateVarName = it },
+                        label = "اسم المتغير الخاص (مثال: localResult)",
+                    )
+                    Text(
+                        text = "نوع المتغير الخاص:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                    DialogPresetChipsGrid(
+                        presets = varTypes,
+                        selectedValue = privateVarType,
+                        suffix = "",
+                        onSelect = { privateVarType = it },
+                    )
+                    DialogTextField(
+                        value = privateVarValue,
+                        onValueChange = { privateVarValue = it },
+                        label = "القيمة الابتدائية للمتغير الخاص (اختياري)",
+                    )
+                }
+
+                GradientButton(
+                    text = if (initialItem == null) "إضافة الدالة • Create Function" else "حفظ التعديلات • Save Function",
+                    onClick = {
+                        // If the user typed a parameter name without pressing "+ Add Parameter", include it automatically!
+                        val finalParams = params.toMutableList()
+                        val pendingParam = newParamName.trim().replace(Regex("[^a-zA-Z0-9_]+"), "_")
+                        if (pendingParam.isNotEmpty() && finalParams.none { it.name == pendingParam }) {
+                            finalParams.add(IdeFunctionParam(name = pendingParam, type = newParamType))
+                        }
+                        val cleanFuncName = funcName.trim()
+                            .replace(Regex("[^a-zA-Z0-9_]+"), "_")
+                            .ifBlank { "customFunction" }
+                        onSaveFunction(
+                            cleanFuncName,
+                            returnType,
+                            finalParams,
+                            privateVarName.trim(),
+                            privateVarType,
+                            privateVarValue.trim(),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddComponentOrDrawerEventBottomSheet(
+    section: IdeLogicSection,
+    onAddItem: (String, String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val options = remember(section) {
+        if (section == IdeLogicSection.COMPONENT) {
+            listOf(
+                Triple("Timer: onTick", "On timer tick event", "// Timer tick logic"),
+                Triple("Intent: onNavigate", "Start activity intent", "// Intent navigation"),
+                Triple("SharedPreferences: onLoad", "Read/Write local data", "// SharedPreferences logic"),
+                Triple("Dialog: onConfirm", "AlertDialog confirm button clicked", "// Dialog confirm logic"),
+                Triple("FirebaseDB: onChildAdded", "On Firebase Realtime DB child added", "// FirebaseDB child added"),
+                Triple("RequestNetwork: onResponse", "On HTTP network response", "// Network response logic"),
+            )
+        } else {
+            listOf(
+                Triple("onDrawerOpened", "On navigation drawer opened", "// Drawer opened"),
+                Triple("onDrawerClosed", "On navigation drawer closed", "// Drawer closed"),
+                Triple("onDrawerSlide", "On navigation drawer sliding", "// Drawer sliding"),
+                Triple("onDrawerStateChanged", "On drawer state changed", "// Drawer state changed"),
+            )
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "Add ${section.title} Event",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+                options.forEach { (title, sub, body) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF141E42))
+                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                            .clickable { onAddItem(title, sub, body) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Ink,
+                            )
+                            Text(
+                                text = sub,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Muted,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = Cyan,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IdeLogicItemLongPressBottomSheet(
+    item: IdeLogicItem,
+    onResetBody: () -> Unit,
+    onEditName: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "${item.section.title} • ${item.name}",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Cyan,
+            )
+
+            // 1. تعديل الاسم (Edit Name / Edit Function in Functions)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF141E42))
+                    .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                    .clickable(onClick = onEditName)
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = if (item.section == IdeLogicSection.FUNCTIONS) {
+                        "تعديل الاسم وخصائص الدالة • Edit Function"
+                    } else {
+                        "تعديل الاسم • Rename"
+                    },
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Ink,
+                )
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = null,
+                    tint = Cyan,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+
+            // 2. Reset (مسح محتوى الدالة كاملة)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1E2952))
+                    .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                    .clickable(onClick = onResetBody)
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Reset • مسح محتوى الدالة كاملة",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFBBF24),
+                    )
+                    Text(
+                        text = "تفريغ الكود الداخلي بالكامل مع الإبقاء على الدالة/الحدث",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = null,
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+
+            // 3. حذف (Delete)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF3B0D1E))
+                    .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                    .clickable(onClick = onDelete)
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "حذف • Delete",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFFFDA4AF),
+                )
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFFDA4AF),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IdeLogicItemEditorBottomSheet(
+    item: IdeLogicItem,
+    onSaveBodyCode: (String) -> Unit,
+    onResetBodyCode: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var bodyText by remember(item.id) { mutableStateOf(item.bodyCode) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = item.subtitle,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = Cyan,
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF3B0D1E))
+                                .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(50))
+                                .clickable {
+                                    bodyText = ""
+                                    onResetBodyCode()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Reset",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Color(0xFFFDA4AF),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Cyan)
+                                .clickable { onSaveBodyCode(bodyText) }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Save",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Color(0xFF050816),
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = bodyText,
+                    onValueChange = { bodyText = it },
+                    singleLine = false,
+                    placeholder = { Text("// Write event or function logic here...") },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.5.sp,
+                        color = Ink,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink,
+                        cursorColor = Cyan,
+                        focusedBorderColor = Cyan,
+                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        focusedContainerColor = Color(0xFF060A1C),
+                        unfocusedContainerColor = Color(0xFF060A1C),
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp),
+                )
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
 
 @Composable
 private fun IdeLogicCodeEditor(

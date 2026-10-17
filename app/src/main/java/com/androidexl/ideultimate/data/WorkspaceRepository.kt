@@ -127,6 +127,33 @@ data class ProjectImageItem(
         get() = runCatching { File(filePath).length() }.getOrDefault(0L)
 }
 
+enum class IdeLogicSection(val title: String) {
+    ACTIVITY("Activity"),
+    VIEW("View"),
+    COMPONENT("Component"),
+    DRAWER("Drawer"),
+    FUNCTIONS("Functions"),
+}
+
+data class IdeFunctionParam(
+    val name: String,
+    val type: String,
+)
+
+data class IdeLogicItem(
+    val id: String = UUID.randomUUID().toString(),
+    val section: IdeLogicSection,
+    val name: String,
+    val subtitle: String,
+    val targetViewId: String = "",
+    val returnType: String = "void",
+    val parameters: List<IdeFunctionParam> = emptyList(),
+    val privateVarName: String = "",
+    val privateVarType: String = "String",
+    val privateVarValue: String = "",
+    val bodyCode: String = "",
+)
+
 data class IdeWidgetNode(
     val uid: String = UUID.randomUUID().toString(),
     val viewId: String,
@@ -1260,6 +1287,136 @@ class WorkspaceRepository(context: Context) {
         }
         saveProjectImagesMeta(project, remaining)
     }
+
+    /**
+     * Loads the saved Logic Events & Functions for [xmlPage] in [project].
+     * Defaults to `onCreate` and `initializeLogic` in the `Activity` section (matching Sketchware/IDE layout).
+     */
+    fun loadLogicItemsForXmlPage(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+    ): List<IdeLogicItem> {
+        val prefKey = "logic_items_${project.id}_${xmlPage.xmlFileName}"
+        val raw = prefs.getString(prefKey, null)
+        if (!raw.isNullOrBlank()) {
+            val parsed = parseLogicItemsJson(raw)
+            if (parsed.isNotEmpty()) return parsed
+        }
+        for (projDir in projectDirectoriesFor(project)) {
+            val diskFile = File(projDir, ".ide_logic_${xmlPage.layoutResourceName}.json")
+            if (diskFile.exists() && diskFile.isFile) {
+                val diskRaw = runCatching { diskFile.readText(Charsets.UTF_8) }.getOrNull()
+                if (!diskRaw.isNullOrBlank()) {
+                    val parsed = parseLogicItemsJson(diskRaw)
+                    if (parsed.isNotEmpty()) {
+                        prefs.edit().putString(prefKey, diskRaw).apply()
+                        return parsed
+                    }
+                }
+            }
+        }
+        return listOf(
+            IdeLogicItem(
+                id = "default_onCreate_${xmlPage.layoutResourceName}",
+                section = IdeLogicSection.ACTIVITY,
+                name = "onCreate",
+                subtitle = "On activity create",
+                bodyCode = "// On activity create\nsetContentView(R.layout.${xmlPage.layoutResourceName})\ninitializeLogic()",
+            ),
+            IdeLogicItem(
+                id = "default_initializeLogic_${xmlPage.layoutResourceName}",
+                section = IdeLogicSection.ACTIVITY,
+                name = "initializeLogic",
+                subtitle = "On activity create",
+                bodyCode = "// Initialize logic here",
+            ),
+        )
+    }
+
+    /**
+     * Saves the Logic Events & Functions for [xmlPage] in [project] to preferences and disk.
+     */
+    fun saveLogicItemsForXmlPage(
+        project: WorkspaceItem,
+        xmlPage: ProjectXmlPage,
+        logicItems: List<IdeLogicItem>,
+    ) {
+        val array = JSONArray()
+        logicItems.forEach { item ->
+            val paramsArray = JSONArray()
+            item.parameters.forEach { p ->
+                paramsArray.put(
+                    JSONObject().apply {
+                        put("name", p.name)
+                        put("type", p.type)
+                    },
+                )
+            }
+            array.put(
+                JSONObject().apply {
+                    put("id", item.id)
+                    put("section", item.section.name)
+                    put("name", item.name)
+                    put("subtitle", item.subtitle)
+                    put("targetViewId", item.targetViewId)
+                    put("returnType", item.returnType)
+                    put("parameters", paramsArray)
+                    put("privateVarName", item.privateVarName)
+                    put("privateVarType", item.privateVarType)
+                    put("privateVarValue", item.privateVarValue)
+                    put("bodyCode", item.bodyCode)
+                },
+            )
+        }
+        val jsonText = array.toString(2)
+        val prefKey = "logic_items_${project.id}_${xmlPage.xmlFileName}"
+        prefs.edit().putString(prefKey, jsonText).apply()
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                if (!projDir.exists()) projDir.mkdirs()
+                File(projDir, ".ide_logic_${xmlPage.layoutResourceName}.json")
+                    .writeText(jsonText, Charsets.UTF_8)
+            }
+        }
+    }
+
+    private fun parseLogicItemsJson(raw: String): List<IdeLogicItem> = runCatching {
+        val array = JSONArray(raw)
+        val list = ArrayList<IdeLogicItem>(array.length())
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            val section = runCatching {
+                IdeLogicSection.valueOf(obj.optString("section", IdeLogicSection.ACTIVITY.name))
+            }.getOrDefault(IdeLogicSection.ACTIVITY)
+            val paramsArr = obj.optJSONArray("parameters") ?: JSONArray()
+            val params = ArrayList<IdeFunctionParam>(paramsArr.length())
+            for (j in 0 until paramsArr.length()) {
+                val pObj = paramsArr.getJSONObject(j)
+                params.add(
+                    IdeFunctionParam(
+                        name = pObj.optString("name", "param${j + 1}"),
+                        type = pObj.optString("type", "String"),
+                    ),
+                )
+            }
+            list.add(
+                IdeLogicItem(
+                    id = obj.optString("id", UUID.randomUUID().toString()),
+                    section = section,
+                    name = obj.optString("name", "onCreate"),
+                    subtitle = obj.optString("subtitle", "On activity create"),
+                    targetViewId = obj.optString("targetViewId", ""),
+                    returnType = obj.optString("returnType", "void"),
+                    parameters = params,
+                    privateVarName = obj.optString("privateVarName", ""),
+                    privateVarType = obj.optString("privateVarType", "String"),
+                    privateVarValue = obj.optString("privateVarValue", ""),
+                    bodyCode = obj.optString("bodyCode", ""),
+                ),
+            )
+        }
+        list
+    }.getOrDefault(emptyList())
 
     /**
      * Reads the Activity code for the selected [xmlPage] from disk (or preferences/default template).
