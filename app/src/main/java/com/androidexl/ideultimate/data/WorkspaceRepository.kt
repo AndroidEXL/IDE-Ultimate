@@ -1,6 +1,8 @@
 package com.androidexl.ideultimate.data
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import org.json.JSONArray
@@ -104,7 +106,20 @@ enum class IdeWidgetType(
         category = IdeWidgetCategory.TEXT,
         isContainer = false,
     ),
+    IMAGE_VIEW(
+        displayName = "ImageView",
+        shortTag = "IMG",
+        idPrefix = "imageview",
+        category = IdeWidgetCategory.TEXT,
+        isContainer = false,
+    ),
 }
+
+data class ProjectImageItem(
+    val name: String,
+    val filePath: String,
+    val addedAt: Long = System.currentTimeMillis(),
+)
 
 data class IdeWidgetNode(
     val uid: String = UUID.randomUUID().toString(),
@@ -122,6 +137,9 @@ data class IdeWidgetNode(
     val textStyle: String = "normal",
     val textColor: String = "#000000",
     val lines: Int = 0,
+    val imageResName: String = "default_image",
+    val scaleType: String = "FIT_CENTER",
+    val imageTint: String = "none",
     val backgroundResource: String = "none",
     val backgroundColor: String = "transparent",
     val rotation: Float = 0f,
@@ -800,6 +818,9 @@ class WorkspaceRepository(context: Context) {
                 put("textStyle", node.textStyle)
                 put("textColor", node.textColor)
                 put("lines", node.lines)
+                put("imageResName", node.imageResName)
+                put("scaleType", node.scaleType)
+                put("imageTint", node.imageTint)
                 put("backgroundResource", node.backgroundResource)
                 put("backgroundColor", node.backgroundColor)
                 put("rotation", node.rotation.toDouble())
@@ -842,6 +863,9 @@ class WorkspaceRepository(context: Context) {
                     textStyle = obj.optString("textStyle", "normal").ifBlank { "normal" },
                     textColor = obj.optString("textColor", "#000000").ifBlank { "#000000" },
                     lines = obj.optInt("lines", 0),
+                    imageResName = obj.optString("imageResName", "default_image").ifBlank { "default_image" },
+                    scaleType = obj.optString("scaleType", "FIT_CENTER").ifBlank { "FIT_CENTER" },
+                    imageTint = obj.optString("imageTint", "none").ifBlank { "none" },
                     backgroundResource = obj.optString("backgroundResource", "none").ifBlank { "none" },
                     backgroundColor = obj.optString("backgroundColor", "transparent").ifBlank { "transparent" },
                     rotation = obj.optDouble("rotation", 0.0).toFloat(),
@@ -950,20 +974,6 @@ class WorkspaceRepository(context: Context) {
             }
 
             IdeWidgetType.SCROLL_V -> {
-                sb.appendLine("""$indent<ScrollView""")
-                appendCommonXmlAttributes(sb, node, indent)
-                if (node.children.isEmpty()) {
-                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
-                } else {
-                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp">""")
-                    node.children.forEach { child ->
-                        appendWidgetXml(sb, child, "$indent    ")
-                    }
-                    sb.appendLine("""$indent</ScrollView>""")
-                }
-            }
-
-            IdeWidgetType.SCROLL_H -> {
                 sb.appendLine("""$indent<HorizontalScrollView""")
                 appendCommonXmlAttributes(sb, node, indent)
                 if (node.children.isEmpty()) {
@@ -974,6 +984,20 @@ class WorkspaceRepository(context: Context) {
                         appendWidgetXml(sb, child, "$indent    ")
                     }
                     sb.appendLine("""$indent</HorizontalScrollView>""")
+                }
+            }
+
+            IdeWidgetType.SCROLL_H -> {
+                sb.appendLine("""$indent<ScrollView""")
+                appendCommonXmlAttributes(sb, node, indent)
+                if (node.children.isEmpty()) {
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
+                } else {
+                    sb.appendLine("""$indent    android:padding="${node.paddingDp}dp">""")
+                    node.children.forEach { child ->
+                        appendWidgetXml(sb, child, "$indent    ")
+                    }
+                    sb.appendLine("""$indent</ScrollView>""")
                 }
             }
 
@@ -996,7 +1020,239 @@ class WorkspaceRepository(context: Context) {
                 sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
                 sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
             }
+
+            IdeWidgetType.IMAGE_VIEW -> {
+                val xmlScale = when (node.scaleType) {
+                    "CENTER" -> "center"
+                    "CENTER_CROP" -> "centerCrop"
+                    "CENTER_INSIDE" -> "centerInside"
+                    "FIT_START" -> "fitStart"
+                    "FIT_END" -> "fitEnd"
+                    "FIT_XY" -> "fitXY"
+                    else -> "fitCenter"
+                }
+                sb.appendLine("""$indent<ImageView""")
+                appendCommonXmlAttributes(sb, node, indent)
+                sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
+                sb.appendLine("""$indent    android:src="@drawable/${node.imageResName}"""")
+                if (node.imageTint.isNotBlank() && node.imageTint != "none") {
+                    sb.appendLine("""$indent    android:tint="${node.imageTint}"""")
+                }
+                sb.appendLine("""$indent    android:scaleType="$xmlScale" />""")
+            }
         }
+    }
+
+    // =========================================================================
+    // Project Image Manager (import from device, list, rename, delete, multi-delete)
+    // =========================================================================
+
+    private fun projectImagesKey(projectId: String): String = "project_images_$projectId"
+
+    private fun sanitizeDrawableName(raw: String): String {
+        val cleaned = raw.trim()
+            .substringBeforeLast('.')
+            .lowercase(Locale.ROOT)
+            .replace(Regex("[^a-z0-9_]+"), "_")
+            .trim('_')
+        val base = cleaned.ifBlank { "img_${System.currentTimeMillis() % 10000}" }
+        return if (base.first().isDigit()) "img_$base" else base
+    }
+
+    fun getProjectImages(project: WorkspaceItem): List<ProjectImageItem> {
+        val list = mutableListOf<ProjectImageItem>()
+        val seenNames = mutableSetOf<String>()
+
+        val rawJson = prefs.getString(projectImagesKey(project.id), null)
+        if (!rawJson.isNullOrBlank()) {
+            runCatching {
+                val arr = JSONArray(rawJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val name = obj.optString("name").trim()
+                    val path = obj.optString("filePath").trim()
+                    val addedAt = obj.optLong("addedAt", System.currentTimeMillis())
+                    if (name.isNotEmpty() && path.isNotEmpty() && File(path).exists() && seenNames.add(name)) {
+                        list.add(ProjectImageItem(name = name, filePath = path, addedAt = addedAt))
+                    }
+                }
+            }
+        }
+
+        // Also scan drawable directories on disk for this project so external/restored images are picked up
+        val internalDrawableDir = File(appContext.filesDir, "project_drawables/${project.id}")
+        val candidateDirs = buildList {
+            add(internalDrawableDir)
+            projectDirectoriesFor(project).forEach { projDir ->
+                add(File(projDir, "app/src/main/res/drawable"))
+            }
+        }
+        candidateDirs.forEach { dir ->
+            runCatching {
+                if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles()?.forEach { file ->
+                        val ext = file.extension.lowercase(Locale.ROOT)
+                        if (file.isFile && ext in setOf("png", "jpg", "jpeg", "webp")) {
+                            val resName = sanitizeDrawableName(file.nameWithoutExtension)
+                            if (seenNames.add(resName)) {
+                                list.add(
+                                    ProjectImageItem(
+                                        name = resName,
+                                        filePath = file.absolutePath,
+                                        addedAt = file.lastModified(),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return list.sortedByDescending { it.addedAt }
+    }
+
+    private fun saveProjectImagesMeta(project: WorkspaceItem, images: List<ProjectImageItem>) {
+        val arr = JSONArray()
+        images.forEach { item ->
+            arr.put(
+                JSONObject().apply {
+                    put("name", item.name)
+                    put("filePath", item.filePath)
+                    put("addedAt", item.addedAt)
+                },
+            )
+        }
+        prefs.edit().putString(projectImagesKey(project.id), arr.toString()).apply()
+    }
+
+    fun importProjectImage(
+        project: WorkspaceItem,
+        uri: Uri,
+        customName: String? = null,
+    ): ProjectImageItem? {
+        return runCatching {
+            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: return null
+            if (bytes.isEmpty()) return null
+
+            var displayFileName = customName
+            if (displayFileName.isNullOrBlank()) {
+                runCatching {
+                    appContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0 && cursor.moveToFirst()) {
+                            displayFileName = cursor.getString(idx)
+                        }
+                    }
+                }
+            }
+
+            val existing = getProjectImages(project).toMutableList()
+            val baseName = sanitizeDrawableName(displayFileName ?: "image_${existing.size + 1}")
+            var uniqueName = baseName
+            var counter = 2
+            while (existing.any { it.name.equals(uniqueName, ignoreCase = true) }) {
+                uniqueName = "${baseName}_$counter"
+                counter++
+            }
+
+            val internalDir = File(appContext.filesDir, "project_drawables/${project.id}").apply { mkdirs() }
+            val internalFile = File(internalDir, "$uniqueName.png")
+            internalFile.writeBytes(bytes)
+
+            // Also copy into `/storage/emulated/0/.IDE Ultimate/.../app/src/main/res/drawable/`
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val drawDir = File(projDir, "app/src/main/res/drawable").apply { mkdirs() }
+                    File(drawDir, "$uniqueName.png").writeBytes(bytes)
+                }
+            }
+
+            val created = ProjectImageItem(
+                name = uniqueName,
+                filePath = internalFile.absolutePath,
+                addedAt = System.currentTimeMillis(),
+            )
+            existing.add(0, created)
+            saveProjectImagesMeta(project, existing)
+            created
+        }.getOrNull()
+    }
+
+    fun renameProjectImage(
+        project: WorkspaceItem,
+        oldName: String,
+        rawNewName: String,
+    ): String? {
+        val cleanNew = sanitizeDrawableName(rawNewName)
+        if (cleanNew.isBlank() || cleanNew.equals(oldName, ignoreCase = true)) return oldName
+        val currentList = getProjectImages(project).toMutableList()
+        val index = currentList.indexOfFirst { it.name == oldName }
+        if (index < 0) return null
+        if (currentList.any { it.name.equals(cleanNew, ignoreCase = true) && it.name != oldName }) {
+            return null
+        }
+
+        val currentItem = currentList[index]
+        val oldFile = File(currentItem.filePath)
+        val internalDir = File(appContext.filesDir, "project_drawables/${project.id}").apply { mkdirs() }
+        val newFile = File(internalDir, "$cleanNew.png")
+        runCatching {
+            if (oldFile.exists()) {
+                oldFile.copyTo(newFile, overwrite = true)
+                if (oldFile.absolutePath != newFile.absolutePath) {
+                    oldFile.delete()
+                }
+            }
+        }
+
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val drawDir = File(projDir, "app/src/main/res/drawable")
+                val diskOld = File(drawDir, "$oldName.png")
+                val diskNew = File(drawDir, "$cleanNew.png")
+                if (diskOld.exists()) {
+                    diskOld.copyTo(diskNew, overwrite = true)
+                    diskOld.delete()
+                }
+            }
+        }
+
+        currentList[index] = currentItem.copy(
+            name = cleanNew,
+            filePath = if (newFile.exists()) newFile.absolutePath else currentItem.filePath,
+        )
+        saveProjectImagesMeta(project, currentList)
+        return cleanNew
+    }
+
+    fun deleteProjectImages(
+        project: WorkspaceItem,
+        namesToDelete: Set<String>,
+    ) {
+        if (namesToDelete.isEmpty()) return
+        val currentList = getProjectImages(project)
+        val remaining = currentList.filter { item ->
+            if (item.name in namesToDelete) {
+                runCatching { File(item.filePath).delete() }
+                false
+            } else {
+                true
+            }
+        }
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val drawDir = File(projDir, "app/src/main/res/drawable")
+                namesToDelete.forEach { name ->
+                    File(drawDir, "$name.png").delete()
+                    File(drawDir, "$name.jpg").delete()
+                    File(drawDir, "$name.jpeg").delete()
+                    File(drawDir, "$name.webp").delete()
+                }
+            }
+        }
+        saveProjectImagesMeta(project, remaining)
     }
 
     /**

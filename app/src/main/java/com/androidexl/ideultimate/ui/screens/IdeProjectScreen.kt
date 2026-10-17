@@ -1,8 +1,12 @@
 package com.androidexl.ideultimate.ui.screens
 
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,13 +45,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -70,6 +77,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -77,16 +85,19 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -110,6 +121,7 @@ import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.CodeEditorFlavor
 import com.androidexl.ideultimate.data.IdeWidgetNode
 import com.androidexl.ideultimate.data.IdeWidgetType
+import com.androidexl.ideultimate.data.ProjectImageItem
 import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.ProjectXmlPage
 import com.androidexl.ideultimate.data.WorkspaceItem
@@ -174,6 +186,12 @@ private enum class IdeSideMenuItem(
     val badge: String,
     val accentColor: Color,
 ) {
+    IMAGE_MANAGER(
+        title = "Image Manager",
+        subtitle = "استيراد وإدارة صور المشروع داخل res/drawable",
+        badge = "IMG",
+        accentColor = Color(0xFF38BDF8),
+    ),
     LIBRARY_MANAGER(
         title = "Library Manager",
         subtitle = "إدارة مكتبات AndroidX و Material و AppCompat",
@@ -367,7 +385,15 @@ fun IdeProjectScreen(
     var showTempRunScreen by rememberSaveable { mutableStateOf(false) }
     var showBuildMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showSideMenuDrawer by rememberSaveable { mutableStateOf(false) }
+    var showImageManagerScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
+
+    var projectImages by remember(project.id) {
+        mutableStateOf(repository.getProjectImages(project))
+    }
+    fun refreshProjectImages() {
+        projectImages = repository.getProjectImages(project)
+    }
 
     var selectedBuildMethodName by rememberSaveable(project.id) {
         mutableStateOf(repository.getBuildMethodForProject(project.id))
@@ -380,7 +406,12 @@ fun IdeProjectScreen(
         mutableStateOf<String?>(null)
     }
     var isDraggingWidget by remember { mutableStateOf(false) }
+    var isDraggingExistingWidget by remember { mutableStateOf(false) }
+    var isHoveringTrashZone by remember { mutableStateOf(false) }
+    var bottomTrashBounds by remember { mutableStateOf(Rect.Zero) }
+
     var editingPropertyRequest by remember { mutableStateOf<Pair<String, IdeWidgetProperty>?>(null) }
+    var imagePickerWidgetUid by remember { mutableStateOf<String?>(null) }
     val recentProperties = remember { mutableStateListOf<IdeWidgetProperty>() }
 
     val selectedNode = remember(widgetNodes, selectedWidgetUid) {
@@ -388,16 +419,21 @@ fun IdeProjectScreen(
     }
 
     fun openPropertyDialog(node: IdeWidgetNode, prop: IdeWidgetProperty) {
-        if (prop != IdeWidgetProperty.SEE_ALL) {
-            recentProperties.remove(prop)
-            recentProperties.add(0, prop)
+        recentProperties.remove(prop)
+        recentProperties.add(0, prop)
+        if (prop == IdeWidgetProperty.IMAGE) {
+            refreshProjectImages()
+            imagePickerWidgetUid = node.uid
+        } else {
+            editingPropertyRequest = node.uid to prop
         }
-        editingPropertyRequest = node.uid to prop
     }
 
     BackHandler {
         when {
+            imagePickerWidgetUid != null -> imagePickerWidgetUid = null
             editingPropertyRequest != null -> editingPropertyRequest = null
+            showImageManagerScreen -> showImageManagerScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
@@ -407,11 +443,27 @@ fun IdeProjectScreen(
         }
     }
 
+    if (showImageManagerScreen) {
+        IdeImageManagerScreen(
+            project = project,
+            repository = repository,
+            images = projectImages,
+            onRefreshImages = { refreshProjectImages() },
+            onRenameImageInWidgets = { oldName, newName ->
+                updateWidgetNodes(renameImageResInTree(widgetNodes, oldName, newName), recordHistory = false)
+            },
+            onBack = { showImageManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     if (showTempRunScreen) {
         TemporaryRunScreen(
             project = project,
             activeXmlPage = selectedXmlPage,
             widgetNodes = widgetNodes,
+            projectImages = projectImages,
             buildMethod = selectedBuildMethod,
             onChangeBuildMethod = { method ->
                 selectedBuildMethodName = method.name
@@ -471,11 +523,21 @@ fun IdeProjectScreen(
                                 project = project,
                                 xmlPage = selectedXmlPage,
                                 widgetNodes = widgetNodes,
+                                projectImages = projectImages,
                                 selectedWidgetUid = selectedWidgetUid,
+                                bottomTrashBounds = bottomTrashBounds,
                                 onSelectWidgetUid = { selectedWidgetUid = it },
-                                onDraggingStateChange = { isDraggingWidget = it },
-                                onRequestEditTextView = { node ->
-                                    openPropertyDialog(node, IdeWidgetProperty.TEXT)
+                                onDraggingStateChange = { draggingAny, draggingExisting, hoveringTrash ->
+                                    isDraggingWidget = draggingAny
+                                    isDraggingExistingWidget = draggingExisting
+                                    isHoveringTrashZone = hoveringTrash
+                                },
+                                onRequestEditWidgetPrimary = { node ->
+                                    if (node.type == IdeWidgetType.IMAGE_VIEW) {
+                                        openPropertyDialog(node, IdeWidgetProperty.IMAGE)
+                                    } else {
+                                        openPropertyDialog(node, IdeWidgetProperty.TEXT)
+                                    }
                                 },
                                 onUpdateWidgets = { updateWidgetNodes(it) },
                             )
@@ -517,10 +579,18 @@ fun IdeProjectScreen(
                 }
 
                 // 4. Bottom Bar:
-                // When a widget is dropped or selected in View tab (and not actively dragging),
-                // show the Sketchware-style Bottom Widget Property Panel.
-                // Otherwise show the XML/Activity Selector Pill + Split Run Button.
-                if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
+                // - When long-pressing/dragging an existing widget on the canvas (`isDraggingExistingWidget`),
+                //   show the Bottom Trash Drop Zone (`سلة الحذف`) so dropping onto it deletes the widget!
+                // - When a widget is selected in View tab (and not actively dragging),
+                //   show the Bottom Widget Property Panel.
+                // - Otherwise show the XML/Activity Selector Pill + Split Run Button.
+                if (activeTab == IdeProjectTab.VIEW && isDraggingExistingWidget) {
+                    IdeBottomTrashDropBar(
+                        hovered = isHoveringTrashZone,
+                        bottomBarPadding = bottomBarPadding,
+                        onTrashBoundsChanged = { rect -> bottomTrashBounds = rect },
+                    )
+                } else if (activeTab == IdeProjectTab.VIEW && selectedNode != null && !isDraggingWidget) {
                     IdeWidgetPropertyBottomPanel(
                         node = selectedNode,
                         allWidgets = flattenAllNodes(widgetNodes),
@@ -566,7 +636,12 @@ fun IdeProjectScreen(
                 onDismiss = { showSideMenuDrawer = false },
                 onSelectItem = { item ->
                     showSideMenuDrawer = false
-                    activeSideMenuItem = item
+                    if (item == IdeSideMenuItem.IMAGE_MANAGER) {
+                        refreshProjectImages()
+                        showImageManagerScreen = true
+                    } else {
+                        activeSideMenuItem = item
+                    }
                 },
             )
         }
@@ -581,9 +656,6 @@ fun IdeProjectScreen(
                 node = targetNode,
                 property = targetProp,
                 onDismiss = { editingPropertyRequest = null },
-                onSelectFromSeeAll = { chosenProp ->
-                    openPropertyDialog(targetNode, chosenProp)
-                },
                 onUpdateNode = { updatedNode ->
                     updateWidgetNodes(
                         updateNodeByUid(widgetNodes, targetNode.uid) { updatedNode },
@@ -593,6 +665,33 @@ fun IdeProjectScreen(
             )
         } else {
             editingPropertyRequest = null
+        }
+    }
+
+    val pickerTargetUid = imagePickerWidgetUid
+    if (pickerTargetUid != null) {
+        val targetNode = findNodeByUid(widgetNodes, pickerTargetUid)
+        if (targetNode != null) {
+            ImageViewSelectImageBottomSheet(
+                currentImageName = targetNode.imageResName,
+                projectImages = projectImages,
+                onSelectImage = { chosenName ->
+                    updateWidgetNodes(
+                        updateNodeByUid(widgetNodes, targetNode.uid) {
+                            it.copy(imageResName = chosenName)
+                        },
+                    )
+                    imagePickerWidgetUid = null
+                },
+                onOpenImageManager = {
+                    imagePickerWidgetUid = null
+                    refreshProjectImages()
+                    showImageManagerScreen = true
+                },
+                onDismiss = { imagePickerWidgetUid = null },
+            )
+        } else {
+            imagePickerWidgetUid = null
         }
     }
 
@@ -962,10 +1061,12 @@ private fun IdeViewDesigner(
     project: WorkspaceItem,
     xmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
+    projectImages: List<ProjectImageItem>,
     selectedWidgetUid: String?,
+    bottomTrashBounds: Rect,
     onSelectWidgetUid: (String?) -> Unit,
-    onDraggingStateChange: (Boolean) -> Unit,
-    onRequestEditTextView: (IdeWidgetNode) -> Unit,
+    onDraggingStateChange: (Boolean, Boolean, Boolean) -> Unit,
+    onRequestEditWidgetPrimary: (IdeWidgetNode) -> Unit,
     onUpdateWidgets: (List<IdeWidgetNode>) -> Unit,
 ) {
     val density = LocalDensity.current
@@ -980,16 +1081,35 @@ private fun IdeViewDesigner(
 
     val currentWidgetNodes by rememberUpdatedState(widgetNodes)
     val currentSelectedWidgetUid by rememberUpdatedState(selectedWidgetUid)
+    val currentBottomTrashBounds by rememberUpdatedState(bottomTrashBounds)
     val currentOnSelectWidgetUid by rememberUpdatedState(onSelectWidgetUid)
     val currentOnUpdateWidgets by rememberUpdatedState(onUpdateWidgets)
 
-    LaunchedEffect(draggingType) {
-        onDraggingStateChange(draggingType != null)
+    fun evalIsOverTrashZone(): Boolean {
+        if (draggingExistingNode == null || draggingType == null) return false
+        val trashRect = currentBottomTrashBounds
+        if (!trashRect.isEmpty && (trashRect.inflate(24f).contains(dragFingerInRoot) || dragFingerInRoot.y >= trashRect.top - 18f)) {
+            return true
+        }
+        if (!rootBounds.isEmpty && dragFingerInRoot.y >= rootBounds.bottom - with(density) { 36.dp.toPx() }) {
+            return true
+        }
+        return false
+    }
+
+    val isOverTrashZone = evalIsOverTrashZone()
+
+    LaunchedEffect(draggingType, draggingExistingNode, isOverTrashZone) {
+        onDraggingStateChange(
+            draggingType != null,
+            draggingExistingNode != null,
+            isOverTrashZone,
+        )
     }
 
     // Live evaluation functions that always read current MutableState values (never stale!)
     fun evalIsDragOverPhone(): Boolean {
-        if (draggingType == null) return false
+        if (draggingType == null || evalIsOverTrashZone()) return false
         if (!phoneCanvasBounds.isEmpty) {
             return dragFingerInRoot.x >= phoneCanvasBounds.left - 48f
         }
@@ -1023,8 +1143,9 @@ private fun IdeViewDesigner(
         return if (targetContainerUid != null) {
             val containerNode = findNodeByUid(nodes, targetContainerUid)
             val children = containerNode?.children?.filter { it.uid != movingUid }.orEmpty()
+            // Scroll(V) is horizontal linear (Row) & Scroll(H) is vertical linear (Column)
             val isHorizontal = containerNode?.type == IdeWidgetType.LINEAR_H ||
-                containerNode?.type == IdeWidgetType.SCROLL_H
+                containerNode?.type == IdeWidgetType.SCROLL_V
             computeInsertIndex(children, widgetBoundsMap, dragFingerInRoot, isHorizontal)
         } else {
             val rootChildren = nodes.filter { it.uid != movingUid }
@@ -1048,6 +1169,17 @@ private fun IdeViewDesigner(
 
     fun commitDrop(type: IdeWidgetType) {
         val existingMoving = draggingExistingNode
+        val nodes = currentWidgetNodes
+
+        // If user dragged an existing widget into the bottom Trash zone, delete it!
+        if (existingMoving != null && evalIsOverTrashZone()) {
+            currentOnUpdateWidgets(removeNodeByUid(nodes, existingMoving.uid))
+            currentOnSelectWidgetUid(null)
+            draggingType = null
+            draggingExistingNode = null
+            return
+        }
+
         val overPhone = evalIsDragOverPhone()
         if (!overPhone) {
             draggingType = null
@@ -1055,7 +1187,6 @@ private fun IdeViewDesigner(
             return
         }
 
-        val nodes = currentWidgetNodes
         val targetContainer = evalHoveredContainerUid()
         val insertIdx = evalDropInsertIndex(targetContainer)
 
@@ -1121,7 +1252,7 @@ private fun IdeViewDesigner(
                 },
                 onCancelDrag = {
                     val droppedType = draggingType
-                    if (droppedType != null && evalIsDragOverPhone()) {
+                    if (droppedType != null && (evalIsDragOverPhone() || evalIsOverTrashZone())) {
                         commitDrop(droppedType)
                     }
                     draggingType = null
@@ -1166,6 +1297,7 @@ private fun IdeViewDesigner(
                     project = project,
                     xmlPage = xmlPage,
                     widgetNodes = widgetNodes,
+                    projectImages = projectImages,
                     selectedWidgetUid = selectedWidgetUid,
                     draggingType = draggingType,
                     draggingExistingUid = draggingExistingNode?.uid,
@@ -1173,7 +1305,7 @@ private fun IdeViewDesigner(
                     hoveredContainerUid = hoveredContainerUid,
                     dropInsertIndex = dropInsertIndex,
                     onSelectWidget = { node -> currentOnSelectWidgetUid(node.uid) },
-                    onDoubleTapTextView = { node -> onRequestEditTextView(node) },
+                    onDoubleTapWidget = { node -> onRequestEditWidgetPrimary(node) },
                     onStartMoveExistingWidget = { node, startRootPos ->
                         currentOnSelectWidgetUid(null)
                         draggingExistingNode = node
@@ -1193,7 +1325,7 @@ private fun IdeViewDesigner(
                     },
                     onCancelMoveExistingWidget = {
                         val droppedType = draggingType
-                        if (droppedType != null && evalIsDragOverPhone()) {
+                        if (droppedType != null && (evalIsDragOverPhone() || evalIsOverTrashZone())) {
                             commitDrop(droppedType)
                         }
                         draggingType = null
@@ -1219,16 +1351,18 @@ private fun IdeViewDesigner(
             val offsetY = with(density) {
                 (dragFingerInRoot.y - rootBounds.top - 14.dp.toPx()).roundToInt()
             }
+            val pillBorderColor = if (isOverTrashZone) Color(0xFFF43F5E) else Cyan.copy(alpha = 0.65f)
+            val pillBgColor = if (isOverTrashZone) Color(0xFF4C0519) else Color(0xFF1A2448)
             Row(
                 modifier = Modifier
                     .offset { IntOffset(offsetX, offsetY) }
                     .width(108.dp)
                     .height(28.dp)
-                    .graphicsLayer(alpha = 0.62f)
+                    .graphicsLayer(alpha = 0.72f)
                     .shadow(4.dp, RoundedCornerShape(6.dp))
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF1A2448))
-                    .border(1.dp, Cyan.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+                    .background(pillBgColor)
+                    .border(1.dp, pillBorderColor, RoundedCornerShape(6.dp))
                     .padding(horizontal = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1246,6 +1380,52 @@ private fun IdeViewDesigner(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun IdeBottomTrashDropBar(
+    hovered: Boolean,
+    bottomBarPadding: Dp = 0.dp,
+    onTrashBoundsChanged: (Rect) -> Unit,
+) {
+    val bgColor = if (hovered) Color(0xFF881337) else Color(0xFF2A0E1D)
+    val borderColor = if (hovered) Color(0xFFFB7185) else Color(0xFFF43F5E).copy(alpha = 0.6f)
+    val contentTint = if (hovered) Color.White else Color(0xFFFDA4AF)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords ->
+                onTrashBoundsChanged(coords.boundsInRoot())
+            }
+            .background(bgColor)
+            .border(width = 1.5.dp, color = borderColor)
+            .navigationBarsPadding()
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 12.dp,
+                bottom = 12.dp + bottomBarPadding,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Delete,
+            contentDescription = "Delete widget",
+            tint = contentTint,
+            modifier = Modifier.size(if (hovered) 26.dp else 22.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = if (hovered) "أفلت الآن لحذف العنصر • Release to Delete" else "اسحب العنصر إلى السلة لحذفه • Drop here to Delete",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = contentTint,
+        )
     }
 }
 
@@ -1356,7 +1536,7 @@ private fun WidgetsPaletteColumn(
 
         Spacer(Modifier.height(14.dp))
 
-        // Section 2: Widgets / Text ("قسم text")
+        // Section 2: Widgets (TextView + ImageView)
         Text(
             text = "Widgets",
             style = MaterialTheme.typography.labelMedium.copy(
@@ -1368,14 +1548,19 @@ private fun WidgetsPaletteColumn(
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            DraggableWidgetPaletteItem(
-                type = IdeWidgetType.TEXT_VIEW,
-                onStartDrag = onStartDrag,
-                onUpdateDragRootPos = onUpdateDragRootPos,
-                onEndDrag = onEndDrag,
-                onCancelDrag = onCancelDrag,
-                onTap = { onTapAdd(IdeWidgetType.TEXT_VIEW) },
-            )
+            listOf(
+                IdeWidgetType.TEXT_VIEW,
+                IdeWidgetType.IMAGE_VIEW,
+            ).forEach { widgetType ->
+                DraggableWidgetPaletteItem(
+                    type = widgetType,
+                    onStartDrag = onStartDrag,
+                    onUpdateDragRootPos = onUpdateDragRootPos,
+                    onEndDrag = onEndDrag,
+                    onCancelDrag = onCancelDrag,
+                    onTap = { onTapAdd(widgetType) },
+                )
+            }
         }
     }
 }
@@ -1386,6 +1571,7 @@ private fun sketchWidgetLabel(type: IdeWidgetType): String = when (type) {
     IdeWidgetType.SCROLL_H -> "Scroll(H)"
     IdeWidgetType.SCROLL_V -> "Scroll(V)"
     IdeWidgetType.TEXT_VIEW -> "TextView"
+    IdeWidgetType.IMAGE_VIEW -> "ImageView"
 }
 
 @Composable
@@ -1605,6 +1791,30 @@ private fun SketchWidgetIcon(
                 drawLine(tint, Offset(size.width * 0.44f, size.height * 0.16f), Offset(size.width - 1f, size.height * 0.16f), strokeWidth = sw)
                 drawLine(tint, Offset(size.width * 0.72f, size.height * 0.16f), Offset(size.width * 0.72f, size.height * 0.86f), strokeWidth = sw)
             }
+
+            IdeWidgetType.IMAGE_VIEW -> {
+                // Picture frame with mountain peak + sun dot
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(1.2f, 1.5f),
+                    size = Size(size.width - 2.4f, size.height - 3f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = stroke,
+                )
+                drawCircle(
+                    color = tint,
+                    radius = 1.3.dp.toPx(),
+                    center = Offset(size.width * 0.34f, size.height * 0.38f),
+                )
+                val mountain = Path().apply {
+                    moveTo(size.width * 0.18f, size.height * 0.78f)
+                    lineTo(size.width * 0.46f, size.height * 0.48f)
+                    lineTo(size.width * 0.64f, size.height * 0.66f)
+                    lineTo(size.width * 0.76f, size.height * 0.54f)
+                    lineTo(size.width * 0.86f, size.height * 0.78f)
+                }
+                drawPath(mountain, color = tint, style = stroke)
+            }
         }
     }
 }
@@ -1644,6 +1854,7 @@ private fun PhoneFrameWhiteCanvas(
     project: WorkspaceItem,
     xmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
+    projectImages: List<ProjectImageItem>,
     selectedWidgetUid: String?,
     draggingType: IdeWidgetType?,
     draggingExistingUid: String?,
@@ -1651,7 +1862,7 @@ private fun PhoneFrameWhiteCanvas(
     hoveredContainerUid: String?,
     dropInsertIndex: Int,
     onSelectWidget: (IdeWidgetNode) -> Unit,
-    onDoubleTapTextView: (IdeWidgetNode) -> Unit,
+    onDoubleTapWidget: (IdeWidgetNode) -> Unit,
     onStartMoveExistingWidget: (IdeWidgetNode, Offset) -> Unit,
     onUpdateMoveDragPos: (Offset) -> Unit,
     onEndMoveExistingWidget: () -> Unit,
@@ -1663,6 +1874,8 @@ private fun PhoneFrameWhiteCanvas(
     modifier: Modifier = Modifier,
 ) {
     val frameShape = RoundedCornerShape(2.dp)
+    var interiorBounds by remember { mutableStateOf(Rect.Zero) }
+
     Column(
         modifier = modifier
             .shadow(6.dp, frameShape)
@@ -1767,7 +1980,11 @@ private fun PhoneFrameWhiteCanvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .clipToBounds()
                 .background(Color.White)
+                .onGloballyPositioned { coords ->
+                    interiorBounds = coords.boundsInRoot()
+                }
                 .verticalScroll(rememberScrollState(), enabled = draggingType == null),
             verticalArrangement = Arrangement.Top,
         ) {
@@ -1782,13 +1999,15 @@ private fun PhoneFrameWhiteCanvas(
                 }
                 RenderWidgetNodeOnPhone(
                     node = node,
+                    projectImages = projectImages,
+                    parentBounds = interiorBounds,
                     selectedWidgetUid = selectedWidgetUid,
                     draggingType = draggingType,
                     draggingExistingUid = draggingExistingUid,
                     hoveredContainerUid = hoveredContainerUid,
                     dropInsertIndex = dropInsertIndex,
                     onSelectWidget = onSelectWidget,
-                    onDoubleTapTextView = onDoubleTapTextView,
+                    onDoubleTapWidget = onDoubleTapWidget,
                     onStartMoveExistingWidget = onStartMoveExistingWidget,
                     onUpdateMoveDragPos = onUpdateMoveDragPos,
                     onEndMoveExistingWidget = onEndMoveExistingWidget,
@@ -1813,13 +2032,15 @@ private fun PhoneFrameWhiteCanvas(
 @Composable
 private fun RenderWidgetNodeOnPhone(
     node: IdeWidgetNode,
+    projectImages: List<ProjectImageItem>,
+    parentBounds: Rect = Rect.Zero,
     selectedWidgetUid: String?,
     draggingType: IdeWidgetType?,
     draggingExistingUid: String?,
     hoveredContainerUid: String?,
     dropInsertIndex: Int,
     onSelectWidget: (IdeWidgetNode) -> Unit,
-    onDoubleTapTextView: (IdeWidgetNode) -> Unit,
+    onDoubleTapWidget: (IdeWidgetNode) -> Unit,
     onStartMoveExistingWidget: (IdeWidgetNode, Offset) -> Unit,
     onUpdateMoveDragPos: (Offset) -> Unit,
     onEndMoveExistingWidget: () -> Unit,
@@ -1827,6 +2048,7 @@ private fun RenderWidgetNodeOnPhone(
     onContainerPositioned: (String, Rect) -> Unit,
     onWidgetPositioned: (String, Rect) -> Unit,
 ) {
+    val density = LocalDensity.current
     val isSelected = node.uid == selectedWidgetUid
     val isHoveredDropTarget = node.uid == hoveredContainerUid
     val isBeingMoved = node.uid == draggingExistingUid
@@ -1870,14 +2092,33 @@ private fun RenderWidgetNodeOnPhone(
         node.backgroundResource != "none" && node.backgroundResource.isNotBlank() -> Color(0xFFEFF6FF)
         else -> Color.Transparent
     }
+
+    // Clamp translationX & translationY so the widget can NEVER exit outside its parent layout!
+    val requestedTxPx = with(density) { node.translationX.dp.toPx() }
+    val requestedTyPx = with(density) { node.translationY.dp.toPx() }
+    val clampedTxPx = if (!parentBounds.isEmpty && !nodeBoundsInRoot.isEmpty && parentBounds.width > 1f) {
+        val minTx = (parentBounds.left - nodeBoundsInRoot.left).coerceAtMost(0f)
+        val maxTx = (parentBounds.right - nodeBoundsInRoot.right).coerceAtLeast(0f)
+        requestedTxPx.coerceIn(minTx, maxTx)
+    } else {
+        requestedTxPx
+    }
+    val clampedTyPx = if (!parentBounds.isEmpty && !nodeBoundsInRoot.isEmpty && parentBounds.height > 1f) {
+        val minTy = (parentBounds.top - nodeBoundsInRoot.top).coerceAtMost(0f)
+        val maxTy = (parentBounds.bottom - nodeBoundsInRoot.bottom).coerceAtLeast(0f)
+        requestedTyPx.coerceIn(minTy, maxTy)
+    } else {
+        requestedTyPx
+    }
+
     val transformModifier = if (isBeingMoved) {
         Modifier
     } else {
         Modifier.graphicsLayer(
             rotationZ = node.rotation,
             alpha = node.alpha.coerceIn(0.08f, 1f),
-            translationX = node.translationX,
-            translationY = node.translationY,
+            translationX = clampedTxPx,
+            translationY = clampedTyPx,
             scaleX = node.scaleX.coerceIn(0.25f, 2.5f),
             scaleY = node.scaleY.coerceIn(0.25f, 2.5f),
         )
@@ -1905,8 +2146,15 @@ private fun RenderWidgetNodeOnPhone(
     }
 
     when (node.type) {
-        IdeWidgetType.LINEAR_H, IdeWidgetType.SCROLL_H -> {
+        // Linear(H) and Scroll(V) both behave as Horizontal Linear layouts; Scroll(V) scrolls horizontally!
+        IdeWidgetType.LINEAR_H, IdeWidgetType.SCROLL_V -> {
             val isEmpty = nonMovingChildCount == 0 && !isHoveredDropTarget
+            val hScrollState = rememberScrollState()
+            val scrollMod = if (node.type == IdeWidgetType.SCROLL_V) {
+                Modifier.horizontalScroll(hScrollState, enabled = draggingType == null)
+            } else {
+                Modifier
+            }
             Row(
                 modifier = Modifier
                     .padding(if (isBeingMoved) 0.dp else visualMargin)
@@ -1920,6 +2168,7 @@ private fun RenderWidgetNodeOnPhone(
                         },
                     )
                     .then(transformModifier)
+                    .clipToBounds()
                     .onGloballyPositioned { coords ->
                         if (!isBeingMoved) {
                             val rect = coords.boundsInRoot()
@@ -1955,6 +2204,7 @@ private fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
+                    .then(scrollMod)
                     .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
                 verticalAlignment = verticalAlign,
                 horizontalArrangement = horizontalArr,
@@ -1970,13 +2220,15 @@ private fun RenderWidgetNodeOnPhone(
                     }
                     RenderWidgetNodeOnPhone(
                         node = child,
+                        projectImages = projectImages,
+                        parentBounds = nodeBoundsInRoot,
                         selectedWidgetUid = selectedWidgetUid,
                         draggingType = draggingType,
                         draggingExistingUid = draggingExistingUid,
                         hoveredContainerUid = hoveredContainerUid,
                         dropInsertIndex = dropInsertIndex,
                         onSelectWidget = onSelectWidget,
-                        onDoubleTapTextView = onDoubleTapTextView,
+                        onDoubleTapWidget = onDoubleTapWidget,
                         onStartMoveExistingWidget = onStartMoveExistingWidget,
                         onUpdateMoveDragPos = onUpdateMoveDragPos,
                         onEndMoveExistingWidget = onEndMoveExistingWidget,
@@ -1997,8 +2249,15 @@ private fun RenderWidgetNodeOnPhone(
             }
         }
 
-        IdeWidgetType.LINEAR_V, IdeWidgetType.SCROLL_V -> {
+        // Linear(V) and Scroll(H) both behave as Vertical Linear layouts; Scroll(H) scrolls vertically!
+        IdeWidgetType.LINEAR_V, IdeWidgetType.SCROLL_H -> {
             val isEmpty = nonMovingChildCount == 0 && !isHoveredDropTarget
+            val vScrollState = rememberScrollState()
+            val scrollMod = if (node.type == IdeWidgetType.SCROLL_H) {
+                Modifier.verticalScroll(vScrollState, enabled = draggingType == null)
+            } else {
+                Modifier
+            }
             Column(
                 modifier = Modifier
                     .padding(if (isBeingMoved) 0.dp else visualMargin)
@@ -2008,10 +2267,12 @@ private fun RenderWidgetNodeOnPhone(
                             isBeingMoved -> Modifier.height(0.dp)
                             customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(20, 260).dp)
                             isEmpty -> Modifier.height(28.dp)
+                            node.type == IdeWidgetType.SCROLL_H -> Modifier.heightIn(min = 36.dp, max = 180.dp)
                             else -> Modifier.heightIn(min = 28.dp)
                         },
                     )
                     .then(transformModifier)
+                    .clipToBounds()
                     .onGloballyPositioned { coords ->
                         if (!isBeingMoved) {
                             val rect = coords.boundsInRoot()
@@ -2047,6 +2308,7 @@ private fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
+                    .then(scrollMod)
                     .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
                 verticalArrangement = verticalArr,
                 horizontalAlignment = horizontalAlign,
@@ -2062,13 +2324,15 @@ private fun RenderWidgetNodeOnPhone(
                     }
                     RenderWidgetNodeOnPhone(
                         node = child,
+                        projectImages = projectImages,
+                        parentBounds = nodeBoundsInRoot,
                         selectedWidgetUid = selectedWidgetUid,
                         draggingType = draggingType,
                         draggingExistingUid = draggingExistingUid,
                         hoveredContainerUid = hoveredContainerUid,
                         dropInsertIndex = dropInsertIndex,
                         onSelectWidget = onSelectWidget,
-                        onDoubleTapTextView = onDoubleTapTextView,
+                        onDoubleTapWidget = onDoubleTapWidget,
                         onStartMoveExistingWidget = onStartMoveExistingWidget,
                         onUpdateMoveDragPos = onUpdateMoveDragPos,
                         onEndMoveExistingWidget = onEndMoveExistingWidget,
@@ -2122,7 +2386,7 @@ private fun RenderWidgetNodeOnPhone(
                     .background(baseFill)
                     .clickable {
                         if (isSelected) {
-                            onDoubleTapTextView(node)
+                            onDoubleTapWidget(node)
                         } else {
                             onSelectWidget(node)
                         }
@@ -2172,6 +2436,139 @@ private fun RenderWidgetNodeOnPhone(
                 }
             }
         }
+
+        IdeWidgetType.IMAGE_VIEW -> {
+            val matchedImage = remember(projectImages, node.imageResName) {
+                projectImages.firstOrNull { it.resName == node.imageResName }
+            }
+            val decodedBitmap = remember(matchedImage?.filePath) {
+                matchedImage?.filePath?.let { path ->
+                    runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
+                }
+            }
+            val contentScale = remember(node.scaleType) {
+                when (node.scaleType.uppercase()) {
+                    "CENTER_CROP" -> ContentScale.Crop
+                    "FIT_XY" -> ContentScale.FillBounds
+                    "CENTER_INSIDE" -> ContentScale.Inside
+                    "CENTER" -> ContentScale.None
+                    else -> ContentScale.Fit
+                }
+            }
+            val parsedTint = remember(node.imageTint) {
+                parseHexColorOrNull(node.imageTint)
+            }
+            val imgWidthMod = when {
+                isBeingMoved -> Modifier.width(0.dp).height(0.dp).graphicsLayer(alpha = 0f)
+                customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(24, 300).dp)
+                node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
+                else -> Modifier.width(56.dp)
+            }
+            val imgHeightMod = when {
+                isBeingMoved -> Modifier.height(0.dp)
+                customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
+                node.layoutHeight == "match_parent" -> Modifier.height(140.dp)
+                else -> Modifier.height(56.dp)
+            }
+
+            Box(
+                modifier = Modifier
+                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .then(imgWidthMod)
+                    .then(imgHeightMod)
+                    .then(transformModifier)
+                    .clipToBounds()
+                    .onGloballyPositioned { coords ->
+                        if (!isBeingMoved) {
+                            val rect = coords.boundsInRoot()
+                            nodeBoundsInRoot = rect
+                            onWidgetPositioned(node.uid, rect)
+                        }
+                    }
+                    .background(baseFill)
+                    .border(
+                        width = if (isBeingMoved) 0.dp else if (isSelected) 1.dp else 0.6.dp,
+                        color = if (isSelected) Color(0xFF0284C7) else Color(0xFF94A3B8),
+                        shape = RoundedCornerShape(2.dp),
+                    )
+                    .clickable {
+                        if (isSelected) {
+                            onDoubleTapWidget(node)
+                        } else {
+                            onSelectWidget(node)
+                        }
+                    }
+                    .pointerInput(node.uid) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { localOffset ->
+                                currentOnStartMove(
+                                    currentNode,
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + localOffset.x,
+                                        y = nodeBoundsInRoot.top + localOffset.y,
+                                    ),
+                                )
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                currentOnUpdateMove(
+                                    Offset(
+                                        x = nodeBoundsInRoot.left + change.position.x,
+                                        y = nodeBoundsInRoot.top + change.position.y,
+                                    ),
+                                )
+                            },
+                            onDragEnd = { currentOnEndMove() },
+                            onDragCancel = { currentOnCancelMove() },
+                        )
+                    }
+                    .padding(if (isBeingMoved) 0.dp else (node.paddingDp / 2).coerceIn(2, 12).dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!isBeingMoved) {
+                    if (decodedBitmap != null) {
+                        Image(
+                            bitmap = decodedBitmap.asImageBitmap(),
+                            contentDescription = node.viewId,
+                            contentScale = contentScale,
+                            colorFilter = parsedTint?.let { ColorFilter.tint(it) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        // Default Sketchware-style ImageView icon when no image or default_image is selected
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            val iconTint = parsedTint ?: Color(0xFF475569)
+                            Canvas(Modifier.size(28.dp)) {
+                                val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                drawRoundRect(
+                                    color = iconTint,
+                                    topLeft = Offset(2f, 2f),
+                                    size = Size(size.width - 4f, size.height - 4f),
+                                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                                    style = stroke,
+                                )
+                                drawCircle(
+                                    color = iconTint,
+                                    radius = 2.4.dp.toPx(),
+                                    center = Offset(size.width * 0.34f, size.height * 0.36f),
+                                )
+                                val mountain = Path().apply {
+                                    moveTo(size.width * 0.16f, size.height * 0.78f)
+                                    lineTo(size.width * 0.45f, size.height * 0.46f)
+                                    lineTo(size.width * 0.64f, size.height * 0.66f)
+                                    lineTo(size.width * 0.76f, size.height * 0.54f)
+                                    lineTo(size.width * 0.86f, size.height * 0.78f)
+                                }
+                                drawPath(mountain, color = iconTint, style = stroke)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2204,11 +2601,14 @@ private enum class IdeWidgetProperty(
     val title: String,
     val cardLabel: String,
     val textViewOnly: Boolean = false,
+    val imageViewOnly: Boolean = false,
 ) {
+    IMAGE(title = "Image", cardLabel = "Image", imageViewOnly = true),
+    SCALE_TYPE(title = "Scale type", cardLabel = "Scale type", imageViewOnly = true),
+    TINT(title = "Tint", cardLabel = "Tint", imageViewOnly = true),
     CUSTOM_ATTRIBUTES(title = "Custom attributes", cardLabel = "Custom\nattributes"),
     CONVERT(title = "Convert", cardLabel = "Convert"),
     WIDTH(title = "Width", cardLabel = "Width"),
-    SEE_ALL(title = "See All", cardLabel = "See All"),
     HEIGHT(title = "Height", cardLabel = "Height"),
     PADDING(title = "Padding", cardLabel = "Padding"),
     MARGIN(title = "Margin", cardLabel = "Margin"),
@@ -2248,10 +2648,11 @@ private fun IdeWidgetPropertyBottomPanel(
     var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
     var showWidgetPickerMenu by remember { mutableStateOf(false) }
 
-    // Filter out Text-specific properties when a Layout widget (Linear/Scroll) is selected!
+    // Filter properties based on selected widget type (Layouts vs TextView vs ImageView)
     val availableProperties = remember(node.type) {
         IdeWidgetProperty.entries.filter { prop ->
-            !prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW
+            (!prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW) &&
+                (!prop.imageViewOnly || node.type == IdeWidgetType.IMAGE_VIEW)
         }
     }
     val displayedProperties = remember(node.type, activePropTab, recentProperties.size) {
@@ -2259,7 +2660,8 @@ private fun IdeWidgetPropertyBottomPanel(
             WidgetPropTab.BASIC -> availableProperties
             WidgetPropTab.RECENT -> {
                 val filteredRecent = recentProperties.filter { prop ->
-                    !prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW
+                    (!prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW) &&
+                        (!prop.imageViewOnly || node.type == IdeWidgetType.IMAGE_VIEW)
                 }
                 filteredRecent.ifEmpty { availableProperties.take(6) }
             }
@@ -2465,7 +2867,7 @@ private fun IdeWidgetPropertyBottomPanel(
 
         Spacer(Modifier.height(6.dp))
 
-        // 3. Horizontal Scrollable Row of Rounded Property Cards (all 24 items from screenshots)
+        // 3. Horizontal Scrollable Row of Rounded Property Cards (See All removed as requested)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2490,7 +2892,7 @@ private fun IdeWidgetPropertyBottomPanel(
                 displayedProperties.forEach { prop ->
                     SketchPropertySquareCard(
                         label = prop.cardLabel,
-                        highlighted = prop == IdeWidgetProperty.SEE_ALL,
+                        highlighted = prop == IdeWidgetProperty.IMAGE,
                         onClick = { onClickProperty(prop) },
                     ) { tint ->
                         SketchPropertyVectorIcon(property = prop, tint = tint)
@@ -2507,6 +2909,40 @@ private fun SketchPropertyVectorIcon(
     tint: Color,
 ) {
     when (property) {
+        IdeWidgetProperty.IMAGE -> {
+            SketchWidgetIcon(type = IdeWidgetType.IMAGE_VIEW, tint = tint)
+        }
+
+        IdeWidgetProperty.SCALE_TYPE -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.12f, size.height * 0.14f),
+                    size = Size(size.width * 0.76f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    style = stroke,
+                )
+                // Diagonal expand arrows
+                drawLine(tint, Offset(size.width * 0.28f, size.height * 0.70f), Offset(size.width * 0.72f, size.height * 0.28f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.54f, size.height * 0.28f), Offset(size.width * 0.72f, size.height * 0.28f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.72f, size.height * 0.46f), Offset(size.width * 0.72f, size.height * 0.28f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.TINT -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawCircle(
+                    color = tint,
+                    radius = size.width * 0.36f,
+                    center = Offset(size.width * 0.50f, size.height * 0.50f),
+                    style = stroke,
+                )
+                drawCircle(tint, 2.5.dp.toPx(), Offset(size.width * 0.50f, size.height * 0.50f))
+            }
+        }
+
         IdeWidgetProperty.CUSTOM_ATTRIBUTES -> {
             Canvas(Modifier.size(20.dp)) {
                 val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -2557,16 +2993,6 @@ private fun SketchPropertyVectorIcon(
                 drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.38f, cy + 3.2f), stroke.width)
                 drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.62f, cy - 3.2f), stroke.width)
                 drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.62f, cy + 3.2f), stroke.width)
-            }
-        }
-
-        IdeWidgetProperty.SEE_ALL -> {
-            Canvas(Modifier.size(20.dp)) {
-                val r = 2.dp.toPx()
-                val cy = size.height * 0.50f
-                drawCircle(tint, r, Offset(size.width * 0.22f, cy))
-                drawCircle(tint, r, Offset(size.width * 0.50f, cy))
-                drawCircle(tint, r, Offset(size.width * 0.78f, cy))
             }
         }
 
@@ -3622,16 +4048,17 @@ private fun IdeWidgetPropertyEditDialog(
     node: IdeWidgetNode,
     property: IdeWidgetProperty,
     onDismiss: () -> Unit,
-    onSelectFromSeeAll: (IdeWidgetProperty) -> Unit,
     onUpdateNode: (IdeWidgetNode) -> Unit,
 ) {
     var textInput by remember(node.uid, property) {
         mutableStateOf(
             when (property) {
+                IdeWidgetProperty.IMAGE -> node.imageResName
+                IdeWidgetProperty.SCALE_TYPE -> node.scaleType
+                IdeWidgetProperty.TINT -> node.imageTint
                 IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.customAttributes
                 IdeWidgetProperty.CONVERT -> node.type.name
                 IdeWidgetProperty.WIDTH -> node.layoutWidth
-                IdeWidgetProperty.SEE_ALL -> ""
                 IdeWidgetProperty.HEIGHT -> node.layoutHeight
                 IdeWidgetProperty.PADDING -> node.paddingDp.toString()
                 IdeWidgetProperty.MARGIN -> node.marginDp.toString()
@@ -3659,6 +4086,17 @@ private fun IdeWidgetPropertyEditDialog(
     fun applyAndSave(raw: String = textInput) {
         val trimmed = raw.trim()
         val updated = when (property) {
+            IdeWidgetProperty.IMAGE -> node.copy(imageResName = trimmed.removePrefix("@drawable/").ifBlank { "default_image" })
+            IdeWidgetProperty.SCALE_TYPE -> node.copy(scaleType = trimmed.ifBlank { "FIT_CENTER" })
+            IdeWidgetProperty.TINT -> {
+                val clean = if (trimmed.equals("none", ignoreCase = true) || trimmed.isBlank()) {
+                    "none"
+                } else {
+                    val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                    if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.imageTint
+                }
+                node.copy(imageTint = clean)
+            }
             IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.copy(customAttributes = trimmed)
             IdeWidgetProperty.CONVERT -> {
                 val chosenType = runCatching { IdeWidgetType.valueOf(trimmed) }.getOrDefault(node.type)
@@ -3674,7 +4112,6 @@ private fun IdeWidgetPropertyEditDialog(
                 }
                 node.copy(layoutWidth = clean)
             }
-            IdeWidgetProperty.SEE_ALL -> node
             IdeWidgetProperty.HEIGHT -> {
                 val clean = when {
                     trimmed.equals("match_parent", ignoreCase = true) -> "match_parent"
@@ -3732,11 +4169,11 @@ private fun IdeWidgetPropertyEditDialog(
                 node.copy(alpha = a)
             }
             IdeWidgetProperty.TRANSLATION_X -> {
-                val tx = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-500f, 500f) ?: node.translationX
+                val tx = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-160f, 160f) ?: node.translationX
                 node.copy(translationX = tx)
             }
             IdeWidgetProperty.TRANSLATION_Y -> {
-                val ty = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-500f, 500f) ?: node.translationY
+                val ty = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-160f, 160f) ?: node.translationY
                 node.copy(translationY = ty)
             }
             IdeWidgetProperty.SCALE_X -> {
@@ -3806,52 +4243,60 @@ private fun IdeWidgetPropertyEditDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     when (property) {
-                        IdeWidgetProperty.SEE_ALL -> {
-                            val allPropsForWidget = IdeWidgetProperty.entries.filter { prop ->
-                                prop != IdeWidgetProperty.SEE_ALL &&
-                                    (!prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW)
+                        IdeWidgetProperty.IMAGE -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:src (@drawable/...)",
+                            )
+                        }
+
+                        IdeWidgetProperty.SCALE_TYPE -> {
+                            val scaleTypes = listOf(
+                                "FIT_CENTER" to "Fit Center (Default)",
+                                "CENTER_CROP" to "Center Crop (Fill & Crop)",
+                                "FIT_XY" to "Fit XY (Stretch to Bounds)",
+                                "CENTER_INSIDE" to "Center Inside",
+                                "CENTER" to "Center (Original Size)",
+                            )
+                            scaleTypes.forEach { (value, subtitle) ->
+                                DialogOptionRow(
+                                    label = value,
+                                    subtitle = subtitle,
+                                    selected = textInput.equals(value, ignoreCase = true),
+                                    onClick = {
+                                        textInput = value
+                                        applyAndSave(value)
+                                    },
+                                )
                             }
-                            allPropsForWidget.forEach { prop ->
-                                val valSummary = propertyValueSummary(node, prop)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0x14FFFFFF))
-                                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(12.dp))
-                                        .clickable { onSelectFromSeeAll(prop) }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        SketchPropertyVectorIcon(property = prop, tint = Cyan)
-                                        Text(
-                                            text = prop.title,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                fontFamily = JetBrainsMono,
-                                                fontSize = 12.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                            ),
-                                            color = Ink,
-                                        )
-                                    }
-                                    Text(
-                                        text = valSummary,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontFamily = JetBrainsMono,
-                                            fontSize = 11.sp,
-                                        ),
-                                        color = Cyan,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
+                        }
+
+                        IdeWidgetProperty.TINT -> {
+                            val tintColors = listOf(
+                                "none",
+                                "#000000",
+                                "#FFFFFF",
+                                "#38BDF8",
+                                "#2563EB",
+                                "#E11D48",
+                                "#16A34A",
+                                "#D97706",
+                                "#7C3AED",
+                            )
+                            DialogColorSwatches(
+                                colors = tintColors,
+                                selectedHex = textInput,
+                                onSelectHex = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:tint (#RRGGBB or none)",
+                            )
                         }
 
                         IdeWidgetProperty.CONVERT -> {
@@ -3863,7 +4308,10 @@ private fun IdeWidgetPropertyEditDialog(
                                     IdeWidgetType.SCROLL_V,
                                 )
                             } else {
-                                IdeWidgetType.entries
+                                listOf(
+                                    IdeWidgetType.TEXT_VIEW,
+                                    IdeWidgetType.IMAGE_VIEW,
+                                )
                             }
                             candidateTypes.forEach { t ->
                                 val selected = textInput == t.name
@@ -4148,7 +4596,7 @@ private fun IdeWidgetPropertyEditDialog(
                             DialogTextField(
                                 value = textInput,
                                 onValueChange = { textInput = it },
-                                label = "android:${property.title.replaceFirstChar { it.lowercase() }} (dp)",
+                                label = "android:${property.title.replaceFirstChar { it.lowercase() }} (dp — stays inside parent layout)",
                             )
                         }
 
@@ -4204,10 +4652,8 @@ private fun IdeWidgetPropertyEditDialog(
                 }
             },
             confirmButton = {
-                if (property != IdeWidgetProperty.SEE_ALL) {
-                    TextButton(onClick = { applyAndSave() }) {
-                        Text(stringResource(R.string.dialog_save), color = Cyan)
-                    }
+                TextButton(onClick = { applyAndSave() }) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
                 }
             },
             dismissButton = {
@@ -4217,33 +4663,6 @@ private fun IdeWidgetPropertyEditDialog(
             },
         )
     }
-}
-
-private fun propertyValueSummary(node: IdeWidgetNode, prop: IdeWidgetProperty): String = when (prop) {
-    IdeWidgetProperty.CUSTOM_ATTRIBUTES -> if (node.customAttributes.isBlank()) "none" else "custom"
-    IdeWidgetProperty.CONVERT -> node.type.displayName
-    IdeWidgetProperty.WIDTH -> node.layoutWidth
-    IdeWidgetProperty.SEE_ALL -> ""
-    IdeWidgetProperty.HEIGHT -> node.layoutHeight
-    IdeWidgetProperty.PADDING -> "${node.paddingDp}dp"
-    IdeWidgetProperty.MARGIN -> "${node.marginDp}dp"
-    IdeWidgetProperty.GRAVITY -> node.gravity
-    IdeWidgetProperty.LAYOUT_GRAVITY -> node.layoutGravity
-    IdeWidgetProperty.WEIGHT -> node.weight.toString()
-    IdeWidgetProperty.TEXT -> node.text
-    IdeWidgetProperty.TEXT_SIZE -> "${node.textSizeSp}sp"
-    IdeWidgetProperty.TEXT_STYLE -> node.textStyle
-    IdeWidgetProperty.TEXT_COLOR -> node.textColor
-    IdeWidgetProperty.LINES -> if (node.lines <= 0) "default" else node.lines.toString()
-    IdeWidgetProperty.BACKGROUND_RESOURCE -> node.backgroundResource
-    IdeWidgetProperty.BACKGROUND_COLOR -> node.backgroundColor
-    IdeWidgetProperty.ROTATE -> "${node.rotation.toInt()}°"
-    IdeWidgetProperty.ALPHA -> node.alpha.toString()
-    IdeWidgetProperty.TRANSLATION_X -> "${node.translationX.toInt()}dp"
-    IdeWidgetProperty.TRANSLATION_Y -> "${node.translationY.toInt()}dp"
-    IdeWidgetProperty.SCALE_X -> "${node.scaleX}x"
-    IdeWidgetProperty.SCALE_Y -> "${node.scaleY}x"
-    IdeWidgetProperty.ID -> node.viewId
 }
 
 @Composable
@@ -4423,6 +4842,7 @@ private fun TemporaryRunScreen(
     project: WorkspaceItem,
     activeXmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
+    projectImages: List<ProjectImageItem>,
     buildMethod: IdeBuildMethod,
     onChangeBuildMethod: (IdeBuildMethod) -> Unit,
     onClose: () -> Unit,
@@ -4629,6 +5049,7 @@ private fun TemporaryRunScreen(
                                 .fillMaxWidth()
                                 .heightIn(min = 180.dp, max = 300.dp)
                                 .clip(RoundedCornerShape(10.dp))
+                                .clipToBounds()
                                 .background(Color.White)
                                 .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
                                 .verticalScroll(rememberScrollState()),
@@ -4647,13 +5068,14 @@ private fun TemporaryRunScreen(
                                 widgetNodes.forEach { node ->
                                     RenderWidgetNodeOnPhone(
                                         node = node,
+                                        projectImages = projectImages,
                                         selectedWidgetUid = null,
                                         draggingType = null,
                                         draggingExistingUid = null,
                                         hoveredContainerUid = null,
                                         dropInsertIndex = -1,
                                         onSelectWidget = {},
-                                        onDoubleTapTextView = {},
+                                        onDoubleTapWidget = {},
                                         onStartMoveExistingWidget = { _, _ -> },
                                         onUpdateMoveDragPos = {},
                                         onEndMoveExistingWidget = {},
@@ -5233,3 +5655,1019 @@ private fun updateNodeText(
     targetUid: String,
     newText: String,
 ): List<IdeWidgetNode> = updateNodeByUid(nodes, targetUid) { it.copy(text = newText) }
+
+private fun renameImageResInTree(
+    nodes: List<IdeWidgetNode>,
+    oldResName: String,
+    newResName: String,
+): List<IdeWidgetNode> = nodes.map { node ->
+    val updatedChildren = if (node.children.isEmpty()) {
+        emptyList()
+    } else {
+        renameImageResInTree(node.children, oldResName, newResName)
+    }
+    node.copy(
+        imageResName = if (node.imageResName == oldResName) newResName else node.imageResName,
+        backgroundResource = if (node.backgroundResource == "@drawable/$oldResName") {
+            "@drawable/$newResName"
+        } else {
+            node.backgroundResource
+        },
+        children = updatedChildren,
+    )
+}
+
+// ============================================================================
+// 7. ImageView Select Image Bottom Sheet (Lists all images from Image Manager)
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImageViewSelectImageBottomSheet(
+    node: IdeWidgetNode,
+    projectImages: List<ProjectImageItem>,
+    onSelectImageRes: (String) -> Unit,
+    onOpenImageManager: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0B1028),
+        contentColor = Ink,
+        scrimColor = Color(0xD903060F),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Select Image • تحديد الصورة",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "@+id/${node.viewId} • Choose from Image Manager",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 11.sp,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Cyan.copy(alpha = 0.16f))
+                            .border(1.dp, Cyan.copy(alpha = 0.50f), RoundedCornerShape(50))
+                            .clickable(onClick = onOpenImageManager)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = Cyan,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text(
+                            text = "Image Manager",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    // Default placeholder image row
+                    val isDefaultSelected = node.imageResName == "default_image" || node.imageResName.isBlank()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isDefaultSelected) Cyan.copy(alpha = 0.16f) else Color(0xFF141D3F))
+                            .border(
+                                width = if (isDefaultSelected) 1.5.dp else 1.dp,
+                                color = if (isDefaultSelected) Cyan else Color(0x26FFFFFF),
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                            .clickable { onSelectImageRes("default_image") }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1E2952))
+                                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            SketchWidgetIcon(type = IdeWidgetType.IMAGE_VIEW, tint = Cyan)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = "default_image",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = if (isDefaultSelected) Cyan else Ink,
+                            )
+                            Text(
+                                text = "Default ImageView placeholder icon",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                color = Muted,
+                            )
+                        }
+                        if (isDefaultSelected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = Cyan,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+
+                    if (projectImages.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF121A3A))
+                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(16.dp))
+                                .clickable(onClick = onOpenImageManager)
+                                .padding(horizontal = 16.dp, vertical = 22.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                                Text(
+                                    text = "لا توجد صور مضافة في Image Manager بعد",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Ink,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Text(
+                                    text = "اضغط هنا لفتح صفحة Image Manager واستيراد صور من جهازك",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Cyan,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+                    } else {
+                        projectImages.forEach { img ->
+                            val selected = node.imageResName == img.resName
+                            val bmp = remember(img.filePath) {
+                                runCatching { BitmapFactory.decodeFile(img.filePath) }.getOrNull()
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) Cyan.copy(alpha = 0.16f) else Color(0xFF141D3F))
+                                    .border(
+                                        width = if (selected) 1.5.dp else 1.dp,
+                                        color = if (selected) Cyan else Color(0x26FFFFFF),
+                                        shape = RoundedCornerShape(14.dp),
+                                    )
+                                    .clickable { onSelectImageRes(img.resName) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.White)
+                                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (bmp != null) {
+                                        Image(
+                                            bitmap = bmp.asImageBitmap(),
+                                            contentDescription = img.resName,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else {
+                                        SketchWidgetIcon(type = IdeWidgetType.IMAGE_VIEW, tint = Color(0xFF475569))
+                                    }
+                                }
+
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = img.resName,
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = if (selected) Cyan else Ink,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = "@drawable/${img.resName} • ${(img.sizeBytes / 1024L).coerceAtLeast(1L)} KB",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 10.5.sp,
+                                        ),
+                                        color = Muted,
+                                    )
+                                }
+
+                                if (selected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(Cyan),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            tint = Color(0xFF050816),
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 8. Image Manager Screen (Opened from Side Menu -> Image Manager)
+//    - FAB (+) imports images from device into app/src/main/res/drawable/
+//    - Long-press in normal mode opens bottom sheet:
+//        1. تعديل الاسم (Rename)
+//        2. حذف العنصر (Delete item)
+//        3. تحديد متعدد (Multi-select)
+//    - In Multi-select mode:
+//        - Tap items to select/deselect
+//        - Long-press opens bottom sheet with: حذف الملفات (Delete files)
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IdeImageManagerScreen(
+    project: WorkspaceItem,
+    images: List<ProjectImageItem>,
+    onImportUris: (List<android.net.Uri>) -> Unit,
+    onRenameImage: (String, String) -> Unit,
+    onDeleteImages: (Set<String>) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedResNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var activeSheetImage by remember { mutableStateOf<ProjectImageItem?>(null) }
+    var showMultiSelectSheet by remember { mutableStateOf(false) }
+    var renameTargetImage by remember { mutableStateOf<ProjectImageItem?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+    var previewImage by remember { mutableStateOf<ProjectImageItem?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            onImportUris(uris)
+        }
+    }
+
+    BackHandler {
+        if (isMultiSelectMode) {
+            isMultiSelectMode = false
+            selectedResNames = emptySet()
+        } else {
+            onBack()
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0A0F24))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = {
+                            if (isMultiSelectMode) {
+                                isMultiSelectMode = false
+                                selectedResNames = emptySet()
+                            } else {
+                                onBack()
+                            }
+                        },
+                        modifier = Modifier.size(40.dp),
+                    )
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = if (isMultiSelectMode) {
+                                "تحديد متعدد (${selectedResNames.size}) • Multi-Select"
+                            } else {
+                                "Image Manager • مدير الصور"
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (isMultiSelectMode) {
+                                "اضغط لتحديد الصور أو اضغط مطولاً لحذف الملفات"
+                            } else {
+                                "${project.name} • ${images.size} drawable images"
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                            ),
+                            color = Cyan,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    if (isMultiSelectMode) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Cyan.copy(alpha = 0.16f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                    .clickable {
+                                        selectedResNames = if (selectedResNames.size == images.size) {
+                                            emptySet()
+                                        } else {
+                                            images.map { it.resName }.toSet()
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = if (selectedResNames.size == images.size) "إلغاء الكل" else "تحديد الكل",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0x22FFFFFF))
+                                    .clickable {
+                                        isMultiSelectMode = false
+                                        selectedResNames = emptySet()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = "إلغاء",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Ink,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0x24FFFFFF)),
+                )
+
+                if (images.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Cyan.copy(alpha = 0.14f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                                    .clickable { imagePickerLauncher.launch("image/*") },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                    modifier = Modifier.size(34.dp),
+                                )
+                            }
+                            Text(
+                                text = "لا توجد صور في المشروع حالياً",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                            )
+                            Text(
+                                text = "اضغط على زر الإضافة العائم (+) بالأسفل لاستيراد صور من جهازك إلى المشروع",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        images.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowItems.forEach { item ->
+                                    val isSelected = item.resName in selectedResNames
+                                    val bmp = remember(item.filePath) {
+                                        runCatching { BitmapFactory.decodeFile(item.filePath) }.getOrNull()
+                                    }
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                            )
+                                            .border(
+                                                width = if (isSelected) 1.8.dp else 1.dp,
+                                                color = if (isSelected) Cyan else Color(0x28FFFFFF),
+                                                shape = RoundedCornerShape(16.dp),
+                                            )
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (isMultiSelectMode) {
+                                                        selectedResNames = if (isSelected) {
+                                                            selectedResNames - item.resName
+                                                        } else {
+                                                            selectedResNames + item.resName
+                                                        }
+                                                    } else {
+                                                        previewImage = item
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    if (isMultiSelectMode) {
+                                                        if (!isSelected) {
+                                                            selectedResNames = selectedResNames + item.resName
+                                                        }
+                                                        showMultiSelectSheet = true
+                                                    } else {
+                                                        activeSheetImage = item
+                                                    }
+                                                },
+                                            )
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(112.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color.White)
+                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (bmp != null) {
+                                                Image(
+                                                    bitmap = bmp.asImageBitmap(),
+                                                    contentDescription = item.resName,
+                                                    contentScale = ContentScale.Fit,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(4.dp),
+                                                )
+                                            } else {
+                                                SketchWidgetIcon(type = IdeWidgetType.IMAGE_VIEW, tint = Color(0xFF475569))
+                                            }
+
+                                            if (isMultiSelectMode) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(6.dp)
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                        )
+                                                        .border(
+                                                            width = 1.5.dp,
+                                                            color = if (isSelected) Cyan else Color.White,
+                                                            shape = CircleShape,
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    if (isSelected) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF050816),
+                                                            modifier = Modifier.size(15.dp),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = item.resName,
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = if (isSelected) Cyan else Ink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = "@drawable/${item.resName} • ${(item.sizeBytes / 1024L).coerceAtLeast(1L)} KB",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 10.sp,
+                                                ),
+                                                color = Muted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rowItems.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+            }
+
+            // Floating Action Button (+) to import images from phone into project
+            FloatingActionButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                containerColor = Cyan,
+                contentColor = Color(0xFF050816),
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = if (isMultiSelectMode && selectedResNames.isNotEmpty()) 76.dp else 20.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Import Image",
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            // Bottom Action Bar when in Multi-select mode with selected items
+            if (isMultiSelectMode && selectedResNames.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xFF131B3A))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
+                        .navigationBarsPadding()
+                        .clickable { showMultiSelectSheet = true }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تم تحديد ${selectedResNames.size} ملفات",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFF43F5E))
+                            .clickable { showMultiSelectSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "حذف الملفات (${selectedResNames.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Long-press Bottom Sheet in Normal Mode:
+    //    - تعديل الاسم (Rename)
+    //    - حذف العنصر (Delete item)
+    //    - تحديد متعدد (Multi-select)
+    val sheetItem = activeSheetImage
+    if (sheetItem != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { activeSheetImage = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "@drawable/${sheetItem.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Cyan,
+                )
+
+                // Option 1: تعديل الاسم (Rename)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetImage = null
+                            renameInput = target.resName
+                            renameTargetImage = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تعديل الاسم • Rename",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Text(
+                        text = sheetItem.resName,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                        color = Cyan,
+                    )
+                }
+
+                // Option 2: تحديد متعدد (Multi-select)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetImage = null
+                            isMultiSelectMode = true
+                            selectedResNames = setOf(target.resName)
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تحديد متعدد • Multi-select",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                // Option 3: حذف العنصر (Delete item)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetImage = null
+                            onDeleteImages(setOf(target.resName))
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف العنصر • Delete Item",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFDA4AF),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    // 2. Long-press Bottom Sheet in Multi-Select Mode:
+    //    - حذف الملفات (Delete files)
+    if (showMultiSelectSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showMultiSelectSheet = false },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "تم تحديد ${selectedResNames.size} ملفات • Selected Files",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF4C0519))
+                        .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val targets = selectedResNames
+                            showMultiSelectSheet = false
+                            if (targets.isNotEmpty()) {
+                                onDeleteImages(targets)
+                            }
+                            isMultiSelectMode = false
+                            selectedResNames = emptySet()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف الملفات (${selectedResNames.size}) • Delete Files",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    // 3. Rename Image Dialog
+    val renameTarget = renameTargetImage
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetImage = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename Image",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "أدخل الاسم الجديد للصورة (أحرف إنجليزية صغيرة وأرقام و _):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        OutlinedTextField(
+                            value = renameInput,
+                            onValueChange = { renameInput = it },
+                            singleLine = true,
+                            label = { Text("@drawable/...") },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                focusedContainerColor = Color(0x14FFFFFF),
+                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameInput.trim()
+                        if (newName.isNotEmpty()) {
+                            onRenameImage(renameTarget.resName, newName)
+                        }
+                        renameTargetImage = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetImage = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+
+    // 4. Quick Image Preview Dialog on single tap in normal mode
+    val currentPreview = previewImage
+    if (currentPreview != null) {
+        val bmp = remember(currentPreview.filePath) {
+            runCatching { BitmapFactory.decodeFile(currentPreview.filePath) }.getOrNull()
+        }
+        AlertDialog(
+            onDismissRequest = { previewImage = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "@drawable/${currentPreview.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = currentPreview.resName,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { previewImage = null }) {
+                    Text(stringResource(R.string.ide_temp_run_close), color = Cyan)
+                }
+            },
+        )
+    }
+}
+
