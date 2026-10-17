@@ -1,11 +1,17 @@
 package com.androidexl.ideultimate.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -165,10 +172,12 @@ fun WorkspaceScreen(
     activeTab: AppTab,
     onSelectTab: (AppTab) -> Unit,
     onReplaySplash: () -> Unit,
+    onIdeProjectOpenChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     bottomBarPadding: Dp = 0.dp,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val repository = remember { WorkspaceRepository(context) }
     val storeRepository = remember { CommunityStoreRepository(context) }
 
@@ -257,6 +266,47 @@ fun WorkspaceScreen(
     fun showMessage(text: String) {
         lastMessage = text
         message = text
+    }
+
+    val legacyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        repository.restoreFromFileSystem()
+        repository.syncToFileSystem()
+    }
+
+    // Restore projects from /storage/emulated/0/.IDE Ultimate/ on startup & resume
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                repository.restoreFromFileSystem()
+                repository.syncToFileSystem()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            val hasRead = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasRead) {
+                legacyPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    ),
+                )
+            }
+        }
+        repository.restoreFromFileSystem()
+    }
+
+    LaunchedEffect(openProjectId) {
+        onIdeProjectOpenChanged(openProjectId != null)
     }
 
     fun openFolder(item: WorkspaceItem) {
@@ -553,22 +603,12 @@ fun WorkspaceScreen(
                 }
             }
 
-            // 6. Local Project Detail Page
+            // 6. IDE Project Page (opened when tapping any project: Top Icon+Name + Run, 3 Tabs View/Logic/Emulator, Bottom XML/Activity selector)
             openProject != null -> {
-                ProjectDetailScreen(
+                IdeProjectScreen(
                     project = openProject,
+                    repository = repository,
                     onBack = { openProjectId = null },
-                    onExport = {
-                        pendingExport = openProject
-                        exportLauncher.launch(ProjectZipExporter.suggestedFileName(openProject.name))
-                    },
-                    onRename = {
-                        projectPageMode = ProjectPageMode.Edit(openProject.id)
-                    },
-                    onDelete = { deleteTarget = openProject },
-                    onNewProject = {
-                        projectPageMode = ProjectPageMode.Create(parentId = openProject.parentId)
-                    },
                     bottomBarPadding = bottomBarPadding,
                 )
             }
@@ -610,6 +650,22 @@ fun WorkspaceScreen(
                     DiskStoragePathBanner(
                         diskPath = repository.displayDiskPath(pathIds),
                         context = context,
+                        onSyncClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                            Uri.parse("package:${context.packageName}"),
+                                        ),
+                                    )
+                                }
+                            } else {
+                                val count = repository.restoreFromFileSystem()
+                                repository.syncToFileSystem()
+                                showMessage(context.getString(R.string.msg_disk_projects_restored, count))
+                            }
+                        },
                     )
 
                     WorkspaceStatsStrip(
@@ -914,6 +970,7 @@ fun WorkspaceScreen(
 private fun DiskStoragePathBanner(
     diskPath: String,
     context: Context,
+    onSyncClick: () -> Unit,
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
@@ -923,18 +980,7 @@ private fun DiskStoragePathBanner(
                 .clip(RoundedCornerShape(13.dp))
                 .background(Color(0x99060919))
                 .border(1.dp, Cyan.copy(alpha = 0.32f), RoundedCornerShape(13.dp))
-                .clickable {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                    Uri.parse("package:${context.packageName}"),
-                                ),
-                            )
-                        }
-                    }
-                }
+                .clickable(onClick = onSyncClick)
                 .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -950,6 +996,13 @@ private fun DiskStoragePathBanner(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = Cyan,
+                modifier = Modifier.size(14.dp),
             )
         }
     }

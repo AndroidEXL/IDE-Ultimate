@@ -10,7 +10,7 @@
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
     <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
-    <string name="splash_version">v1.11.0</string>
+    <string name="splash_version">v1.12.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.11.0</string>
+    <string name="home_version">Version 1.12.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -254,4 +254,17 @@
     <string name="nav_store_code">Store Code</string>
     <string name="nav_home">Home</string>
     <string name="nav_workspace">Workspace</string>
+
+    <!-- IDE Project Screen & Disk Restore -->
+    <string name="msg_disk_projects_restored">Synced &amp; restored projects from storage (%1$d new)</string>
+    <string name="ide_run_button">Run</string>
+    <string name="ide_xml_sheet_title">XML Layout Pages</string>
+    <string name="ide_xml_sheet_subtitle">Select an XML layout page to switch the current layout and its paired Activity</string>
+    <string name="ide_xml_add_btn">Add XML</string>
+    <string name="ide_xml_add_dialog_title">Add New XML Layout Page</string>
+    <string name="ide_xml_add_dialog_desc">Enter the XML filename (e.g. activity_profile.xml) and its paired Activity class will be created automatically:</string>
+    <string name="ide_temp_run_title">Temporary Run Page (Run Preview)</string>
+    <string name="ide_temp_run_subtitle">Temporary project run page</string>
+    <string name="ide_temp_run_desc">The project is currently running in this temporary page with the selected XML layout and Activity above.</string>
+    <string name="ide_temp_run_close">Back to IDE Project</string>
 </resources>
