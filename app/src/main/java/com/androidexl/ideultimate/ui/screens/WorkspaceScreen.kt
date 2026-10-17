@@ -5,6 +5,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -32,7 +41,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +53,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +66,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,28 +84,37 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
+import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.ProjectZipExporter
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceItemType
 import com.androidexl.ideultimate.data.WorkspaceRepository
+import com.androidexl.ideultimate.ui.components.AppTab
 import com.androidexl.ideultimate.ui.components.GlassIconButton
 import com.androidexl.ideultimate.ui.components.LogoMark
+import com.androidexl.ideultimate.ui.components.ProjectIconView
 import com.androidexl.ideultimate.ui.components.Starfield
+import com.androidexl.ideultimate.ui.components.languageColor
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.Violet
@@ -107,22 +127,30 @@ private sealed interface WorkspaceSheet {
     data class ProjectActions(val item: WorkspaceItem) : WorkspaceSheet
 }
 
-private sealed interface NameDialog {
-    data class Create(val parentId: String?, val type: WorkspaceItemType) : NameDialog
-    data class Rename(val item: WorkspaceItem) : NameDialog
+private sealed interface FolderDialog {
+    data class CreateFolder(val parentId: String?) : FolderDialog
+    data class RenameFolder(val item: WorkspaceItem) : FolderDialog
+}
+
+private sealed interface ProjectPageMode {
+    data class Create(
+        val parentId: String?,
+        val initialName: String = "",
+        val initialLanguage: ProjectLanguage = ProjectLanguage.KOTLIN,
+    ) : ProjectPageMode
+
+    data class Edit(val projectId: String) : ProjectPageMode
 }
 
 private val FolderPalette = listOf(Cyan, VioletSoft, Fuchsia, Teal)
+private val TileEase = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
-/**
- * File-style workspace browser:
- * folders open on tap and expose rename/delete on long press, projects expose
- * rename / export as ZIP / new project / delete, and a FAB opens the create sheet.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkspaceScreen(
-    onBack: () -> Unit,
+    activeTab: AppTab,
+    onSelectTab: (AppTab) -> Unit,
+    onReplaySplash: () -> Unit,
     modifier: Modifier = Modifier,
     bottomBarPadding: Dp = 0.dp,
 ) {
@@ -135,11 +163,23 @@ fun WorkspaceScreen(
     }
     val currentParentId = pathIds.lastOrNull()
     val currentFolder = currentParentId?.let { repository.itemById(it) }
-    val children = repository.childrenOf(currentParentId)
+
+    var languageFilter by rememberSaveable { mutableStateOf("ALL") }
+    val rawChildren = repository.childrenOf(currentParentId)
+    val children = remember(rawChildren, languageFilter, currentFolder) {
+        if (currentFolder == null || languageFilter == "ALL") {
+            rawChildren
+        } else {
+            rawChildren.filter { item ->
+                item.type == WorkspaceItemType.FOLDER || item.language.name == languageFilter
+            }
+        }
+    }
 
     var openProjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var projectPageMode by remember { mutableStateOf<ProjectPageMode?>(null) }
     var sheet by remember { mutableStateOf<WorkspaceSheet?>(null) }
-    var dialog by remember { mutableStateOf<NameDialog?>(null) }
+    var folderDialog by remember { mutableStateOf<FolderDialog?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceItem?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var lastMessage by remember { mutableStateOf("") }
@@ -153,7 +193,7 @@ fun WorkspaceScreen(
         if (uri != null && target != null) {
             val success = runCatching {
                 context.contentResolver.openOutputStream(uri)?.use { stream ->
-                    stream.write(ProjectZipExporter.buildZip(target.name))
+                    stream.write(ProjectZipExporter.buildZip(target))
                 } ?: error("Unable to open the selected destination")
             }.isSuccess
             message = if (success) {
@@ -170,18 +210,34 @@ fun WorkspaceScreen(
     }
 
     fun openFolder(item: WorkspaceItem) {
+        languageFilter = "ALL"
         pathCsv = (pathIds + item.id).joinToString("|")
     }
 
     fun navigateUp() {
-        if (pathIds.isEmpty()) onBack() else pathCsv = pathIds.dropLast(1).joinToString("|")
+        when {
+            projectPageMode != null -> projectPageMode = null
+            openProjectId != null -> openProjectId = null
+            activeTab == AppTab.StoreCode -> onSelectTab(AppTab.ProjectManager)
+            pathIds.isNotEmpty() -> {
+                languageFilter = "ALL"
+                pathCsv = pathIds.dropLast(1).joinToString("|")
+            }
+        }
     }
 
-    BackHandler { navigateUp() }
+    BackHandler(
+        enabled = projectPageMode != null ||
+            openProjectId != null ||
+            activeTab == AppTab.StoreCode ||
+            pathIds.isNotEmpty(),
+    ) {
+        navigateUp()
+    }
 
     LaunchedEffect(message) {
         if (message != null) {
-            delay(2400)
+            delay(2500)
             message = null
         }
     }
@@ -195,7 +251,7 @@ fun WorkspaceScreen(
             painter = painterResource(R.drawable.splash_nebula),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            alpha = 0.28f,
+            alpha = 0.30f,
             modifier = Modifier.fillMaxSize(),
         )
         Box(
@@ -204,7 +260,7 @@ fun WorkspaceScreen(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            DeepNavy.copy(alpha = 0.60f),
+                            DeepNavy.copy(alpha = 0.58f),
                             DeepNavy.copy(alpha = 0.92f),
                             DeepNavy,
                         ),
@@ -213,99 +269,237 @@ fun WorkspaceScreen(
         )
         Starfield(
             modifier = Modifier.fillMaxSize(),
-            starCount = 42,
+            starCount = 46,
             seed = 27,
             comet = false,
         )
 
+        val currentMode = projectPageMode
         val openProject = openProjectId?.let { id -> repository.itemById(id) }
-        if (openProject != null) {
-            ProjectDetailScreen(
-                project = openProject,
-                onBack = { openProjectId = null },
-                onExport = {
-                    pendingExport = openProject
-                    exportLauncher.launch(ProjectZipExporter.suggestedFileName(openProject.name))
-                },
-                onRename = { dialog = NameDialog.Rename(openProject) },
-                onDelete = { deleteTarget = openProject },
-                onNewProject = {
-                    dialog = NameDialog.Create(openProject.parentId, WorkspaceItemType.PROJECT)
-                },
-                bottomBarPadding = bottomBarPadding,
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeDrawingPadding(),
-            ) {
-                WorkspaceTopBar(
-                    title = currentFolder?.name ?: stringResource(R.string.workspace_title),
-                    subtitle = if (currentFolder == null) {
-                        stringResource(R.string.workspace_subtitle)
-                    } else {
-                        stringResource(R.string.workspace_count, repository.childCount(currentFolder.id))
+
+        when {
+            activeTab == AppTab.StoreCode -> {
+                StoreCodeScreen(
+                    onUseTemplate = { template ->
+                        val targetFolderId = currentParentId
+                            ?: repository.allFolders().firstOrNull()?.id
+                        if (targetFolderId != null && pathIds.isEmpty()) {
+                            pathCsv = targetFolderId
+                        }
+                        onSelectTab(AppTab.ProjectManager)
+                        projectPageMode = ProjectPageMode.Create(
+                            parentId = targetFolderId,
+                            initialName = template.title,
+                            initialLanguage = template.language,
+                        )
                     },
-                    onBack = { navigateUp() },
+                    bottomBarPadding = bottomBarPadding,
                 )
+            }
 
-                if (pathIds.isNotEmpty()) {
-                    Breadcrumbs(
-                        pathIds = pathIds,
-                        nameOf = { id -> repository.itemById(id)?.name },
-                        onRoot = { pathCsv = "" },
-                        onCrumb = { index -> pathCsv = pathIds.take(index + 1).joinToString("|") },
-                    )
-                }
+            currentMode != null -> {
+                when (currentMode) {
+                    is ProjectPageMode.Create -> {
+                        val folderLabel = currentMode.parentId
+                            ?.let { repository.itemById(it)?.name }
+                            ?: stringResource(R.string.workspace_root)
+                        CreateProjectScreen(
+                            folderName = folderLabel,
+                            editingProject = null,
+                            initialLanguage = currentMode.initialLanguage,
+                            initialName = currentMode.initialName,
+                            validateName = { candidate ->
+                                validateName(
+                                    context = context,
+                                    repository = repository,
+                                    rawName = candidate,
+                                    parentId = currentMode.parentId,
+                                    excludeId = null,
+                                )
+                            },
+                            onBack = { projectPageMode = null },
+                            onSubmit = { form ->
+                                repository.createProject(
+                                    name = form.name,
+                                    parentId = currentMode.parentId,
+                                    packageName = form.packageName,
+                                    language = form.language,
+                                    versionCode = form.versionCode,
+                                    versionName = form.versionName,
+                                    iconPreset = form.iconPreset,
+                                    customIconPath = form.customIconPath,
+                                )
+                                projectPageMode = null
+                                showMessage(context.getString(R.string.msg_project_created))
+                            },
+                            bottomBarPadding = bottomBarPadding,
+                        )
+                    }
 
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                ) {
-                    if (children.isEmpty()) {
-                        EmptyWorkspace(Modifier.fillMaxSize())
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 148.dp),
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = 20.dp,
-                                end = 20.dp,
-                                top = 10.dp,
-                                bottom = 130.dp + bottomBarPadding,
-                            ),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            items(children, key = { it.id }) { item ->
-                                when (item.type) {
-                                    WorkspaceItemType.FOLDER -> FolderTile(
-                                        item = item,
-                                        childCount = repository.childCount(item.id),
-                                        onClick = { openFolder(item) },
-                                        onLongClick = { sheet = WorkspaceSheet.FolderActions(item) },
+                    is ProjectPageMode.Edit -> {
+                        val target = repository.itemById(currentMode.projectId)
+                        if (target == null) {
+                            projectPageMode = null
+                        } else {
+                            val folderLabel = target.parentId
+                                ?.let { repository.itemById(it)?.name }
+                                ?: stringResource(R.string.workspace_root)
+                            CreateProjectScreen(
+                                folderName = folderLabel,
+                                editingProject = target,
+                                validateName = { candidate ->
+                                    validateName(
+                                        context = context,
+                                        repository = repository,
+                                        rawName = candidate,
+                                        parentId = target.parentId,
+                                        excludeId = target.id,
                                     )
-                                    WorkspaceItemType.PROJECT -> ProjectTile(
-                                        item = item,
-                                        onClick = { openProjectId = item.id },
-                                        onLongClick = { sheet = WorkspaceSheet.ProjectActions(item) },
+                                },
+                                onBack = { projectPageMode = null },
+                                onSubmit = { form ->
+                                    repository.updateProject(
+                                        id = target.id,
+                                        newName = form.name,
+                                        newPackageName = form.packageName,
+                                        newVersionCode = form.versionCode,
+                                        newVersionName = form.versionName,
+                                        newIconPreset = form.iconPreset,
+                                        newCustomIconPath = form.customIconPath,
                                     )
-                                }
-                            }
+                                    projectPageMode = null
+                                    showMessage(context.getString(R.string.msg_project_updated))
+                                },
+                                bottomBarPadding = bottomBarPadding,
+                            )
                         }
                     }
                 }
             }
 
-            WorkspaceFab(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 14.dp, bottom = 16.dp + bottomBarPadding),
-                onClick = { sheet = WorkspaceSheet.Create },
-            )
+            openProject != null -> {
+                ProjectDetailScreen(
+                    project = openProject,
+                    onBack = { openProjectId = null },
+                    onExport = {
+                        pendingExport = openProject
+                        exportLauncher.launch(ProjectZipExporter.suggestedFileName(openProject.name))
+                    },
+                    onRename = {
+                        projectPageMode = ProjectPageMode.Edit(openProject.id)
+                    },
+                    onDelete = { deleteTarget = openProject },
+                    onNewProject = {
+                        projectPageMode = ProjectPageMode.Create(parentId = openProject.parentId)
+                    },
+                    bottomBarPadding = bottomBarPadding,
+                )
+            }
+
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .safeDrawingPadding(),
+                ) {
+                    WorkspaceTopBar(
+                        title = currentFolder?.name ?: stringResource(R.string.workspace_title),
+                        subtitle = if (currentFolder == null) {
+                            stringResource(R.string.workspace_subtitle)
+                        } else {
+                            stringResource(
+                                R.string.workspace_count,
+                                repository.childCount(currentFolder.id),
+                            )
+                        },
+                        showBack = pathIds.isNotEmpty(),
+                        onBack = { navigateUp() },
+                        onReplaySplash = onReplaySplash,
+                    )
+
+                    WorkspaceStatsStrip(
+                        folderCount = if (currentFolder == null) {
+                            repository.folderCount(null)
+                        } else {
+                            repository.folderCount(currentFolder.id)
+                        },
+                        projectCount = if (currentFolder == null) {
+                            repository.totalProjectCount()
+                        } else {
+                            repository.projectCount(currentFolder.id)
+                        },
+                    )
+
+                    if (pathIds.isNotEmpty()) {
+                        Breadcrumbs(
+                            pathIds = pathIds,
+                            nameOf = { id -> repository.itemById(id)?.name },
+                            onRoot = {
+                                languageFilter = "ALL"
+                                pathCsv = ""
+                            },
+                            onCrumb = { index ->
+                                languageFilter = "ALL"
+                                pathCsv = pathIds.take(index + 1).joinToString("|")
+                            },
+                        )
+
+                        LanguageFilterRow(
+                            selected = languageFilter,
+                            onSelect = { languageFilter = it },
+                        )
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    ) {
+                        if (children.isEmpty()) {
+                            EmptyWorkspace(Modifier.fillMaxSize())
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 152.dp),
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 20.dp,
+                                    end = 20.dp,
+                                    top = 10.dp,
+                                    bottom = 136.dp + bottomBarPadding,
+                                ),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                itemsIndexed(children, key = { _, item -> item.id }) { index, item ->
+                                    when (item.type) {
+                                        WorkspaceItemType.FOLDER -> FolderTile(
+                                            item = item,
+                                            index = index,
+                                            childCount = repository.childCount(item.id),
+                                            onClick = { openFolder(item) },
+                                            onLongClick = { sheet = WorkspaceSheet.FolderActions(item) },
+                                        )
+                                        WorkspaceItemType.PROJECT -> ProjectTile(
+                                            item = item,
+                                            index = index,
+                                            onClick = { openProjectId = item.id },
+                                            onLongClick = { sheet = WorkspaceSheet.ProjectActions(item) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                WorkspaceFab(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(end = 16.dp, bottom = 18.dp + bottomBarPadding),
+                    onClick = { sheet = WorkspaceSheet.Create },
+                )
+            }
         }
 
         SnackbarOverlay(
@@ -314,138 +508,121 @@ fun WorkspaceScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 104.dp + bottomBarPadding, start = 24.dp, end = 24.dp),
+                .padding(bottom = 108.dp + bottomBarPadding, start = 24.dp, end = 24.dp),
         )
     }
 
-    if (sheet != null) {
-        val currentSheet = sheet
-        if (currentSheet != null) {
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(
-                onDismissRequest = { sheet = null },
-                sheetState = sheetState,
-                containerColor = Color(0xFF0B1028),
-                contentColor = Ink,
-                scrimColor = Color(0xD903060F),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                dragHandle = { SheetHandle() },
+    val currentSheet = sheet
+    if (currentSheet != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { sheet = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            dragHandle = { SheetHandle() },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, bottom = 26.dp),
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(start = 20.dp, end = 20.dp, bottom = 26.dp),
-                ) {
-                    when (currentSheet) {
-                        is WorkspaceSheet.Create -> CreateSheetContent(
-                            locationName = currentFolder?.name ?: stringResource(R.string.workspace_root),
-                            allowProject = currentFolder != null,
-                            onNewFolder = {
-                                sheet = null
-                                dialog = NameDialog.Create(currentParentId, WorkspaceItemType.FOLDER)
-                            },
-                            onNewProject = {
-                                sheet = null
-                                dialog = NameDialog.Create(currentParentId, WorkspaceItemType.PROJECT)
-                            },
-                        )
-                        is WorkspaceSheet.FolderActions -> FolderActionsSheetContent(
-                            item = currentSheet.item,
-                            onRename = {
-                                sheet = null
-                                dialog = NameDialog.Rename(currentSheet.item)
-                            },
-                            onDelete = {
-                                sheet = null
-                                deleteTarget = currentSheet.item
-                            },
-                        )
-                        is WorkspaceSheet.ProjectActions -> ProjectActionsSheetContent(
-                            item = currentSheet.item,
-                            onRename = {
-                                sheet = null
-                                dialog = NameDialog.Rename(currentSheet.item)
-                            },
-                            onExport = {
-                                sheet = null
-                                pendingExport = currentSheet.item
-                                exportLauncher.launch(
-                                    ProjectZipExporter.suggestedFileName(currentSheet.item.name),
-                                )
-                            },
-                            onNewProject = {
-                                sheet = null
-                                dialog = NameDialog.Create(
-                                    currentSheet.item.parentId,
-                                    WorkspaceItemType.PROJECT,
-                                )
-                            },
-                            onDelete = {
-                                sheet = null
-                                deleteTarget = currentSheet.item
-                            },
-                        )
-                    }
+                when (currentSheet) {
+                    is WorkspaceSheet.Create -> CreateSheetContent(
+                        locationName = currentFolder?.name ?: stringResource(R.string.workspace_root),
+                        allowProject = currentFolder != null,
+                        onNewFolder = {
+                            sheet = null
+                            folderDialog = FolderDialog.CreateFolder(currentParentId)
+                        },
+                        onNewProject = {
+                            sheet = null
+                            projectPageMode = ProjectPageMode.Create(parentId = currentParentId)
+                        },
+                    )
+
+                    is WorkspaceSheet.FolderActions -> FolderActionsSheetContent(
+                        item = currentSheet.item,
+                        onRename = {
+                            sheet = null
+                            folderDialog = FolderDialog.RenameFolder(currentSheet.item)
+                        },
+                        onDelete = {
+                            sheet = null
+                            deleteTarget = currentSheet.item
+                        },
+                    )
+
+                    is WorkspaceSheet.ProjectActions -> ProjectActionsSheetContent(
+                        item = currentSheet.item,
+                        onEditProject = {
+                            val target = currentSheet.item
+                            sheet = null
+                            projectPageMode = ProjectPageMode.Edit(target.id)
+                        },
+                        onExport = {
+                            val target = currentSheet.item
+                            sheet = null
+                            pendingExport = target
+                            exportLauncher.launch(
+                                ProjectZipExporter.suggestedFileName(target.name),
+                            )
+                        },
+                        onDelete = {
+                            val target = currentSheet.item
+                            sheet = null
+                            deleteTarget = target
+                        },
+                        onNewProject = {
+                            val target = currentSheet.item
+                            sheet = null
+                            projectPageMode = ProjectPageMode.Create(parentId = target.parentId)
+                        },
+                    )
                 }
             }
         }
     }
 
-    val currentDialog = dialog
-    if (currentDialog != null) {
-        when (currentDialog) {
-            is NameDialog.Create -> {
-                val isFolder = currentDialog.type == WorkspaceItemType.FOLDER
-                NameInputDialog(
-                    title = stringResource(
-                        if (isFolder) R.string.dialog_new_folder else R.string.dialog_new_project,
-                    ),
-                    initialName = "",
-                    confirmLabel = stringResource(R.string.dialog_create),
-                    validate = { name ->
-                        validateName(context, repository, name, currentDialog.parentId, null)
-                    },
-                    onDismiss = { dialog = null },
-                    onConfirm = { name ->
-                        if (isFolder) {
-                            repository.createFolder(name, currentDialog.parentId)
-                        } else {
-                            repository.createProject(name, currentDialog.parentId)
-                        }
-                        showMessage(
-                            context.getString(
-                                if (isFolder) R.string.msg_folder_created else R.string.msg_project_created,
-                            ),
-                        )
-                        dialog = null
-                    },
-                )
-            }
-            is NameDialog.Rename -> NameInputDialog(
-                title = stringResource(
-                    if (currentDialog.item.type == WorkspaceItemType.PROJECT) {
-                        R.string.dialog_edit_project
-                    } else {
-                        R.string.dialog_rename
-                    },
-                ),
-                initialName = currentDialog.item.name,
+    val currentFolderDialog = folderDialog
+    if (currentFolderDialog != null) {
+        when (currentFolderDialog) {
+            is FolderDialog.CreateFolder -> NameInputDialog(
+                title = stringResource(R.string.dialog_new_folder),
+                initialName = "",
+                confirmLabel = stringResource(R.string.dialog_create),
+                validate = { name ->
+                    validateName(context, repository, name, currentFolderDialog.parentId, null)
+                },
+                onDismiss = { folderDialog = null },
+                onConfirm = { name ->
+                    repository.createFolder(name, currentFolderDialog.parentId)
+                    showMessage(context.getString(R.string.msg_folder_created))
+                    folderDialog = null
+                },
+            )
+
+            is FolderDialog.RenameFolder -> NameInputDialog(
+                title = stringResource(R.string.dialog_rename),
+                initialName = currentFolderDialog.item.name,
                 confirmLabel = stringResource(R.string.dialog_save),
                 validate = { name ->
                     validateName(
                         context,
                         repository,
                         name,
-                        currentDialog.item.parentId,
-                        currentDialog.item.id,
+                        currentFolderDialog.item.parentId,
+                        currentFolderDialog.item.id,
                     )
                 },
-                onDismiss = { dialog = null },
+                onDismiss = { folderDialog = null },
                 onConfirm = { name ->
-                    repository.rename(currentDialog.item.id, name)
+                    repository.rename(currentFolderDialog.item.id, name)
                     showMessage(context.getString(R.string.msg_renamed))
-                    dialog = null
+                    folderDialog = null
                 },
             )
         }
@@ -545,7 +722,9 @@ private fun validateName(
 private fun WorkspaceTopBar(
     title: String,
     subtitle: String,
+    showBack: Boolean,
     onBack: () -> Unit,
+    onReplaySplash: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -553,12 +732,19 @@ private fun WorkspaceTopBar(
             .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassIconButton(
-            icon = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = stringResource(R.string.workspace_back),
-            onClick = onBack,
-            modifier = Modifier.size(44.dp),
-        )
+        if (showBack) {
+            GlassIconButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.workspace_back),
+                onClick = onBack,
+                modifier = Modifier.size(44.dp),
+            )
+        } else {
+            LogoMark(
+                modifier = Modifier.size(42.dp),
+                animated = true,
+            )
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -577,9 +763,140 @@ private fun WorkspaceTopBar(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        LogoMark(
-            modifier = Modifier.size(40.dp),
-            animated = false,
+        GlassIconButton(
+            icon = Icons.Filled.Refresh,
+            contentDescription = stringResource(R.string.home_replay_splash),
+            onClick = onReplaySplash,
+            modifier = Modifier.size(42.dp),
+        )
+    }
+}
+
+@Composable
+private fun WorkspaceStatsStrip(
+    folderCount: Int,
+    projectCount: Int,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        StatChip(
+            modifier = Modifier.weight(1f),
+            label = stringResource(R.string.stat_folders),
+            value = folderCount.toString(),
+            accent = Cyan,
+        )
+        StatChip(
+            modifier = Modifier.weight(1f),
+            label = stringResource(R.string.stat_projects),
+            value = projectCount.toString(),
+            accent = VioletSoft,
+        )
+    }
+}
+
+@Composable
+private fun StatChip(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    accent: Color,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                Brush.horizontalGradient(
+                    listOf(accent.copy(alpha = 0.16f), Color(0x0DFFFFFF)),
+                ),
+            )
+            .border(1.dp, accent.copy(alpha = 0.35f), shape)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+            color = Muted,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = JetBrainsMono,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = accent,
+        )
+    }
+}
+
+@Composable
+private fun LanguageFilterRow(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LanguageChip(
+            label = stringResource(R.string.filter_all),
+            selected = selected == "ALL",
+            accent = Cyan,
+            onClick = { onSelect("ALL") },
+        )
+        ProjectLanguage.entries.forEach { lang ->
+            LanguageChip(
+                label = lang.displayName,
+                selected = selected == lang.name,
+                accent = languageColor(lang),
+                onClick = { onSelect(lang.name) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LanguageChip(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val bg by animateColorAsState(
+        targetValue = if (selected) accent.copy(alpha = 0.20f) else Color(0x10FFFFFF),
+        animationSpec = tween(200),
+        label = "lang-chip-bg",
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected) accent.copy(alpha = 0.60f) else Color(0x1FFFFFFF),
+        animationSpec = tween(200),
+        label = "lang-chip-border",
+    )
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(percent = 50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.5.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            ),
+            color = if (selected) accent else Muted,
         )
     }
 }
@@ -595,7 +912,7 @@ private fun Breadcrumbs(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 6.dp),
+            .padding(horizontal = 20.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Crumb(
@@ -644,39 +961,80 @@ private fun Crumb(text: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun FolderTile(
     item: WorkspaceItem,
+    index: Int,
     childCount: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val accent = folderAccent(item.name)
     val shape = RoundedCornerShape(24.dp)
+    val appear = remember(item.id) { Animatable(0f) }
+
+    LaunchedEffect(item.id) {
+        delay((index.coerceAtMost(8) * 45).toLong())
+        appear.animateTo(1f, tween(durationMillis = 480, easing = TileEase))
+    }
+
     Column(
         modifier = Modifier
             .aspectRatio(1f)
+            .graphicsLayer {
+                alpha = appear.value
+                scaleX = 0.88f + 0.12f * appear.value
+                scaleY = 0.88f + 0.12f * appear.value
+                translationY = (1f - appear.value) * 26.dp.toPx()
+            }
             .clip(shape)
             .background(
-                Brush.verticalGradient(listOf(Color(0x1FFFFFFF), Color(0x08FFFFFF))),
+                Brush.verticalGradient(
+                    listOf(
+                        accent.copy(alpha = 0.14f),
+                        Color(0x18FFFFFF),
+                        Color(0x08FFFFFF),
+                    ),
+                ),
             )
             .border(
-                width = 1.dp,
+                width = 1.2.dp,
                 brush = Brush.linearGradient(
-                    listOf(accent.copy(alpha = 0.45f), Color(0x12FFFFFF)),
+                    listOf(accent.copy(alpha = 0.58f), Color(0x16FFFFFF)),
                 ),
                 shape = shape,
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(14.dp),
     ) {
-        FolderGlyph(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp),
-            accent = accent,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            FolderGlyph(
+                modifier = Modifier.size(width = 74.dp, height = 56.dp),
+                accent = accent,
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(accent.copy(alpha = 0.16f))
+                    .border(1.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(percent = 50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = childCount.toString(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = accent,
+                )
+            }
+        }
         Spacer(Modifier.weight(1f))
         Text(
             text = item.name,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.5.sp),
             color = Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -699,95 +1057,114 @@ private fun FolderTile(
 @Composable
 private fun ProjectTile(
     item: WorkspaceItem,
+    index: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val langAccent = languageColor(item.language)
     val shape = RoundedCornerShape(24.dp)
+    val appear = remember(item.id) { Animatable(0f) }
+
+    LaunchedEffect(item.id) {
+        delay((index.coerceAtMost(8) * 45).toLong())
+        appear.animateTo(1f, tween(durationMillis = 500, easing = TileEase))
+    }
+
     Column(
         modifier = Modifier
             .aspectRatio(1f)
+            .graphicsLayer {
+                alpha = appear.value
+                scaleX = 0.88f + 0.12f * appear.value
+                scaleY = 0.88f + 0.12f * appear.value
+                translationY = (1f - appear.value) * 26.dp.toPx()
+            }
             .clip(shape)
             .background(
-                Brush.verticalGradient(listOf(Color(0x1FFFFFFF), Color(0x08FFFFFF))),
+                Brush.verticalGradient(
+                    listOf(
+                        langAccent.copy(alpha = 0.15f),
+                        Color(0x1DFFFFFF),
+                        Color(0x0A0E24),
+                    ),
+                ),
             )
             .border(
-                width = 1.dp,
+                width = 1.2.dp,
                 brush = Brush.linearGradient(
-                    listOf(VioletSoft.copy(alpha = 0.45f), Color(0x12FFFFFF)),
+                    listOf(langAccent.copy(alpha = 0.62f), VioletSoft.copy(alpha = 0.20f)),
                 ),
                 shape = shape,
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(12.dp),
+            .padding(13.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(15.dp))
-                .background(Color(0xB3070B1C))
-                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(15.dp))
-                .padding(horizontal = 10.dp, vertical = 9.dp),
+        // Top row: Custom Icon + Language & Version pills
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Dot(Color(0xFFFF5F57))
-                Spacer(Modifier.width(4.dp))
-                Dot(Color(0xFFFEBC2E))
-                Spacer(Modifier.width(4.dp))
-                Dot(Color(0xFF28C840))
-                Spacer(Modifier.weight(1f))
+            ProjectIconView(
+                iconPreset = item.iconPreset,
+                customIconPath = item.customIconPath,
+                modifier = Modifier.size(48.dp),
+                cornerRadius = 15.dp,
+            )
+
+            Column(horizontalAlignment = Alignment.End) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(langAccent.copy(alpha = 0.18f))
+                        .border(1.dp, langAccent.copy(alpha = 0.48f), RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = item.language.displayName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = langAccent,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "kt",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
-                    color = Muted.copy(alpha = 0.8f),
+                    text = "v${item.versionName} (#${item.versionCode})",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 8.5.sp,
+                    ),
+                    color = Muted,
                 )
             }
-            Spacer(Modifier.height(10.dp))
-            CodeLine(0.78f, Fuchsia)
-            Spacer(Modifier.height(5.dp))
-            CodeLine(0.52f, Cyan)
-            Spacer(Modifier.height(5.dp))
-            CodeLine(0.88f, VioletSoft)
-            Spacer(Modifier.height(5.dp))
-            CodeLine(0.38f, Teal)
         }
-        Spacer(Modifier.height(9.dp))
+
+        Spacer(Modifier.weight(1f))
+
         Text(
             text = item.name,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
             color = Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = stringResource(R.string.project_label),
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-            color = Muted,
-            maxLines = 1,
-        )
+        Spacer(Modifier.height(3.dp))
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Text(
+                text = item.packageName,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 8.5.sp,
+                ),
+                color = Cyan.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
-}
-
-@Composable
-private fun Dot(color: Color) {
-    Box(
-        Modifier
-            .size(5.dp)
-            .clip(CircleShape)
-            .background(color),
-    )
-}
-
-@Composable
-private fun CodeLine(fraction: Float, color: Color) {
-    Box(
-        Modifier
-            .fillMaxWidth(fraction)
-            .height(4.dp)
-            .clip(RoundedCornerShape(percent = 50))
-            .background(color.copy(alpha = 0.75f)),
-    )
 }
 
 @Composable
@@ -861,14 +1238,28 @@ private fun EmptyWorkspace(modifier: Modifier = Modifier) {
 
 @Composable
 private fun WorkspaceFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val infinite = rememberInfiniteTransition(label = "fab-pulse")
+    val haloScale by infinite.animateFloat(
+        initialValue = 0.90f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "fab-halo",
+    )
     val shape = RoundedCornerShape(21.dp)
-    Box(modifier.size(76.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.size(78.dp), contentAlignment = Alignment.Center) {
         Box(
             Modifier
                 .size(76.dp)
+                .graphicsLayer {
+                    scaleX = haloScale
+                    scaleY = haloScale
+                }
                 .background(
                     brush = Brush.radialGradient(
-                        listOf(Violet.copy(alpha = 0.45f), Color.Transparent),
+                        listOf(Cyan.copy(alpha = 0.42f), Violet.copy(alpha = 0.25f), Color.Transparent),
                     ),
                     shape = CircleShape,
                 ),
@@ -879,10 +1270,10 @@ private fun WorkspaceFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
                 .clip(shape)
                 .background(
                     Brush.linearGradient(
-                        listOf(Violet, Color(0xFF8B5CF6), Color(0xFFD946EF)),
+                        listOf(Violet, Color(0xFF7C3AED), Cyan),
                     ),
                 )
-                .border(1.dp, Color(0x4DFFFFFF), shape)
+                .border(1.2.dp, Color(0x66FFFFFF), shape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -1131,14 +1522,14 @@ private fun FolderActionsSheetContent(
 @Composable
 private fun ProjectActionsSheetContent(
     item: WorkspaceItem,
-    onRename: () -> Unit,
+    onEditProject: () -> Unit,
     onExport: () -> Unit,
-    onNewProject: () -> Unit,
     onDelete: () -> Unit,
+    onNewProject: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SheetHeader(
-            badge = stringResource(R.string.project_label),
+            badge = "${item.language.displayName} • v${item.versionName}",
             title = item.name,
             subtitle = stringResource(R.string.sheet_project_actions),
         )
@@ -1155,7 +1546,7 @@ private fun ProjectActionsSheetContent(
                     modifier = Modifier.size(20.dp),
                 )
             },
-            onClick = onRename,
+            onClick = onEditProject,
         )
         SheetAction(
             title = stringResource(R.string.action_export),

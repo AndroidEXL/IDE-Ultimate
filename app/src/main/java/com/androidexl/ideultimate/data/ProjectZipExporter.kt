@@ -6,8 +6,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Builds a ready-to-open Android Studio project (Gradle KTS + Compose) from a
- * workspace project name and returns it as an in-memory ZIP archive.
+ * Builds a ready-to-open project archive (Kotlin/Compose, Java Android, or Flutter)
+ * from a workspace project and returns it as an in-memory ZIP archive.
  */
 object ProjectZipExporter {
 
@@ -17,30 +17,87 @@ object ProjectZipExporter {
     fun directoryName(projectName: String): String =
         safeDirectoryName(projectName.trim().ifBlank { "Project" })
 
-    /** Application id / package of the generated project. */
+    /** Default application id / package of a generated project. */
     fun packageName(projectName: String): String =
         "com.ideultimate.projects.${packageSlug(projectName.trim().ifBlank { "Project" })}"
 
-    fun buildZip(projectName: String): ByteArray {
+    /** Validates whether a user-entered package name is syntactically valid. */
+    fun isValidPackageName(raw: String): Boolean {
+        val trimmed = raw.trim()
+        if (trimmed.length < 3 || !trimmed.contains('.')) return false
+        val parts = trimmed.split('.')
+        if (parts.size < 2) return false
+        return parts.all { part ->
+            part.isNotEmpty() &&
+                part.first() in 'a'..'z' &&
+                part.all { ch -> ch in 'a'..'z' || ch in '0'..'9' || ch == '_' }
+        }
+    }
+
+    fun buildZip(item: WorkspaceItem): ByteArray = buildZip(
+        projectName = item.name,
+        customPackageName = item.packageName,
+        language = item.language,
+        versionCode = item.versionCode,
+        versionName = item.versionName,
+    )
+
+    fun buildZip(
+        projectName: String,
+        customPackageName: String? = null,
+        language: ProjectLanguage = ProjectLanguage.KOTLIN,
+        versionCode: Int = 1,
+        versionName: String = "1.0",
+    ): ByteArray {
         val displayName = projectName.trim().ifBlank { "Project" }
         val directory = directoryName(displayName)
-        val appPackage = packageName(displayName)
+        val appPackage = customPackageName?.trim()?.takeIf { isValidPackageName(it) }
+            ?: packageName(displayName)
+        val safeVersionCode = versionCode.coerceAtLeast(1)
+        val safeVersionName = versionName.trim().ifBlank { "1.0.0" }
 
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
-            zip.add("$directory/settings.gradle.kts", settingsGradle(displayName))
-            zip.add("$directory/build.gradle.kts", rootBuildGradle)
-            zip.add("$directory/gradle.properties", gradleProperties)
-            zip.add("$directory/.gitignore", gitignore)
-            zip.add("$directory/app/build.gradle.kts", appBuildGradle(appPackage))
-            zip.add("$directory/app/src/main/AndroidManifest.xml", manifest())
-            zip.add(
-                "$directory/app/src/main/java/${appPackage.replace('.', '/')}/MainActivity.kt",
-                mainActivity(appPackage, displayName),
-            )
-            zip.add("$directory/app/src/main/res/values/strings.xml", stringsXml(displayName))
-            zip.add("$directory/app/src/main/res/values/themes.xml", themesXml)
-            zip.add("$directory/README.md", readme(displayName))
+            when (language) {
+                ProjectLanguage.FLUTTER -> {
+                    zip.add("$directory/pubspec.yaml", flutterPubspec(directory, displayName, safeVersionName, safeVersionCode))
+                    zip.add("$directory/lib/main.dart", flutterMainDart(displayName, appPackage, safeVersionName))
+                    zip.add("$directory/android/app/build.gradle.kts", flutterAndroidBuildGradle(appPackage, safeVersionCode, safeVersionName))
+                    zip.add("$directory/android/app/src/main/AndroidManifest.xml", manifest())
+                    zip.add("$directory/.gitignore", flutterGitignore)
+                    zip.add("$directory/README.md", readme(displayName, language, appPackage, safeVersionName, safeVersionCode))
+                }
+                ProjectLanguage.JAVA -> {
+                    zip.add("$directory/settings.gradle.kts", settingsGradle(displayName))
+                    zip.add("$directory/build.gradle.kts", rootJavaBuildGradle)
+                    zip.add("$directory/gradle.properties", gradleProperties)
+                    zip.add("$directory/.gitignore", gitignore)
+                    zip.add("$directory/app/build.gradle.kts", javaAppBuildGradle(appPackage, safeVersionCode, safeVersionName))
+                    zip.add("$directory/app/src/main/AndroidManifest.xml", manifest())
+                    zip.add(
+                        "$directory/app/src/main/java/${appPackage.replace('.', '/')}/MainActivity.java",
+                        javaMainActivity(appPackage, displayName),
+                    )
+                    zip.add("$directory/app/src/main/res/values/strings.xml", stringsXml(displayName))
+                    zip.add("$directory/app/src/main/res/values/themes.xml", themesXml)
+                    zip.add("$directory/README.md", readme(displayName, language, appPackage, safeVersionName, safeVersionCode))
+                }
+                ProjectLanguage.KOTLIN -> {
+                    zip.add("$directory/settings.gradle.kts", settingsGradle(displayName))
+                    zip.add("$directory/build.gradle.kts", rootBuildGradle)
+                    zip.add("$directory/gradle.properties", gradleProperties)
+                    zip.add("$directory/.gitignore", gitignore)
+                    zip.add("$directory/app/build.gradle.kts", appBuildGradle(appPackage, safeVersionCode, safeVersionName))
+                    zip.add("$directory/app/src/main/AndroidManifest.xml", manifest())
+                    zip.add(
+                        "$directory/app/src/main/java/${appPackage.replace('.', '/')}/MainActivity.kt",
+                        mainActivity(appPackage, displayName),
+                    )
+                    zip.add("$directory/app/src/main/res/values/strings.xml", stringsXml(displayName))
+                    zip.add("$directory/app/src/main/res/values/themes.xml", themesXml)
+                    zip.add("$directory/README.md", readme(displayName, language, appPackage, safeVersionName, safeVersionCode))
+                }
+            }
         }
         return output.toByteArray()
     }
@@ -118,6 +175,12 @@ object ProjectZipExporter {
         }
     """.trimIndent()
 
+    private val rootJavaBuildGradle = """
+        plugins {
+            id("com.android.application") version "8.9.2" apply false
+        }
+    """.trimIndent()
+
     private val gradleProperties = """
         org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
         android.useAndroidX=true
@@ -133,7 +196,15 @@ object ProjectZipExporter {
         captures/
     """.trimIndent()
 
-    private fun appBuildGradle(packageName: String) = """
+    private val flutterGitignore = """
+        .dart_tool/
+        .packages
+        build/
+        .idea/
+        *.iml
+    """.trimIndent()
+
+    private fun appBuildGradle(packageName: String, versionCode: Int, versionName: String) = """
         plugins {
             id("com.android.application")
             id("org.jetbrains.kotlin.android")
@@ -148,8 +219,8 @@ object ProjectZipExporter {
                 applicationId = "$packageName"
                 minSdk = 24
                 targetSdk = 35
-                versionCode = 1
-                versionName = "1.0"
+                versionCode = $versionCode
+                versionName = "${escapeKotlin(versionName)}"
             }
 
             buildFeatures {
@@ -174,6 +245,105 @@ object ProjectZipExporter {
             implementation("androidx.compose.ui:ui")
             implementation("androidx.compose.material3:material3")
             debugImplementation("androidx.compose.ui:ui-tooling")
+        }
+    """.trimIndent()
+
+    private fun javaAppBuildGradle(packageName: String, versionCode: Int, versionName: String) = """
+        plugins {
+            id("com.android.application")
+        }
+
+        android {
+            namespace = "$packageName"
+            compileSdk = 35
+
+            defaultConfig {
+                applicationId = "$packageName"
+                minSdk = 24
+                targetSdk = 35
+                versionCode = $versionCode
+                versionName = "${escapeKotlin(versionName)}"
+            }
+
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+
+        dependencies {
+            implementation("androidx.appcompat:appcompat:1.7.0")
+        }
+    """.trimIndent()
+
+    private fun flutterPubspec(slug: String, displayName: String, versionName: String, versionCode: Int): String {
+        val dartSlug = packageSlug(slug)
+        return """
+            name: $dartSlug
+            description: "${escapeKotlin(displayName)} — generated by IDE Ultimate"
+            publish_to: "none"
+            version: $versionName+$versionCode
+
+            environment:
+              sdk: ">=3.4.0 <4.0.0"
+
+            dependencies:
+              flutter:
+                sdk: flutter
+
+            flutter:
+              uses-material-design: true
+        """.trimIndent()
+    }
+
+    private fun flutterMainDart(displayName: String, packageName: String, versionName: String) = """
+        import 'package:flutter/material.dart';
+
+        void main() {
+          runApp(const IdeUltimateApp());
+        }
+
+        class IdeUltimateApp extends StatelessWidget {
+          const IdeUltimateApp({super.key});
+
+          @override
+          Widget build(BuildContext context) {
+            return MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: '${escapeKotlin(displayName)}',
+              theme: ThemeData.dark(useMaterial3: true),
+              home: Scaffold(
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Text(
+                        'Hello from ${escapeKotlin(displayName)}',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 8),
+                      Text('$packageName • v${escapeKotlin(versionName)}'),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+    """.trimIndent()
+
+    private fun flutterAndroidBuildGradle(packageName: String, versionCode: Int, versionName: String) = """
+        android {
+            namespace = "$packageName"
+            compileSdk = 35
+
+            defaultConfig {
+                applicationId = "$packageName"
+                minSdk = 24
+                targetSdk = 35
+                versionCode = $versionCode
+                versionName = "${escapeKotlin(versionName)}"
+            }
         }
     """.trimIndent()
 
@@ -233,6 +403,27 @@ object ProjectZipExporter {
         }
     """.trimIndent()
 
+    private fun javaMainActivity(packageName: String, displayName: String) = """
+        package $packageName;
+
+        import android.app.Activity;
+        import android.os.Bundle;
+        import android.view.Gravity;
+        import android.widget.TextView;
+
+        public class MainActivity extends Activity {
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                TextView tv = new TextView(this);
+                tv.setText("Hello from ${escapeKotlin(displayName)}");
+                tv.setGravity(Gravity.CENTER);
+                tv.setTextSize(20f);
+                setContentView(tv);
+            }
+        }
+    """.trimIndent()
+
     private fun stringsXml(name: String) = """
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -247,23 +438,25 @@ object ProjectZipExporter {
         </resources>
     """.trimIndent()
 
-    private fun readme(name: String) = """
+    private fun readme(
+        name: String,
+        language: ProjectLanguage,
+        packageName: String,
+        versionName: String,
+        versionCode: Int,
+    ) = """
         # $name
 
         تم تصدير هذا المشروع من **IDE Ultimate**.
 
+        - **اللغة البرمجية**: ${language.displayName}
+        - **الحزمة (Package)**: `$packageName`
+        - **الإصدار**: `$versionName` (`versionCode = $versionCode`)
+
         ## التشغيل
 
-        1. افتح المجلد في Android Studio (Ladybug أو أحدث).
-        2. اترك Gradle يقوم بمزامنة المشروع (Sync).
-        3. شغّل التطبيق على محاكي أو جهاز حقيقي.
-
-        ## البنية
-
-        - `app/src/main/java/` — كود Kotlin (نقطة البداية: `MainActivity.kt`).
-        - `app/src/main/res/` — الموارد (النصوص والثيمات).
-
-        Built with Kotlin and Jetpack Compose.
+        1. افتح المجلد في Android Studio أو VS Code.
+        2. شغّل المشروع على محاكي أو جهاز حقيقي.
     """.trimIndent()
 
     private fun escapeKotlin(value: String): String = value

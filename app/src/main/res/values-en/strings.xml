@@ -9,8 +9,8 @@
     <string name="splash_status_preview">Warming up live preview</string>
     <string name="splash_status_ready">Ready to code</string>
     <string name="splash_skip">Skip</string>
-    <string name="splash_powered">KOTLIN  •  JETPACK COMPOSE</string>
-    <string name="splash_version">v1.5.0</string>
+    <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
+    <string name="splash_version">v1.6.0</string>
 
     <!-- Home -->
     <string name="home_greeting">Welcome back</string>
@@ -21,7 +21,7 @@
     <string name="home_start">Start now</string>
     <string name="home_tools">Your tools</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">Version 1.5.0</string>
+    <string name="home_version">Version 1.6.0</string>
     <string name="home_replay_splash">Replay splash</string>
     <string name="home_footer">Crafted with Kotlin and Jetpack Compose</string>
     <string name="home_soon">coming soon in this demo</string>
@@ -36,41 +36,45 @@
     <string name="feature_build">Build &amp; sign</string>
     <string name="feature_build_desc">Ship an APK in a single tap.</string>
 
-    <!-- Workspace -->
-    <string name="workspace_title">Workspace</string>
-    <string name="workspace_subtitle">Organise your projects into folders</string>
+    <!-- Workspace / Project Manager -->
+    <string name="workspace_title">Project Manager</string>
+    <string name="workspace_subtitle">Organise your folders &amp; projects (Flutter • Kotlin • Java)</string>
     <string name="workspace_back">Back</string>
     <string name="workspace_root">Root</string>
-    <string name="workspace_root_inside">Create inside: %1$s</string>
+    <string name="workspace_root_inside">Location: %1$s</string>
     <string name="workspace_empty_title">Nothing here yet</string>
     <string name="workspace_empty_desc">Tap + to create a folder or a new project and start organising.</string>
     <string name="workspace_count">Items: %1$d</string>
     <string name="workspace_empty_folder">Empty folder</string>
     <string name="workspace_fab">Add item</string>
 
+    <string name="stat_folders">Folders</string>
+    <string name="stat_projects">Projects</string>
+    <string name="filter_all">All</string>
+
     <string name="sheet_create_title">What do you want to create?</string>
-    <string name="sheet_create_subtitle">Pick the type of the new item in this location.</string>
+    <string name="sheet_create_subtitle">Pick the type of the new item in this folder.</string>
     <string name="sheet_create_folder_only_subtitle">Create a square folder to organise your projects inside it.</string>
     <string name="sheet_new_folder">Create new folder</string>
     <string name="sheet_new_folder_desc">Create a square folder to organise your projects.</string>
     <string name="sheet_new_project">Create new project</string>
-    <string name="sheet_new_project_desc">Create a new Kotlin project with ready Gradle files.</string>
+    <string name="sheet_new_project_desc">Open the new project setup screen (icon, name, package, language, version).</string>
     <string name="sheet_folder_hint">Tap a folder to open it, or long press for more options.</string>
     <string name="sheet_folder_actions">Folder options</string>
     <string name="sheet_project_actions">Project options</string>
     <string name="folder_label">Folder</string>
-    <string name="project_label">Kotlin project</string>
+    <string name="project_label">Project</string>
 
     <string name="action_rename">Rename</string>
     <string name="action_rename_desc">Change the item name at any time.</string>
     <string name="action_edit_project">Edit project</string>
-    <string name="action_edit_project_desc">Edit the project name and settings.</string>
+    <string name="action_edit_project_desc">Edit the project icon, name, package, and version.</string>
     <string name="action_delete">Delete item</string>
     <string name="action_delete_project">Delete project</string>
     <string name="action_delete_folder_desc">Delete the folder and everything inside it.</string>
     <string name="action_delete_project_desc">Remove the project from your workspace.</string>
     <string name="action_export">Export to ZIP code</string>
-    <string name="action_export_desc">Download a ZIP archive with a ready Gradle project.</string>
+    <string name="action_export_desc">Download a ZIP archive with a ready project for the selected language.</string>
     <string name="action_new_project_here">Create new project</string>
     <string name="action_new_project_here_desc">Add a new project in the same folder.</string>
 
@@ -86,6 +90,44 @@
     <string name="error_name_empty">Type a name first.</string>
     <string name="error_name_taken">That name is already used here.</string>
     <string name="error_name_too_long">The name is too long (40 characters max).</string>
+    <string name="error_package_invalid">Invalid package name (example: com.ideultimate.app).</string>
+    <string name="error_version_code_invalid">Version code must be a positive integer.</string>
+    <string name="error_version_name_empty">Enter a version name (example: 1.0.0).</string>
+
+    <!-- Create / Edit Project Screen -->
+    <string name="create_project_title">Create New Project</string>
+    <string name="create_project_edit_title">Edit Project</string>
+    <string name="create_project_preview_default_name">My New Project</string>
+    <string name="field_icon_title">Project Icon</string>
+    <string name="field_icon_subtitle">Pick an image from your device or choose a glowing preset</string>
+    <string name="field_icon_pick_gallery">Pick Icon from Gallery</string>
+    <string name="field_icon_reset_preset">Reset to preset icon</string>
+    <string name="field_identity_title">Name &amp; Package</string>
+    <string name="field_identity_subtitle">Set the display name and unique applicationId</string>
+    <string name="field_project_name_label">Project Name</string>
+    <string name="field_project_name_hint">e.g. My Super App</string>
+    <string name="field_package_label">Package Name</string>
+    <string name="field_language_title">Programming Language</string>
+    <string name="field_language_once_note">Selected once when creating the project</string>
+    <string name="field_language_locked_note">Language was set at creation and cannot be changed</string>
+    <string name="badge_once_only">SET ONCE</string>
+    <string name="badge_locked">LOCKED</string>
+    <string name="lang_desc_flutter">Flutter SDK • Dart &amp; Material 3</string>
+    <string name="lang_desc_kotlin">Kotlin • Jetpack Compose &amp; Android</string>
+    <string name="lang_desc_java">Java • Classic Android SDK</string>
+    <string name="field_version_title">Version Code &amp; Version Name</string>
+    <string name="field_version_subtitle">Configure versionCode and versionName</string>
+    <string name="field_version_code_label">Version Code</string>
+    <string name="field_version_name_label">Version Name</string>
+    <string name="create_project_submit_btn">Create Project Now</string>
+    <string name="create_project_save_btn">Save Project Changes</string>
+
+    <!-- Store Code Screen -->
+    <string name="store_code_title">Store Code</string>
+    <string name="store_code_subtitle">Ready-to-use snippets &amp; templates for Flutter, Kotlin &amp; Java</string>
+    <string name="store_use_as_project">Use as Project</string>
+    <string name="store_copy_code">Copy Code</string>
+    <string name="store_copied_msg">Copied %1$s code</string>
 
     <string name="delete_folder_title">Delete folder &quot;%1$s&quot;?</string>
     <string name="delete_project_title">Delete project &quot;%1$s&quot;?</string>
@@ -95,7 +137,8 @@
     <string name="delete_confirm">Delete permanently</string>
 
     <string name="msg_folder_created">Folder created</string>
-    <string name="msg_project_created">Project created</string>
+    <string name="msg_project_created">Project created successfully</string>
+    <string name="msg_project_updated">Project changes saved</string>
     <string name="msg_renamed">Name updated</string>
     <string name="msg_deleted">Item deleted</string>
     <string name="export_success">&quot;%1$s&quot; exported successfully</string>
@@ -104,19 +147,21 @@
     <!-- Project detail -->
     <string name="project_detail_ready">Ready to export and build</string>
     <string name="project_detail_package">Package name (applicationId)</string>
-    <string name="project_detail_export">Export ZIP</string>
-    <string name="project_detail_hint">A complete Gradle project is exported and can be opened directly in Android Studio.</string>
+    <string name="project_detail_export">Export ZIP Code</string>
+    <string name="project_detail_hint">Exports a complete project in the chosen language with its package and version.</string>
     <string name="project_detail_files">Project files</string>
     <string name="project_detail_files_desc">These files are packaged inside the ZIP archive.</string>
     <string name="project_file_settings">Project settings</string>
     <string name="project_file_root_build">Root build configuration</string>
     <string name="project_file_app_build">App build configuration</string>
     <string name="project_file_manifest">App manifest</string>
-    <string name="project_file_code">Main screen</string>
+    <string name="project_file_code">Main source file</string>
     <string name="project_file_resources">App strings</string>
     <string name="project_file_readme">Getting started guide</string>
 
     <!-- Bottom navigation -->
+    <string name="nav_project_manager">Project Manager</string>
+    <string name="nav_store_code">Store Code</string>
     <string name="nav_home">Home</string>
     <string name="nav_workspace">Workspace</string>
 </resources>

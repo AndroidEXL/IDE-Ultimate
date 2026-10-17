@@ -1,11 +1,15 @@
 package com.androidexl.ideultimate.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,32 +28,35 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
-import com.androidexl.ideultimate.data.ProjectZipExporter
+import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.ui.components.GlassCard
 import com.androidexl.ideultimate.ui.components.GlassIconButton
 import com.androidexl.ideultimate.ui.components.GradientButton
 import com.androidexl.ideultimate.ui.components.LogoMark
+import com.androidexl.ideultimate.ui.components.ProjectIconView
+import com.androidexl.ideultimate.ui.components.languageColor
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
@@ -58,6 +65,8 @@ import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 
+private val DetailCurve = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
 private data class ProjectFile(
     val path: String,
     val labelRes: Int,
@@ -65,29 +74,47 @@ private data class ProjectFile(
     val tint: Color,
 )
 
-private fun projectFiles(packageName: String): List<ProjectFile> {
-    val packagePath = packageName.replace('.', '/')
-    return listOf(
-        ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
-        ProjectFile("build.gradle.kts", R.string.project_file_root_build, "KTS", VioletSoft),
-        ProjectFile("app/build.gradle.kts", R.string.project_file_app_build, "KTS", Fuchsia),
-        ProjectFile("app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
-        ProjectFile(
-            "app/src/main/java/$packagePath/MainActivity.kt",
-            R.string.project_file_code,
-            "KT",
-            Teal,
-        ),
-        ProjectFile("app/src/main/res/values/strings.xml", R.string.project_file_resources, "XML", Cyan),
-        ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
-    )
+private fun projectFiles(item: WorkspaceItem): List<ProjectFile> {
+    val packagePath = item.packageName.replace('.', '/')
+    return when (item.language) {
+        ProjectLanguage.FLUTTER -> listOf(
+            ProjectFile("pubspec.yaml", R.string.project_file_settings, "YAML", Color(0xFF38BDF8)),
+            ProjectFile("lib/main.dart", R.string.project_file_code, "DART", Cyan),
+            ProjectFile("android/app/build.gradle.kts", R.string.project_file_app_build, "KTS", VioletSoft),
+            ProjectFile("android/app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+        )
+        ProjectLanguage.JAVA -> listOf(
+            ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
+            ProjectFile("build.gradle.kts", R.string.project_file_root_build, "KTS", VioletSoft),
+            ProjectFile("app/build.gradle.kts", R.string.project_file_app_build, "KTS", Fuchsia),
+            ProjectFile("app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
+            ProjectFile(
+                "app/src/main/java/$packagePath/MainActivity.java",
+                R.string.project_file_code,
+                "JAVA",
+                Color(0xFFFBBF24),
+            ),
+            ProjectFile("app/src/main/res/values/strings.xml", R.string.project_file_resources, "XML", Cyan),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+        )
+        ProjectLanguage.KOTLIN -> listOf(
+            ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
+            ProjectFile("build.gradle.kts", R.string.project_file_root_build, "KTS", VioletSoft),
+            ProjectFile("app/build.gradle.kts", R.string.project_file_app_build, "KTS", Fuchsia),
+            ProjectFile("app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
+            ProjectFile(
+                "app/src/main/java/$packagePath/MainActivity.kt",
+                R.string.project_file_code,
+                "KT",
+                Teal,
+            ),
+            ProjectFile("app/src/main/res/values/strings.xml", R.string.project_file_resources, "XML", Cyan),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+        )
+    }
 }
 
-/**
- * Detail view opened by tapping a project tile: shows the project identity, the
- * files that will be packaged, and the full action set (export / rename /
- * delete / create another project).
- */
 @Composable
 fun ProjectDetailScreen(
     project: WorkspaceItem,
@@ -97,10 +124,16 @@ fun ProjectDetailScreen(
     onDelete: () -> Unit,
     onNewProject: () -> Unit,
     modifier: Modifier = Modifier,
-    bottomBarPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    bottomBarPadding: Dp = 0.dp,
 ) {
-    val packageName = remember(project.name) { ProjectZipExporter.packageName(project.name) }
-    val files = remember(packageName) { projectFiles(packageName) }
+    val files = remember(project) { projectFiles(project) }
+    val langAccent = languageColor(project.language)
+    val enter = remember { Animatable(0f) }
+
+    LaunchedEffect(project.id) {
+        enter.snapTo(0f)
+        enter.animateTo(1f, tween(durationMillis = 620, easing = DetailCurve))
+    }
 
     BackHandler(onBack = onBack)
 
@@ -109,7 +142,11 @@ fun ProjectDetailScreen(
             .fillMaxSize()
             .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp),
+            .padding(horizontal = 22.dp)
+            .graphicsLayer {
+                alpha = enter.value
+                translationY = (1f - enter.value) * 34.dp.toPx()
+            },
     ) {
         Row(
             modifier = Modifier
@@ -134,9 +171,12 @@ fun ProjectDetailScreen(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = stringResource(R.string.project_label),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = Muted,
+                    text = "${project.language.displayName} • v${project.versionName} (${project.versionCode})",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.sp,
+                    ),
+                    color = langAccent,
                 )
             }
             LogoMark(modifier = Modifier.size(40.dp), animated = false)
@@ -146,30 +186,53 @@ fun ProjectDetailScreen(
 
         GlassCard(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF2A1B5E), Color(0xFF101637)),
-                            ),
-                        )
-                        .border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(18.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "</>",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Cyan,
-                    )
-                }
+                ProjectIconView(
+                    iconPreset = project.iconPreset,
+                    customIconPath = project.customIconPath,
+                    modifier = Modifier.size(62.dp),
+                    cornerRadius = 20.dp,
+                )
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(langAccent.copy(alpha = 0.16f))
+                                .border(1.dp, langAccent.copy(alpha = 0.45f), RoundedCornerShape(percent = 50))
+                                .padding(horizontal = 9.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = project.language.displayName,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = langAccent,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(Color(0x16FFFFFF))
+                                .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(percent = 50))
+                                .padding(horizontal = 9.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = "v${project.versionName} (#${project.versionCode})",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.sp,
+                                ),
+                                color = Ink,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = project.name,
                         style = MaterialTheme.typography.titleLarge,
@@ -203,8 +266,11 @@ fun ProjectDetailScreen(
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                 ) {
                     Text(
-                        text = packageName,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                        text = project.packageName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                        ),
                         color = Cyan,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -224,14 +290,14 @@ fun ProjectDetailScreen(
                 Spacer(Modifier.width(8.dp))
                 GlassIconButton(
                     icon = Icons.Filled.Create,
-                    contentDescription = stringResource(R.string.action_rename),
+                    contentDescription = stringResource(R.string.action_edit_project),
                     onClick = onRename,
                     modifier = Modifier.size(46.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 GlassIconButton(
                     icon = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.action_delete),
+                    contentDescription = stringResource(R.string.action_delete_project),
                     onClick = onDelete,
                     modifier = Modifier.size(46.dp),
                 )
@@ -292,7 +358,7 @@ fun ProjectDetailScreen(
 
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            contentPadding = PaddingValues(
                 horizontal = 14.dp,
                 vertical = 8.dp,
             ),

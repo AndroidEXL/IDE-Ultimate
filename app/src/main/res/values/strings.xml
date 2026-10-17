@@ -9,8 +9,8 @@
     <string name="splash_status_preview">تجهيز المعاينة الفورية</string>
     <string name="splash_status_ready">جاهز للبرمجة</string>
     <string name="splash_skip">تخطي</string>
-    <string name="splash_powered">KOTLIN  •  JETPACK COMPOSE</string>
-    <string name="splash_version">v1.5.0</string>
+    <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
+    <string name="splash_version">v1.6.0</string>
 
     <!-- Home -->
     <string name="home_greeting">أهلًا بك من جديد</string>
@@ -21,7 +21,7 @@
     <string name="home_start">ابدأ الآن</string>
     <string name="home_tools">أدواتك</string>
     <string name="home_code_title">MainActivity.kt</string>
-    <string name="home_version">الإصدار 1.5.0</string>
+    <string name="home_version">الإصدار 1.6.0</string>
     <string name="home_replay_splash">إعادة الافتتاحية</string>
     <string name="home_footer">صُنع بشغف باستخدام Kotlin و Jetpack Compose</string>
     <string name="home_soon">قادمة قريبًا في هذا العرض</string>
@@ -36,43 +36,47 @@
     <string name="feature_build">بناء وتوقيع</string>
     <string name="feature_build_desc">أنشئ APK بضغطة واحدة.</string>
 
-    <!-- Workspace -->
-    <string name="workspace_title">مساحة العمل</string>
-    <string name="workspace_subtitle">نظّم مشاريعك في مجلدات</string>
+    <!-- Workspace / Project Manager -->
+    <string name="workspace_title">Project Manager</string>
+    <string name="workspace_subtitle">نظّم فولدراتك ومشاريعك (Flutter • Kotlin • Java)</string>
     <string name="workspace_back">رجوع</string>
     <string name="workspace_root">الجذر</string>
-    <string name="workspace_root_inside">إنشاء داخل: %1$s</string>
+    <string name="workspace_root_inside">المسار: %1$s</string>
     <string name="workspace_empty_title">لا توجد عناصر بعد</string>
-    <string name="workspace_empty_desc">اضغط زر + لإنشاء مجلد أو مشروع جديد وبدء التنظيم.</string>
+    <string name="workspace_empty_desc">اضغط زر + لإنشاء فولدر أو مشروع جديد وبدء التنظيم.</string>
     <string name="workspace_count">العناصر: %1$d</string>
-    <string name="workspace_empty_folder">مجلد فارغ</string>
+    <string name="workspace_empty_folder">فولدر فارغ</string>
     <string name="workspace_fab">إضافة عنصر</string>
 
+    <string name="stat_folders">الفولدرات</string>
+    <string name="stat_projects">المشاريع</string>
+    <string name="filter_all">الكل</string>
+
     <string name="sheet_create_title">ماذا تريد أن تنشئ؟</string>
-    <string name="sheet_create_subtitle">اختر نوع العنصر الجديد داخل هذا الموقع.</string>
+    <string name="sheet_create_subtitle">اختر نوع العنصر الجديد داخل هذا الفولدر.</string>
     <string name="sheet_create_folder_only_subtitle">أنشئ فولدر مربع لتنظيم مشاريعك بداخله.</string>
     <string name="sheet_new_folder">إنشاء فولدر جديد</string>
     <string name="sheet_new_folder_desc">أنشئ فولدر مربع لتنظيم مشاريعك.</string>
     <string name="sheet_new_project">إنشاء مشروع جديد</string>
-    <string name="sheet_new_project_desc">أنشئ مشروع Kotlin جديدًا بملفات Gradle جاهزة.</string>
+    <string name="sheet_new_project_desc">افتح صفحة إعداد مشروع جديد (الأيقونة، الاسم، الحزمة، اللغة، الإصدار).</string>
     <string name="sheet_folder_hint">اضغط على الفولدر لفتحه، أو اضغط مطولًا لمزيد من الخيارات.</string>
     <string name="sheet_folder_actions">خيارات الفولدر</string>
     <string name="sheet_project_actions">خيارات المشروع</string>
     <string name="folder_label">فولدر</string>
-    <string name="project_label">مشروع Kotlin</string>
+    <string name="project_label">مشروع</string>
 
     <string name="action_rename">تعديل الاسم</string>
     <string name="action_rename_desc">غيّر اسم العنصر في أي وقت.</string>
     <string name="action_edit_project">تعديل المشروع</string>
-    <string name="action_edit_project_desc">عدّل اسم وإعدادات المشروع.</string>
+    <string name="action_edit_project_desc">عدّل الأيقونة والاسم والحزمة ورقم/اسم الإصدار.</string>
     <string name="action_delete">حذف العنصر</string>
     <string name="action_delete_project">حذف المشروع</string>
     <string name="action_delete_folder_desc">حذف الفولدر وكل ما بداخله.</string>
     <string name="action_delete_project_desc">حذف المشروع من مساحة العمل.</string>
     <string name="action_export">تصدير إلى ZIP Code</string>
-    <string name="action_export_desc">تصدير الكود كملف ZIP يحتوي مشروع Gradle كامل.</string>
+    <string name="action_export_desc">تصدير الكود كملف ZIP جاهز للفتح حسب لغة المشروع.</string>
     <string name="action_new_project_here">إنشاء مشروع جديد</string>
-    <string name="action_new_project_here_desc">أضف مشروعًا جديدًا في نفس الفولدر.</string>
+    <string name="action_new_project_here_desc">أنشئ مشروعًا جديدًا داخل نفس الفولدر.</string>
 
     <string name="dialog_new_folder">إنشاء فولدر جديد</string>
     <string name="dialog_new_project">إنشاء مشروع جديد</string>
@@ -86,16 +90,55 @@
     <string name="error_name_empty">اكتب اسمًا أولًا.</string>
     <string name="error_name_taken">هذا الاسم مستخدم بالفعل هنا.</string>
     <string name="error_name_too_long">الاسم طويل جدًا (40 حرفًا كحد أقصى).</string>
+    <string name="error_package_invalid">صيغة الحزمة غير صحيحة (مثال: com.ideultimate.app).</string>
+    <string name="error_version_code_invalid">رقم الإصدار يجب أن يكون رقمًا صحيحًا أكبر من 0.</string>
+    <string name="error_version_name_empty">اكتب اسم الإصدار (مثال: 1.0.0).</string>
 
-    <string name="delete_folder_title">حذف المجلد &quot;%1$s&quot;؟</string>
+    <!-- Create / Edit Project Screen -->
+    <string name="create_project_title">إنشاء مشروع جديد</string>
+    <string name="create_project_edit_title">تعديل المشروع</string>
+    <string name="create_project_preview_default_name">مشروعي الجديد</string>
+    <string name="field_icon_title">الأيقونة</string>
+    <string name="field_icon_subtitle">اختر صورة من جهازك أو أحد القوالب المضيئة</string>
+    <string name="field_icon_pick_gallery">اختيار أيقونة من المعرض</string>
+    <string name="field_icon_reset_preset">استعادة الأيقونة الافتراضية</string>
+    <string name="field_identity_title">الاسم والحزمة</string>
+    <string name="field_identity_subtitle">حدد اسم التطبيق ومعرّف الحزمة الفريد (Package)</string>
+    <string name="field_project_name_label">اسم المشروع</string>
+    <string name="field_project_name_hint">مثال: My Super App</string>
+    <string name="field_package_label">الحزمة (Package Name)</string>
+    <string name="field_language_title">اللغة البرمجية</string>
+    <string name="field_language_once_note">تُحدَّد مرة واحدة فقط عند إنشاء المشروع</string>
+    <string name="field_language_locked_note">تم تحديد اللغة عند الإنشاء ولا يمكن تغييرها</string>
+    <string name="badge_once_only">تُحدَّد مرة واحدة</string>
+    <string name="badge_locked">مقفلة</string>
+    <string name="lang_desc_flutter">Flutter SDK • Dart &amp; Material 3</string>
+    <string name="lang_desc_kotlin">Kotlin • Jetpack Compose &amp; Android</string>
+    <string name="lang_desc_java">Java • Android SDK الكلاسيكي</string>
+    <string name="field_version_title">رقم الإصدار واسم الإصدار</string>
+    <string name="field_version_subtitle">ضبط versionCode و versionName للمشروع</string>
+    <string name="field_version_code_label">رقم الإصدار (Code)</string>
+    <string name="field_version_name_label">اسم الإصدار (Name)</string>
+    <string name="create_project_submit_btn">إنشاء المشروع الآن</string>
+    <string name="create_project_save_btn">حفظ تعديلات المشروع</string>
+
+    <!-- Store Code Screen -->
+    <string name="store_code_title">Store Code</string>
+    <string name="store_code_subtitle">أكواد وقوالب جاهزة لـ Flutter و Kotlin و Java</string>
+    <string name="store_use_as_project">استيراد كمشروع</string>
+    <string name="store_copy_code">نسخ الكود</string>
+    <string name="store_copied_msg">تم نسخ كود %1$s</string>
+
+    <string name="delete_folder_title">حذف الفولدر &quot;%1$s&quot;؟</string>
     <string name="delete_project_title">حذف المشروع &quot;%1$s&quot;؟</string>
-    <string name="delete_folder_message">سيُحذف المجلد وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_folder_message">سيُحذف الفولدر وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
     <string name="delete_project_message">سيُحذف المشروع نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
-    <string name="delete_folder_count">يحتوي المجلد على %1$d عنصرًا ستتم إزالته أيضًا.</string>
+    <string name="delete_folder_count">يحتوي الفولدر على %1$d عنصرًا ستتم إزالته أيضًا.</string>
     <string name="delete_confirm">حذف نهائي</string>
 
-    <string name="msg_folder_created">تم إنشاء المجلد</string>
-    <string name="msg_project_created">تم إنشاء المشروع</string>
+    <string name="msg_folder_created">تم إنشاء الفولدر</string>
+    <string name="msg_project_created">تم إنشاء المشروع بنجاح</string>
+    <string name="msg_project_updated">تم حفظ تعديلات المشروع</string>
     <string name="msg_renamed">تم تحديث الاسم</string>
     <string name="msg_deleted">تم الحذف</string>
     <string name="export_success">تم تصدير &quot;%1$s&quot; بنجاح</string>
@@ -104,19 +147,21 @@
     <!-- Project detail -->
     <string name="project_detail_ready">جاهز للتصدير والبناء</string>
     <string name="project_detail_package">اسم الحزمة (applicationId)</string>
-    <string name="project_detail_export">تصدير ZIP</string>
-    <string name="project_detail_hint">سيُصدَّر مشروع Gradle كامل يمكن فتحه مباشرة في Android Studio.</string>
+    <string name="project_detail_export">تصدير ZIP Code</string>
+    <string name="project_detail_hint">سيُصدَّر مشروع كامل بلغة المشروع المحددة مع الحزمة ورقم الإصدار.</string>
     <string name="project_detail_files">ملفات المشروع</string>
     <string name="project_detail_files_desc">هذه الملفات تُضمَّن داخل ملف الـ ZIP.</string>
     <string name="project_file_settings">إعدادات المشروع</string>
     <string name="project_file_root_build">إعدادات البناء الرئيسية</string>
     <string name="project_file_app_build">إعدادات بناء التطبيق</string>
     <string name="project_file_manifest">بيان التطبيق</string>
-    <string name="project_file_code">الشاشة الرئيسية</string>
+    <string name="project_file_code">الملف البرمجي الرئيسي</string>
     <string name="project_file_resources">نصوص التطبيق</string>
     <string name="project_file_readme">دليل التشغيل</string>
 
     <!-- Bottom navigation -->
+    <string name="nav_project_manager">Project Manager</string>
+    <string name="nav_store_code">Store Code</string>
     <string name="nav_home">الرئيسية</string>
     <string name="nav_workspace">مساحة العمل</string>
 </resources>
