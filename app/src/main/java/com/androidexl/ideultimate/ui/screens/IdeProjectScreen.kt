@@ -446,11 +446,23 @@ fun IdeProjectScreen(
     if (showImageManagerScreen) {
         IdeImageManagerScreen(
             project = project,
-            repository = repository,
             images = projectImages,
-            onRefreshImages = { refreshProjectImages() },
-            onRenameImageInWidgets = { oldName, newName ->
-                updateWidgetNodes(renameImageResInTree(widgetNodes, oldName, newName), recordHistory = false)
+            onImportUris = { uris ->
+                uris.forEach { uri ->
+                    repository.importProjectImage(project, uri)
+                }
+                refreshProjectImages()
+            },
+            onRenameImage = { oldName, newName ->
+                val renamed = repository.renameProjectImage(project, oldName, newName)
+                refreshProjectImages()
+                if (renamed != null && renamed != oldName) {
+                    updateWidgetNodes(renameImageResInTree(widgetNodes, oldName, renamed), recordHistory = false)
+                }
+            },
+            onDeleteImages = { namesToDelete ->
+                repository.deleteProjectImages(project, namesToDelete)
+                refreshProjectImages()
             },
             onBack = { showImageManagerScreen = false },
             modifier = modifier,
@@ -673,9 +685,9 @@ fun IdeProjectScreen(
         val targetNode = findNodeByUid(widgetNodes, pickerTargetUid)
         if (targetNode != null) {
             ImageViewSelectImageBottomSheet(
-                currentImageName = targetNode.imageResName,
+                node = targetNode,
                 projectImages = projectImages,
-                onSelectImage = { chosenName ->
+                onSelectImageRes = { chosenName ->
                     updateWidgetNodes(
                         updateNodeByUid(widgetNodes, targetNode.uid) {
                             it.copy(imageResName = chosenName)
