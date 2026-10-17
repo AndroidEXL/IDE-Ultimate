@@ -114,7 +114,23 @@ data class IdeWidgetNode(
     val layoutWidth: String = if (type.isContainer) "match_parent" else "wrap_content",
     val layoutHeight: String = "wrap_content",
     val paddingDp: Int = if (type.isContainer) 8 else 4,
+    val marginDp: Int = 0,
+    val gravity: String = "left|top",
+    val layoutGravity: String = "left|top",
+    val weight: Int = 0,
     val textSizeSp: Int = 12,
+    val textStyle: String = "normal",
+    val textColor: String = "#000000",
+    val lines: Int = 0,
+    val backgroundResource: String = "none",
+    val backgroundColor: String = "transparent",
+    val rotation: Float = 0f,
+    val alpha: Float = 1f,
+    val translationX: Float = 0f,
+    val translationY: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val customAttributes: String = "",
     val children: List<IdeWidgetNode> = emptyList(),
 )
 
@@ -776,7 +792,23 @@ class WorkspaceRepository(context: Context) {
                 put("layoutWidth", node.layoutWidth)
                 put("layoutHeight", node.layoutHeight)
                 put("paddingDp", node.paddingDp)
+                put("marginDp", node.marginDp)
+                put("gravity", node.gravity)
+                put("layoutGravity", node.layoutGravity)
+                put("weight", node.weight)
                 put("textSizeSp", node.textSizeSp)
+                put("textStyle", node.textStyle)
+                put("textColor", node.textColor)
+                put("lines", node.lines)
+                put("backgroundResource", node.backgroundResource)
+                put("backgroundColor", node.backgroundColor)
+                put("rotation", node.rotation.toDouble())
+                put("alpha", node.alpha.toDouble())
+                put("translationX", node.translationX.toDouble())
+                put("translationY", node.translationY.toDouble())
+                put("scaleX", node.scaleX.toDouble())
+                put("scaleY", node.scaleY.toDouble())
+                put("customAttributes", node.customAttributes)
                 put("children", serializeWidgetNodes(node.children))
             }
             arr.put(obj)
@@ -802,7 +834,23 @@ class WorkspaceRepository(context: Context) {
                     layoutWidth = obj.optString("layoutWidth", defaultW).ifBlank { defaultW },
                     layoutHeight = obj.optString("layoutHeight", "wrap_content").ifBlank { "wrap_content" },
                     paddingDp = obj.optInt("paddingDp", defaultPad),
+                    marginDp = obj.optInt("marginDp", 0),
+                    gravity = obj.optString("gravity", "left|top").ifBlank { "left|top" },
+                    layoutGravity = obj.optString("layoutGravity", "left|top").ifBlank { "left|top" },
+                    weight = obj.optInt("weight", 0),
                     textSizeSp = obj.optInt("textSizeSp", 12),
+                    textStyle = obj.optString("textStyle", "normal").ifBlank { "normal" },
+                    textColor = obj.optString("textColor", "#000000").ifBlank { "#000000" },
+                    lines = obj.optInt("lines", 0),
+                    backgroundResource = obj.optString("backgroundResource", "none").ifBlank { "none" },
+                    backgroundColor = obj.optString("backgroundColor", "transparent").ifBlank { "transparent" },
+                    rotation = obj.optDouble("rotation", 0.0).toFloat(),
+                    alpha = obj.optDouble("alpha", 1.0).toFloat(),
+                    translationX = obj.optDouble("translationX", 0.0).toFloat(),
+                    translationY = obj.optDouble("translationY", 0.0).toFloat(),
+                    scaleX = obj.optDouble("scaleX", 1.0).toFloat(),
+                    scaleY = obj.optDouble("scaleY", 1.0).toFloat(),
+                    customAttributes = obj.optString("customAttributes", ""),
                     children = parseWidgetNodes(childrenArr),
                 ),
             )
@@ -834,14 +882,61 @@ class WorkspaceRepository(context: Context) {
         return sb.toString()
     }
 
+    private fun appendCommonXmlAttributes(sb: StringBuilder, node: IdeWidgetNode, indent: String) {
+        sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
+        sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
+        sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+        if (node.marginDp > 0) {
+            sb.appendLine("""$indent    android:layout_margin="${node.marginDp}dp"""")
+        }
+        if (node.gravity.isNotBlank() && node.gravity != "left|top") {
+            sb.appendLine("""$indent    android:gravity="${node.gravity}"""")
+        }
+        if (node.layoutGravity.isNotBlank() && node.layoutGravity != "left|top") {
+            sb.appendLine("""$indent    android:layout_gravity="${node.layoutGravity}"""")
+        }
+        if (node.weight > 0) {
+            sb.appendLine("""$indent    android:layout_weight="${node.weight}"""")
+        }
+        if (node.backgroundResource.isNotBlank() && node.backgroundResource != "none") {
+            sb.appendLine("""$indent    android:background="${node.backgroundResource}"""")
+        } else if (node.backgroundColor.isNotBlank() && node.backgroundColor != "transparent") {
+            sb.appendLine("""$indent    android:background="${node.backgroundColor}"""")
+        }
+        if (node.rotation != 0f) {
+            sb.appendLine("""$indent    android:rotation="${node.rotation}"""")
+        }
+        if (node.alpha != 1f) {
+            sb.appendLine("""$indent    android:alpha="${node.alpha}"""")
+        }
+        if (node.translationX != 0f) {
+            sb.appendLine("""$indent    android:translationX="${node.translationX}dp"""")
+        }
+        if (node.translationY != 0f) {
+            sb.appendLine("""$indent    android:translationY="${node.translationY}dp"""")
+        }
+        if (node.scaleX != 1f) {
+            sb.appendLine("""$indent    android:scaleX="${node.scaleX}"""")
+        }
+        if (node.scaleY != 1f) {
+            sb.appendLine("""$indent    android:scaleY="${node.scaleY}"""")
+        }
+        if (node.customAttributes.isNotBlank()) {
+            node.customAttributes.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .forEach { line ->
+                    sb.appendLine("""$indent    $line""")
+                }
+        }
+    }
+
     private fun appendWidgetXml(sb: StringBuilder, node: IdeWidgetNode, indent: String) {
         when (node.type) {
             IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V -> {
                 val orientation = if (node.type == IdeWidgetType.LINEAR_H) "horizontal" else "vertical"
                 sb.appendLine("""$indent<LinearLayout""")
-                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
-                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+                appendCommonXmlAttributes(sb, node, indent)
                 sb.appendLine("""$indent    android:orientation="$orientation"""")
                 if (node.children.isEmpty()) {
                     sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
@@ -856,9 +951,7 @@ class WorkspaceRepository(context: Context) {
 
             IdeWidgetType.SCROLL_V -> {
                 sb.appendLine("""$indent<ScrollView""")
-                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
-                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+                appendCommonXmlAttributes(sb, node, indent)
                 if (node.children.isEmpty()) {
                     sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
@@ -872,9 +965,7 @@ class WorkspaceRepository(context: Context) {
 
             IdeWidgetType.SCROLL_H -> {
                 sb.appendLine("""$indent<HorizontalScrollView""")
-                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
-                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+                appendCommonXmlAttributes(sb, node, indent)
                 if (node.children.isEmpty()) {
                     sb.appendLine("""$indent    android:padding="${node.paddingDp}dp" />""")
                 } else {
@@ -893,12 +984,16 @@ class WorkspaceRepository(context: Context) {
                     .replace(">", "&gt;")
                     .replace("\"", "&quot;")
                 sb.appendLine("""$indent<TextView""")
-                sb.appendLine("""$indent    android:id="@+id/${node.viewId}"""")
-                sb.appendLine("""$indent    android:layout_width="${node.layoutWidth}"""")
-                sb.appendLine("""$indent    android:layout_height="${node.layoutHeight}"""")
+                appendCommonXmlAttributes(sb, node, indent)
                 sb.appendLine("""$indent    android:padding="${node.paddingDp}dp"""")
                 sb.appendLine("""$indent    android:text="$safeText"""")
-                sb.appendLine("""$indent    android:textColor="#000000"""")
+                if (node.textStyle != "normal" && node.textStyle.isNotBlank()) {
+                    sb.appendLine("""$indent    android:textStyle="${node.textStyle}"""")
+                }
+                if (node.lines > 0) {
+                    sb.appendLine("""$indent    android:lines="${node.lines}"""")
+                }
+                sb.appendLine("""$indent    android:textColor="${node.textColor}"""")
                 sb.appendLine("""$indent    android:textSize="${node.textSizeSp}sp" />""")
             }
         }

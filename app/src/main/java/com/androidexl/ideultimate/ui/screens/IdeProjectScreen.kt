@@ -78,6 +78,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -93,6 +94,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
@@ -378,16 +380,24 @@ fun IdeProjectScreen(
         mutableStateOf<String?>(null)
     }
     var isDraggingWidget by remember { mutableStateOf(false) }
-    var editingTextViewNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
-    var editingIdNode by remember { mutableStateOf<IdeWidgetNode?>(null) }
-    var editingSizeNode by remember { mutableStateOf<Pair<IdeWidgetNode, Boolean>?>(null) } // true = width, false = height
+    var editingPropertyRequest by remember { mutableStateOf<Pair<String, IdeWidgetProperty>?>(null) }
+    val recentProperties = remember { mutableStateListOf<IdeWidgetProperty>() }
 
     val selectedNode = remember(widgetNodes, selectedWidgetUid) {
         selectedWidgetUid?.let { findNodeByUid(widgetNodes, it) }
     }
 
+    fun openPropertyDialog(node: IdeWidgetNode, prop: IdeWidgetProperty) {
+        if (prop != IdeWidgetProperty.SEE_ALL) {
+            recentProperties.remove(prop)
+            recentProperties.add(0, prop)
+        }
+        editingPropertyRequest = node.uid to prop
+    }
+
     BackHandler {
         when {
+            editingPropertyRequest != null -> editingPropertyRequest = null
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
@@ -464,7 +474,9 @@ fun IdeProjectScreen(
                                 selectedWidgetUid = selectedWidgetUid,
                                 onSelectWidgetUid = { selectedWidgetUid = it },
                                 onDraggingStateChange = { isDraggingWidget = it },
-                                onRequestEditTextView = { editingTextViewNode = it },
+                                onRequestEditTextView = { node ->
+                                    openPropertyDialog(node, IdeWidgetProperty.TEXT)
+                                },
                                 onUpdateWidgets = { updateWidgetNodes(it) },
                             )
                         }
@@ -512,6 +524,7 @@ fun IdeProjectScreen(
                     IdeWidgetPropertyBottomPanel(
                         node = selectedNode,
                         allWidgets = flattenAllNodes(widgetNodes),
+                        recentProperties = recentProperties,
                         onSelectOtherWidget = { selectedWidgetUid = it.uid },
                         onMoveUp = {
                             updateWidgetNodes(moveNodeInParent(widgetNodes, selectedNode.uid, direction = -1))
@@ -524,39 +537,8 @@ fun IdeProjectScreen(
                         onSave = {
                             repository.saveWidgetsForXmlPage(project, selectedXmlPage, widgetNodes)
                         },
-                        onEditIdOrCustomAttr = { editingIdNode = selectedNode },
-                        onConvertWidget = {
-                            val convertedType = when (selectedNode.type) {
-                                IdeWidgetType.LINEAR_H -> IdeWidgetType.LINEAR_V
-                                IdeWidgetType.LINEAR_V -> IdeWidgetType.LINEAR_H
-                                IdeWidgetType.SCROLL_H -> IdeWidgetType.SCROLL_V
-                                IdeWidgetType.SCROLL_V -> IdeWidgetType.SCROLL_H
-                                IdeWidgetType.TEXT_VIEW -> IdeWidgetType.TEXT_VIEW
-                            }
-                            if (convertedType != selectedNode.type) {
-                                updateWidgetNodes(
-                                    updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(type = convertedType) },
-                                )
-                            } else {
-                                editingTextViewNode = selectedNode
-                            }
-                        },
-                        onEditWidth = { editingSizeNode = selectedNode to true },
-                        onEditHeight = { editingSizeNode = selectedNode to false },
-                        onEditText = { editingTextViewNode = selectedNode },
-                        onCycleTextSize = {
-                            val sizes = listOf(12, 14, 16, 18, 20, 24)
-                            val nextSize = sizes[(sizes.indexOf(selectedNode.textSizeSp) + 1) % sizes.size]
-                            updateWidgetNodes(
-                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(textSizeSp = nextSize) },
-                            )
-                        },
-                        onCyclePadding = {
-                            val pads = listOf(0, 4, 8, 12, 16)
-                            val nextPad = pads[(pads.indexOf(selectedNode.paddingDp) + 1) % pads.size]
-                            updateWidgetNodes(
-                                updateNodeByUid(widgetNodes, selectedNode.uid) { it.copy(paddingDp = nextPad) },
-                            )
+                        onClickProperty = { prop ->
+                            openPropertyDialog(selectedNode, prop)
                         },
                         onOpenLogicEvent = {
                             selectedWidgetUid = null
@@ -590,51 +572,28 @@ fun IdeProjectScreen(
         }
     }
 
-    val editingNode = editingTextViewNode
-    if (editingNode != null) {
-        EditTextViewDialog(
-            initialText = editingNode.text,
-            viewId = editingNode.viewId,
-            onDismiss = { editingTextViewNode = null },
-            onConfirm = { newText ->
-                updateWidgetNodes(updateNodeText(widgetNodes, editingNode.uid, newText))
-                editingTextViewNode = null
-            },
-        )
-    }
-
-    val idNode = editingIdNode
-    if (idNode != null) {
-        EditWidgetIdDialog(
-            initialId = idNode.viewId,
-            widgetType = idNode.type,
-            onDismiss = { editingIdNode = null },
-            onConfirm = { newId ->
-                updateWidgetNodes(
-                    updateNodeByUid(widgetNodes, idNode.uid) { it.copy(viewId = newId) },
-                )
-                editingIdNode = null
-            },
-        )
-    }
-
-    val sizeDialogPair = editingSizeNode
-    if (sizeDialogPair != null) {
-        val (targetNode, isWidth) = sizeDialogPair
-        EditWidgetDimensionDialog(
-            viewId = targetNode.viewId,
-            isWidth = isWidth,
-            currentValue = if (isWidth) targetNode.layoutWidth else targetNode.layoutHeight,
-            onDismiss = { editingSizeNode = null },
-            onSelectValue = { chosen ->
-                updateWidgetNodes(
-                    updateNodeByUid(widgetNodes, targetNode.uid) {
-                        if (isWidth) it.copy(layoutWidth = chosen) else it.copy(layoutHeight = chosen)
-                    },
-                )
-                editingSizeNode = null
-            },
-        )
+    val activePropReq = editingPropertyRequest
+    if (activePropReq != null) {
+        val (targetUid, targetProp) = activePropReq
+        val targetNode = findNodeByUid(widgetNodes, targetUid)
+        if (targetNode != null) {
+            IdeWidgetPropertyEditDialog(
+                node = targetNode,
+                property = targetProp,
+                onDismiss = { editingPropertyRequest = null },
+                onSelectFromSeeAll = { chosenProp ->
+                    openPropertyDialog(targetNode, chosenProp)
+                },
+                onUpdateNode = { updatedNode ->
+                    updateWidgetNodes(
+                        updateNodeByUid(widgetNodes, targetNode.uid) { updatedNode },
+                    )
+                    editingPropertyRequest = null
+                },
+            )
+        } else {
+            editingPropertyRequest = null
+        }
     }
 
     // Bottom Sheet showing all XML layout pages & their corresponding Activities
@@ -1890,29 +1849,77 @@ private fun RenderWidgetNodeOnPhone(
         -1
     }
 
-    val widthModifier = if (isBeingMoved) {
-        Modifier.width(0.dp).height(0.dp).graphicsLayer(alpha = 0f)
-    } else if (node.layoutWidth == "match_parent") {
-        Modifier.fillMaxWidth()
-    } else {
-        Modifier.wrapContentWidth()
+    val customWidthDp = node.layoutWidth.removeSuffix("dp").trim().toIntOrNull()
+    val customHeightDp = node.layoutHeight.removeSuffix("dp").trim().toIntOrNull()
+
+    val widthModifier = when {
+        isBeingMoved -> Modifier.width(0.dp).height(0.dp).graphicsLayer(alpha = 0f)
+        customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(16, 320).dp)
+        node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
+        else -> Modifier.wrapContentWidth()
     }
-    val visualPad = (node.paddingDp / 2).coerceIn(2, 12).dp
+
+    val visualPad = (node.paddingDp / 2).coerceIn(2, 16).dp
+    val visualMargin = (node.marginDp / 2).coerceIn(0, 16).dp
+    val parsedBgColor = remember(node.backgroundColor) {
+        parseHexColorOrNull(node.backgroundColor)
+    }
+    val baseFill = when {
+        isSelected -> selectedFill
+        parsedBgColor != null -> parsedBgColor
+        node.backgroundResource != "none" && node.backgroundResource.isNotBlank() -> Color(0xFFEFF6FF)
+        else -> Color.Transparent
+    }
+    val transformModifier = if (isBeingMoved) {
+        Modifier
+    } else {
+        Modifier.graphicsLayer(
+            rotationZ = node.rotation,
+            alpha = node.alpha.coerceIn(0.08f, 1f),
+            translationX = node.translationX,
+            translationY = node.translationY,
+            scaleX = node.scaleX.coerceIn(0.25f, 2.5f),
+            scaleY = node.scaleY.coerceIn(0.25f, 2.5f),
+        )
+    }
+
+    val horizontalAlign = when {
+        node.gravity.contains("right") -> Alignment.End
+        node.gravity.contains("center") -> Alignment.CenterHorizontally
+        else -> Alignment.Start
+    }
+    val verticalAlign = when {
+        node.gravity.contains("bottom") -> Alignment.Bottom
+        node.gravity.contains("center") -> Alignment.CenterVertically
+        else -> Alignment.Top
+    }
+    val horizontalArr = when {
+        node.gravity.contains("right") -> Arrangement.End
+        node.gravity.contains("center") -> Arrangement.Center
+        else -> Arrangement.Start
+    }
+    val verticalArr = when {
+        node.gravity.contains("bottom") -> Arrangement.Bottom
+        node.gravity.contains("center") -> Arrangement.Center
+        else -> Arrangement.Top
+    }
 
     when (node.type) {
         IdeWidgetType.LINEAR_H, IdeWidgetType.SCROLL_H -> {
             val isEmpty = nonMovingChildCount == 0 && !isHoveredDropTarget
             Row(
-                modifier = widthModifier
+                modifier = Modifier
+                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .then(widthModifier)
                     .then(
-                        if (isBeingMoved) {
-                            Modifier.height(0.dp)
-                        } else if (isEmpty) {
-                            Modifier.height(28.dp)
-                        } else {
-                            Modifier.heightIn(min = 28.dp)
+                        when {
+                            isBeingMoved -> Modifier.height(0.dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(20, 260).dp)
+                            isEmpty -> Modifier.height(28.dp)
+                            else -> Modifier.heightIn(min = 28.dp)
                         },
                     )
+                    .then(transformModifier)
                     .onGloballyPositioned { coords ->
                         if (!isBeingMoved) {
                             val rect = coords.boundsInRoot()
@@ -1921,7 +1928,7 @@ private fun RenderWidgetNodeOnPhone(
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
-                    .background(if (isSelected) selectedFill else Color.Transparent)
+                    .background(baseFill)
                     .border(if (isBeingMoved) 0.dp else 0.8.dp, layoutOutlineColor, RectangleShape)
                     .clickable { onSelectWidget(node) }
                     .pointerInput(node.uid) {
@@ -1949,8 +1956,8 @@ private fun RenderWidgetNodeOnPhone(
                         )
                     }
                     .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = verticalAlign,
+                horizontalArrangement = horizontalArr,
             ) {
                 var childSlot = 0
                 node.children.forEach { child ->
@@ -1993,16 +2000,18 @@ private fun RenderWidgetNodeOnPhone(
         IdeWidgetType.LINEAR_V, IdeWidgetType.SCROLL_V -> {
             val isEmpty = nonMovingChildCount == 0 && !isHoveredDropTarget
             Column(
-                modifier = widthModifier
+                modifier = Modifier
+                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .then(widthModifier)
                     .then(
-                        if (isBeingMoved) {
-                            Modifier.height(0.dp)
-                        } else if (isEmpty) {
-                            Modifier.height(28.dp)
-                        } else {
-                            Modifier.heightIn(min = 28.dp)
+                        when {
+                            isBeingMoved -> Modifier.height(0.dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(20, 260).dp)
+                            isEmpty -> Modifier.height(28.dp)
+                            else -> Modifier.heightIn(min = 28.dp)
                         },
                     )
+                    .then(transformModifier)
                     .onGloballyPositioned { coords ->
                         if (!isBeingMoved) {
                             val rect = coords.boundsInRoot()
@@ -2011,7 +2020,7 @@ private fun RenderWidgetNodeOnPhone(
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
-                    .background(if (isSelected) selectedFill else Color.Transparent)
+                    .background(baseFill)
                     .border(if (isBeingMoved) 0.dp else 0.8.dp, layoutOutlineColor, RectangleShape)
                     .clickable { onSelectWidget(node) }
                     .pointerInput(node.uid) {
@@ -2039,8 +2048,8 @@ private fun RenderWidgetNodeOnPhone(
                         )
                     }
                     .padding(if (isEmpty || isBeingMoved) 0.dp else visualPad),
-                verticalArrangement = Arrangement.Top,
-                horizontalAlignment = Alignment.Start,
+                verticalArrangement = verticalArr,
+                horizontalAlignment = horizontalAlign,
             ) {
                 var childSlot = 0
                 node.children.forEach { child ->
@@ -2081,8 +2090,28 @@ private fun RenderWidgetNodeOnPhone(
         }
 
         IdeWidgetType.TEXT_VIEW -> {
+            val parsedTxtColor = remember(node.textColor) {
+                parseHexColorOrNull(node.textColor) ?: Color(0xFF222222)
+            }
+            val fontWeight = if (node.textStyle.contains("bold")) FontWeight.Bold else FontWeight.Normal
+            val fontStyle = if (node.textStyle.contains("italic")) FontStyle.Italic else FontStyle.Normal
+            val boxAlignment = when {
+                node.gravity.contains("center") -> Alignment.Center
+                node.gravity.contains("right") -> Alignment.CenterEnd
+                else -> Alignment.CenterStart
+            }
             Box(
-                modifier = widthModifier
+                modifier = Modifier
+                    .padding(if (isBeingMoved) 0.dp else visualMargin)
+                    .then(widthModifier)
+                    .then(
+                        if (!isBeingMoved && customHeightDp != null && customHeightDp > 0) {
+                            Modifier.height(customHeightDp.coerceIn(18, 220).dp)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .then(transformModifier)
                     .onGloballyPositioned { coords ->
                         if (!isBeingMoved) {
                             val rect = coords.boundsInRoot()
@@ -2090,7 +2119,7 @@ private fun RenderWidgetNodeOnPhone(
                             onWidgetPositioned(node.uid, rect)
                         }
                     }
-                    .background(if (isSelected) selectedFill else Color.Transparent)
+                    .background(baseFill)
                     .clickable {
                         if (isSelected) {
                             onDoubleTapTextView(node)
@@ -2122,16 +2151,23 @@ private fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
-                    .padding(if (isBeingMoved) 0.dp else 6.dp, if (isBeingMoved) 0.dp else 4.dp),
+                    .padding(
+                        horizontal = if (isBeingMoved) 0.dp else (node.paddingDp.coerceIn(2, 24)).dp,
+                        vertical = if (isBeingMoved) 0.dp else (node.paddingDp / 2).coerceIn(2, 16).dp,
+                    ),
+                contentAlignment = boxAlignment,
             ) {
                 if (!isBeingMoved) {
                     Text(
                         text = node.text,
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = (node.textSizeSp - 1).coerceIn(10, 22).sp,
-                            fontWeight = FontWeight.Normal,
+                            fontSize = (node.textSizeSp - 1).coerceIn(9, 28).sp,
+                            fontWeight = fontWeight,
+                            fontStyle = fontStyle,
                         ),
-                        color = Color(0xFF222222),
+                        color = parsedTxtColor,
+                        maxLines = if (node.lines > 0) node.lines else Int.MAX_VALUE,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -2139,9 +2175,23 @@ private fun RenderWidgetNodeOnPhone(
     }
 }
 
+private fun parseHexColorOrNull(raw: String): Color? {
+    val clean = raw.trim().removePrefix("#")
+    if (clean.equals("transparent", ignoreCase = true) || clean.equals("none", ignoreCase = true) || clean.isBlank()) {
+        return null
+    }
+    return runCatching {
+        when (clean.length) {
+            6 -> Color(("FF$clean").toLong(16))
+            8 -> Color(clean.toLong(16))
+            else -> null
+        }
+    }.getOrNull()
+}
+
 // ============================================================================
-// 2B. Bottom Widget Property Panel (Slides up when a widget is dropped/selected
-//     matching video frames 1.3s-1.7s & 5.4s-6.2s)
+// 2B. Bottom Widget Property Panel (All 24 Properties from User Screenshots)
+//     Layouts exclude Text-specific properties; every card opens a value dialog
 // ============================================================================
 
 private enum class WidgetPropTab(val label: String) {
@@ -2150,27 +2200,72 @@ private enum class WidgetPropTab(val label: String) {
     EVENT("Event"),
 }
 
+private enum class IdeWidgetProperty(
+    val title: String,
+    val cardLabel: String,
+    val textViewOnly: Boolean = false,
+) {
+    CUSTOM_ATTRIBUTES(title = "Custom attributes", cardLabel = "Custom\nattributes"),
+    CONVERT(title = "Convert", cardLabel = "Convert"),
+    WIDTH(title = "Width", cardLabel = "Width"),
+    SEE_ALL(title = "See All", cardLabel = "See All"),
+    HEIGHT(title = "Height", cardLabel = "Height"),
+    PADDING(title = "Padding", cardLabel = "Padding"),
+    MARGIN(title = "Margin", cardLabel = "Margin"),
+    GRAVITY(title = "Gravity", cardLabel = "Gravity"),
+    LAYOUT_GRAVITY(title = "Layout gravity", cardLabel = "Layout gravity"),
+    WEIGHT(title = "Weight", cardLabel = "Weight"),
+    TEXT(title = "Text", cardLabel = "Text", textViewOnly = true),
+    TEXT_SIZE(title = "Text size", cardLabel = "Text size", textViewOnly = true),
+    TEXT_STYLE(title = "Text style", cardLabel = "Text style", textViewOnly = true),
+    TEXT_COLOR(title = "Text color", cardLabel = "Text color", textViewOnly = true),
+    LINES(title = "Lines", cardLabel = "Lines", textViewOnly = true),
+    BACKGROUND_RESOURCE(title = "Background resource", cardLabel = "Background\nresource"),
+    BACKGROUND_COLOR(title = "Background color", cardLabel = "Background\ncolor"),
+    ROTATE(title = "Rotate", cardLabel = "Rotate"),
+    ALPHA(title = "Alpha", cardLabel = "Alpha"),
+    TRANSLATION_X(title = "TranslationX", cardLabel = "TranslationX"),
+    TRANSLATION_Y(title = "TranslationY", cardLabel = "TranslationY"),
+    SCALE_X(title = "ScaleX", cardLabel = "ScaleX"),
+    SCALE_Y(title = "ScaleY", cardLabel = "ScaleY"),
+    ID(title = "ID", cardLabel = "ID"),
+}
+
 @Composable
 private fun IdeWidgetPropertyBottomPanel(
     node: IdeWidgetNode,
     allWidgets: List<IdeWidgetNode>,
+    recentProperties: List<IdeWidgetProperty>,
     onSelectOtherWidget: (IdeWidgetNode) -> Unit,
     onMoveUp: () -> Unit,
     onCollapse: () -> Unit,
     onDelete: () -> Unit,
     onSave: () -> Unit,
-    onEditIdOrCustomAttr: () -> Unit,
-    onConvertWidget: () -> Unit,
-    onEditWidth: () -> Unit,
-    onEditHeight: () -> Unit,
-    onEditText: () -> Unit,
-    onCycleTextSize: () -> Unit,
-    onCyclePadding: () -> Unit,
+    onClickProperty: (IdeWidgetProperty) -> Unit,
     onOpenLogicEvent: () -> Unit,
     bottomBarPadding: Dp = 0.dp,
 ) {
     var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
     var showWidgetPickerMenu by remember { mutableStateOf(false) }
+
+    // Filter out Text-specific properties when a Layout widget (Linear/Scroll) is selected!
+    val availableProperties = remember(node.type) {
+        IdeWidgetProperty.entries.filter { prop ->
+            !prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW
+        }
+    }
+    val displayedProperties = remember(node.type, activePropTab, recentProperties.size) {
+        when (activePropTab) {
+            WidgetPropTab.BASIC -> availableProperties
+            WidgetPropTab.RECENT -> {
+                val filteredRecent = recentProperties.filter { prop ->
+                    !prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW
+                }
+                filteredRecent.ifEmpty { availableProperties.take(6) }
+            }
+            WidgetPropTab.EVENT -> emptyList()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -2195,7 +2290,7 @@ private fun IdeWidgetPropertyBottomPanel(
                         if (allWidgets.size > 1) {
                             showWidgetPickerMenu = !showWidgetPickerMenu
                         } else {
-                            onEditIdOrCustomAttr()
+                            onClickProperty(IdeWidgetProperty.ID)
                         }
                     }
                     .padding(vertical = 4.dp, horizontal = 4.dp),
@@ -2370,7 +2465,7 @@ private fun IdeWidgetPropertyBottomPanel(
 
         Spacer(Modifier.height(6.dp))
 
-        // 3. Horizontal Scrollable Row of Rounded Property Cards (matches video: Custom attributes, Convert, Width, See All, etc.)
+        // 3. Horizontal Scrollable Row of Rounded Property Cards (all 24 items from screenshots)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2392,139 +2487,413 @@ private fun IdeWidgetPropertyBottomPanel(
                     )
                 }
             } else {
-                // Card 1: Custom attributes (< >)
-                SketchPropertySquareCard(
-                    label = "Custom\nattributes",
-                    highlighted = false,
-                    onClick = onEditIdOrCustomAttr,
-                ) { tint ->
-                    Canvas(Modifier.size(18.dp)) {
-                        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        val left = Path().apply {
-                            moveTo(size.width * 0.36f, size.height * 0.25f)
-                            lineTo(size.width * 0.14f, size.height * 0.50f)
-                            lineTo(size.width * 0.36f, size.height * 0.75f)
-                        }
-                        val right = Path().apply {
-                            moveTo(size.width * 0.64f, size.height * 0.25f)
-                            lineTo(size.width * 0.86f, size.height * 0.50f)
-                            lineTo(size.width * 0.64f, size.height * 0.75f)
-                        }
-                        drawPath(left, tint, style = stroke)
-                        drawPath(right, tint, style = stroke)
-                    }
-                }
-
-                // Card 2: Convert
-                SketchPropertySquareCard(
-                    label = "Convert",
-                    highlighted = false,
-                    onClick = onConvertWidget,
-                ) { tint ->
-                    Canvas(Modifier.size(18.dp)) {
-                        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        drawLine(tint, Offset(size.width * 0.18f, size.height * 0.34f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.64f, size.height * 0.18f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.64f, size.height * 0.50f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
-
-                        drawLine(tint, Offset(size.width * 0.82f, size.height * 0.68f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.36f, size.height * 0.52f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.36f, size.height * 0.84f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
-                    }
-                }
-
-                // Card 3: Width ([<->])
-                SketchPropertySquareCard(
-                    label = "Width",
-                    highlighted = false,
-                    onClick = onEditWidth,
-                ) { tint ->
-                    Canvas(Modifier.size(18.dp)) {
-                        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        drawRoundRect(
-                            color = tint,
-                            topLeft = Offset(1.5f, 2.5f),
-                            size = Size(size.width - 3f, size.height - 5f),
-                            cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
-                            style = stroke,
-                        )
-                        val cy = size.height * 0.50f
-                        drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.42f, cy - 3f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.42f, cy + 3f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.58f, cy - 3f), stroke.width)
-                        drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.58f, cy + 3f), stroke.width)
-                    }
-                }
-
-                // Card 4: See All (••• highlighted in soft blue-cyan like video)
-                SketchPropertySquareCard(
-                    label = "See All",
-                    highlighted = true,
-                    onClick = {
-                        if (node.type == IdeWidgetType.TEXT_VIEW) {
-                            onEditText()
-                        } else {
-                            onEditWidth()
-                        }
-                    },
-                ) { tint ->
-                    Canvas(Modifier.size(18.dp)) {
-                        val r = 2.dp.toPx()
-                        val cy = size.height * 0.50f
-                        drawCircle(tint, r, Offset(size.width * 0.22f, cy))
-                        drawCircle(tint, r, Offset(size.width * 0.50f, cy))
-                        drawCircle(tint, r, Offset(size.width * 0.78f, cy))
-                    }
-                }
-
-                // Extra cards when scrolling right: Height, Text, Text size, Padding
-                SketchPropertySquareCard(
-                    label = "Height",
-                    highlighted = false,
-                    onClick = onEditHeight,
-                ) { tint ->
-                    Canvas(Modifier.size(18.dp)) {
-                        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        drawRoundRect(
-                            color = tint,
-                            topLeft = Offset(2.5f, 1.5f),
-                            size = Size(size.width - 5f, size.height - 3f),
-                            cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
-                            style = stroke,
-                        )
-                        val cx = size.width * 0.50f
-                        drawLine(tint, Offset(cx, size.height * 0.24f), Offset(cx - 3f, size.height * 0.42f), stroke.width)
-                        drawLine(tint, Offset(cx, size.height * 0.24f), Offset(cx + 3f, size.height * 0.42f), stroke.width)
-                        drawLine(tint, Offset(cx, size.height * 0.76f), Offset(cx - 3f, size.height * 0.58f), stroke.width)
-                        drawLine(tint, Offset(cx, size.height * 0.76f), Offset(cx + 3f, size.height * 0.58f), stroke.width)
-                    }
-                }
-
-                if (node.type == IdeWidgetType.TEXT_VIEW) {
+                displayedProperties.forEach { prop ->
                     SketchPropertySquareCard(
-                        label = "Text",
-                        highlighted = false,
-                        onClick = onEditText,
+                        label = prop.cardLabel,
+                        highlighted = prop == IdeWidgetProperty.SEE_ALL,
+                        onClick = { onClickProperty(prop) },
                     ) { tint ->
-                        SketchWidgetIcon(type = IdeWidgetType.TEXT_VIEW, tint = tint)
-                    }
-
-                    SketchPropertySquareCard(
-                        label = "Text size\n(${node.textSizeSp}sp)",
-                        highlighted = false,
-                        onClick = onCycleTextSize,
-                    ) { tint ->
-                        SketchWidgetIcon(type = IdeWidgetType.TEXT_VIEW, tint = tint)
+                        SketchPropertyVectorIcon(property = prop, tint = tint)
                     }
                 }
+            }
+        }
+    }
+}
 
-                SketchPropertySquareCard(
-                    label = "Padding\n(${node.paddingDp}dp)",
-                    highlighted = false,
-                    onClick = onCyclePadding,
-                ) { tint ->
-                    SketchWidgetIcon(type = IdeWidgetType.LINEAR_H, tint = tint)
+@Composable
+private fun SketchPropertyVectorIcon(
+    property: IdeWidgetProperty,
+    tint: Color,
+) {
+    when (property) {
+        IdeWidgetProperty.CUSTOM_ATTRIBUTES -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val left = Path().apply {
+                    moveTo(size.width * 0.36f, size.height * 0.25f)
+                    lineTo(size.width * 0.14f, size.height * 0.50f)
+                    lineTo(size.width * 0.36f, size.height * 0.75f)
                 }
+                val right = Path().apply {
+                    moveTo(size.width * 0.64f, size.height * 0.25f)
+                    lineTo(size.width * 0.86f, size.height * 0.50f)
+                    lineTo(size.width * 0.64f, size.height * 0.75f)
+                }
+                drawPath(left, tint, style = stroke)
+                drawPath(right, tint, style = stroke)
+            }
+        }
+
+        IdeWidgetProperty.CONVERT -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawCircle(tint, 1.3.dp.toPx(), Offset(size.width * 0.20f, size.height * 0.34f))
+                drawCircle(tint, 1.3.dp.toPx(), Offset(size.width * 0.34f, size.height * 0.34f))
+                drawLine(tint, Offset(size.width * 0.46f, size.height * 0.34f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.66f, size.height * 0.18f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.66f, size.height * 0.50f), Offset(size.width * 0.82f, size.height * 0.34f), stroke.width)
+
+                drawCircle(tint, 1.3.dp.toPx(), Offset(size.width * 0.80f, size.height * 0.68f))
+                drawCircle(tint, 1.3.dp.toPx(), Offset(size.width * 0.66f, size.height * 0.68f))
+                drawLine(tint, Offset(size.width * 0.54f, size.height * 0.68f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.34f, size.height * 0.52f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.34f, size.height * 0.84f), Offset(size.width * 0.18f, size.height * 0.68f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.WIDTH -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.10f, size.height * 0.20f),
+                    size = Size(size.width * 0.80f, size.height * 0.60f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                val cy = size.height * 0.50f
+                drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.38f, cy - 3.2f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.24f, cy), Offset(size.width * 0.38f, cy + 3.2f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.62f, cy - 3.2f), stroke.width)
+                drawLine(tint, Offset(size.width * 0.76f, cy), Offset(size.width * 0.62f, cy + 3.2f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.SEE_ALL -> {
+            Canvas(Modifier.size(20.dp)) {
+                val r = 2.dp.toPx()
+                val cy = size.height * 0.50f
+                drawCircle(tint, r, Offset(size.width * 0.22f, cy))
+                drawCircle(tint, r, Offset(size.width * 0.50f, cy))
+                drawCircle(tint, r, Offset(size.width * 0.78f, cy))
+            }
+        }
+
+        IdeWidgetProperty.HEIGHT -> {
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.22f, size.height * 0.10f),
+                    size = Size(size.width * 0.56f, size.height * 0.80f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                val cx = size.width * 0.50f
+                drawLine(tint, Offset(cx, size.height * 0.25f), Offset(cx - 3.2f, size.height * 0.38f), stroke.width)
+                drawLine(tint, Offset(cx, size.height * 0.25f), Offset(cx + 3.2f, size.height * 0.38f), stroke.width)
+                drawLine(tint, Offset(cx, size.height * 0.75f), Offset(cx - 3.2f, size.height * 0.62f), stroke.width)
+                drawLine(tint, Offset(cx, size.height * 0.75f), Offset(cx + 3.2f, size.height * 0.62f), stroke.width)
+            }
+        }
+
+        IdeWidgetProperty.PADDING -> {
+            // 4 arrows pointing inward toward a center dot (exact match to screenshot)
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.6.dp.toPx()
+                val cx = size.width * 0.50f
+                val cy = size.height * 0.50f
+                drawCircle(tint, 1.5.dp.toPx(), Offset(cx, cy))
+                // Top arrow down
+                drawLine(tint, Offset(cx, size.height * 0.08f), Offset(cx, size.height * 0.34f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx - 3f, size.height * 0.24f), Offset(cx, size.height * 0.34f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx + 3f, size.height * 0.24f), Offset(cx, size.height * 0.34f), s, StrokeCap.Round)
+                // Bottom arrow up
+                drawLine(tint, Offset(cx, size.height * 0.92f), Offset(cx, size.height * 0.66f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx - 3f, size.height * 0.76f), Offset(cx, size.height * 0.66f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx + 3f, size.height * 0.76f), Offset(cx, size.height * 0.66f), s, StrokeCap.Round)
+                // Left arrow right
+                drawLine(tint, Offset(size.width * 0.08f, cy), Offset(size.width * 0.34f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.24f, cy - 3f), Offset(size.width * 0.34f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.24f, cy + 3f), Offset(size.width * 0.34f, cy), s, StrokeCap.Round)
+                // Right arrow left
+                drawLine(tint, Offset(size.width * 0.92f, cy), Offset(size.width * 0.66f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.76f, cy - 3f), Offset(size.width * 0.66f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.76f, cy + 3f), Offset(size.width * 0.66f, cy), s, StrokeCap.Round)
+            }
+        }
+
+        IdeWidgetProperty.MARGIN -> {
+            // |<->| icon matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.7.dp.toPx()
+                val cy = size.height * 0.50f
+                drawLine(tint, Offset(size.width * 0.14f, size.height * 0.20f), Offset(size.width * 0.14f, size.height * 0.80f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.86f, size.height * 0.20f), Offset(size.width * 0.86f, size.height * 0.80f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.28f, cy), Offset(size.width * 0.72f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.28f, cy), Offset(size.width * 0.42f, cy - 3.5f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.28f, cy), Offset(size.width * 0.42f, cy + 3.5f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.72f, cy), Offset(size.width * 0.58f, cy - 3.5f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.72f, cy), Offset(size.width * 0.58f, cy + 3.5f), s, StrokeCap.Round)
+            }
+        }
+
+        IdeWidgetProperty.GRAVITY, IdeWidgetProperty.LAYOUT_GRAVITY -> {
+            // 4 corner brackets + center circle matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.7.dp.toPx()
+                val stroke = Stroke(width = s, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawCircle(tint, radius = size.width * 0.16f, center = Offset(size.width * 0.50f, size.height * 0.50f), style = stroke)
+                // Top-left corner
+                drawLine(tint, Offset(size.width * 0.16f, size.height * 0.34f), Offset(size.width * 0.16f, size.height * 0.16f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.16f, size.height * 0.16f), Offset(size.width * 0.34f, size.height * 0.16f), s, StrokeCap.Round)
+                // Top-right corner
+                drawLine(tint, Offset(size.width * 0.66f, size.height * 0.16f), Offset(size.width * 0.84f, size.height * 0.16f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.84f, size.height * 0.16f), Offset(size.width * 0.84f, size.height * 0.34f), s, StrokeCap.Round)
+                // Bottom-left corner
+                drawLine(tint, Offset(size.width * 0.16f, size.height * 0.66f), Offset(size.width * 0.16f, size.height * 0.84f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.16f, size.height * 0.84f), Offset(size.width * 0.34f, size.height * 0.84f), s, StrokeCap.Round)
+                // Bottom-right corner
+                drawLine(tint, Offset(size.width * 0.66f, size.height * 0.84f), Offset(size.width * 0.84f, size.height * 0.84f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.84f, size.height * 0.66f), Offset(size.width * 0.84f, size.height * 0.84f), s, StrokeCap.Round)
+            }
+        }
+
+        IdeWidgetProperty.WEIGHT -> {
+            // Split rectangle [ |  ] matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.12f, size.height * 0.22f),
+                    size = Size(size.width * 0.76f, size.height * 0.56f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.42f, size.height * 0.22f),
+                    end = Offset(size.width * 0.42f, size.height * 0.78f),
+                    strokeWidth = stroke.width,
+                )
+            }
+        }
+
+        IdeWidgetProperty.TEXT -> {
+            // I-beam cursor + dotted rectangle matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.6.dp.toPx()
+                drawLine(tint, Offset(size.width * 0.22f, size.height * 0.20f), Offset(size.width * 0.22f, size.height * 0.80f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.12f, size.height * 0.20f), Offset(size.width * 0.32f, size.height * 0.20f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.12f, size.height * 0.80f), Offset(size.width * 0.32f, size.height * 0.80f), s, StrokeCap.Round)
+                val dash = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.36f, size.height * 0.24f),
+                    size = Size(size.width * 0.50f, size.height * 0.52f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = Stroke(width = 1.4.dp.toPx(), pathEffect = dash),
+                )
+            }
+        }
+
+        IdeWidgetProperty.TEXT_SIZE -> {
+            SketchWidgetIcon(type = IdeWidgetType.TEXT_VIEW, tint = tint)
+        }
+
+        IdeWidgetProperty.TEXT_STYLE -> {
+            // Paint roller / brush icon matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.18f, size.height * 0.14f),
+                    size = Size(size.width * 0.64f, size.height * 0.34f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                    style = stroke,
+                )
+                drawLine(tint, Offset(size.width * 0.18f, size.height * 0.32f), Offset(size.width * 0.82f, size.height * 0.32f), stroke.width)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.42f, size.height * 0.52f),
+                    size = Size(size.width * 0.16f, size.height * 0.34f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                )
+            }
+        }
+
+        IdeWidgetProperty.TEXT_COLOR, IdeWidgetProperty.BACKGROUND_COLOR -> {
+            // Palette icon matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawCircle(
+                    color = tint,
+                    radius = size.width * 0.38f,
+                    center = Offset(size.width * 0.50f, size.height * 0.50f),
+                    style = stroke,
+                )
+                drawCircle(tint, 1.5.dp.toPx(), Offset(size.width * 0.35f, size.height * 0.38f))
+                drawCircle(tint, 1.5.dp.toPx(), Offset(size.width * 0.50f, size.height * 0.30f))
+                drawCircle(tint, 1.5.dp.toPx(), Offset(size.width * 0.65f, size.height * 0.40f))
+                drawCircle(tint, 2.dp.toPx(), Offset(size.width * 0.60f, size.height * 0.62f))
+            }
+        }
+
+        IdeWidgetProperty.LINES -> {
+            Text(
+                text = "123",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = tint,
+            )
+        }
+
+        IdeWidgetProperty.BACKGROUND_RESOURCE -> {
+            // Rounded square with 3x3 dots inside (matching screenshot)
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.14f, size.height * 0.14f),
+                    size = Size(size.width * 0.72f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    style = stroke,
+                )
+                for (r in 0..2) {
+                    for (c in 0..2) {
+                        drawCircle(
+                            color = tint,
+                            radius = 1.1.dp.toPx(),
+                            center = Offset(
+                                x = size.width * (0.32f + c * 0.18f),
+                                y = size.height * (0.32f + r * 0.18f),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+        IdeWidgetProperty.ROTATE -> {
+            // Rotating diamond arrows matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.6.dp.toPx()
+                val path = Path().apply {
+                    moveTo(size.width * 0.50f, size.height * 0.16f)
+                    lineTo(size.width * 0.84f, size.height * 0.50f)
+                    lineTo(size.width * 0.50f, size.height * 0.84f)
+                    lineTo(size.width * 0.16f, size.height * 0.50f)
+                    close()
+                }
+                drawPath(path, tint, style = Stroke(width = s, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
+
+        IdeWidgetProperty.ALPHA -> {
+            // Droplet icon matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val drop = Path().apply {
+                    moveTo(size.width * 0.50f, size.height * 0.14f)
+                    cubicTo(
+                        size.width * 0.82f, size.height * 0.48f,
+                        size.width * 0.78f, size.height * 0.84f,
+                        size.width * 0.50f, size.height * 0.84f,
+                    )
+                    cubicTo(
+                        size.width * 0.22f, size.height * 0.84f,
+                        size.width * 0.18f, size.height * 0.48f,
+                        size.width * 0.50f, size.height * 0.14f,
+                    )
+                }
+                drawPath(drop, tint, style = stroke)
+                drawArc(
+                    color = tint,
+                    startAngle = 0f,
+                    sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset(size.width * 0.27f, size.height * 0.40f),
+                    size = Size(size.width * 0.46f, size.height * 0.42f),
+                )
+            }
+        }
+
+        IdeWidgetProperty.TRANSLATION_X -> {
+            // <-.. icon matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.7.dp.toPx()
+                val cy = size.height * 0.50f
+                drawLine(tint, Offset(size.width * 0.16f, cy), Offset(size.width * 0.52f, cy), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.16f, cy), Offset(size.width * 0.30f, cy - 3.5f), s, StrokeCap.Round)
+                drawLine(tint, Offset(size.width * 0.16f, cy), Offset(size.width * 0.30f, cy + 3.5f), s, StrokeCap.Round)
+                drawCircle(tint, 1.4.dp.toPx(), Offset(size.width * 0.66f, cy))
+                drawCircle(tint, 1.4.dp.toPx(), Offset(size.width * 0.80f, cy))
+            }
+        }
+
+        IdeWidgetProperty.TRANSLATION_Y -> {
+            // Vertical dots + down arrow matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                val s = 1.7.dp.toPx()
+                val cx = size.width * 0.50f
+                drawCircle(tint, 1.4.dp.toPx(), Offset(cx, size.height * 0.20f))
+                drawCircle(tint, 1.4.dp.toPx(), Offset(cx, size.height * 0.34f))
+                drawLine(tint, Offset(cx, size.height * 0.48f), Offset(cx, size.height * 0.84f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx - 3.5f, size.height * 0.70f), Offset(cx, size.height * 0.84f), s, StrokeCap.Round)
+                drawLine(tint, Offset(cx + 3.5f, size.height * 0.70f), Offset(cx, size.height * 0.84f), s, StrokeCap.Round)
+            }
+        }
+
+        IdeWidgetProperty.SCALE_X -> {
+            // Filled left half + dotted right half matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.14f, size.height * 0.18f),
+                    size = Size(size.width * 0.38f, size.height * 0.64f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                )
+                val dash = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.48f, size.height * 0.22f),
+                    size = Size(size.width * 0.36f, size.height * 0.56f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = Stroke(width = 1.4.dp.toPx(), pathEffect = dash),
+                )
+            }
+        }
+
+        IdeWidgetProperty.SCALE_Y -> {
+            // Filled bottom half + dotted top half matching screenshot
+            Canvas(Modifier.size(20.dp)) {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.18f, size.height * 0.48f),
+                    size = Size(size.width * 0.64f, size.height * 0.36f),
+                    cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                )
+                val dash = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f)
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.22f, size.height * 0.16f),
+                    size = Size(size.width * 0.56f, size.height * 0.34f),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+                    style = Stroke(width = 1.4.dp.toPx(), pathEffect = dash),
+                )
+            }
+        }
+
+        IdeWidgetProperty.ID -> {
+            Box(
+                modifier = Modifier
+                    .border(1.5.dp, tint, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "ID",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = tint,
+                )
             }
         }
     }
@@ -3249,187 +3618,803 @@ private fun AddXmlLayoutDialog(
 }
 
 @Composable
-private fun EditTextViewDialog(
-    initialText: String,
-    viewId: String,
+private fun IdeWidgetPropertyEditDialog(
+    node: IdeWidgetNode,
+    property: IdeWidgetProperty,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+    onSelectFromSeeAll: (IdeWidgetProperty) -> Unit,
+    onUpdateNode: (IdeWidgetNode) -> Unit,
 ) {
-    var text by remember { mutableStateOf(initialText) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
-        titleContentColor = Ink,
-        textContentColor = Ink,
-        shape = RoundedCornerShape(24.dp),
-        title = {
-            Text(
-                text = "TextView (@+id/$viewId)",
-                style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono),
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text("android:text") },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Ink,
-                    unfocusedTextColor = Ink,
-                    cursorColor = Cyan,
-                    focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0x14FFFFFF),
-                    unfocusedContainerColor = Color(0x0AFFFFFF),
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(text.ifBlank { "TextView" }) }) {
-                Text(stringResource(R.string.dialog_save), color = Cyan)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel), color = Muted)
-            }
-        },
-    )
-}
+    var textInput by remember(node.uid, property) {
+        mutableStateOf(
+            when (property) {
+                IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.customAttributes
+                IdeWidgetProperty.CONVERT -> node.type.name
+                IdeWidgetProperty.WIDTH -> node.layoutWidth
+                IdeWidgetProperty.SEE_ALL -> ""
+                IdeWidgetProperty.HEIGHT -> node.layoutHeight
+                IdeWidgetProperty.PADDING -> node.paddingDp.toString()
+                IdeWidgetProperty.MARGIN -> node.marginDp.toString()
+                IdeWidgetProperty.GRAVITY -> node.gravity
+                IdeWidgetProperty.LAYOUT_GRAVITY -> node.layoutGravity
+                IdeWidgetProperty.WEIGHT -> node.weight.toString()
+                IdeWidgetProperty.TEXT -> node.text
+                IdeWidgetProperty.TEXT_SIZE -> node.textSizeSp.toString()
+                IdeWidgetProperty.TEXT_STYLE -> node.textStyle
+                IdeWidgetProperty.TEXT_COLOR -> node.textColor
+                IdeWidgetProperty.LINES -> node.lines.toString()
+                IdeWidgetProperty.BACKGROUND_RESOURCE -> node.backgroundResource
+                IdeWidgetProperty.BACKGROUND_COLOR -> node.backgroundColor
+                IdeWidgetProperty.ROTATE -> node.rotation.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }
+                IdeWidgetProperty.ALPHA -> node.alpha.toString()
+                IdeWidgetProperty.TRANSLATION_X -> node.translationX.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }
+                IdeWidgetProperty.TRANSLATION_Y -> node.translationY.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }
+                IdeWidgetProperty.SCALE_X -> node.scaleX.toString()
+                IdeWidgetProperty.SCALE_Y -> node.scaleY.toString()
+                IdeWidgetProperty.ID -> node.viewId
+            },
+        )
+    }
 
-@Composable
-private fun EditWidgetIdDialog(
-    initialId: String,
-    widgetType: IdeWidgetType,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var rawId by remember { mutableStateOf(initialId) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
-        titleContentColor = Ink,
-        textContentColor = Ink,
-        shape = RoundedCornerShape(24.dp),
-        title = {
-            Text(
-                text = "${sketchWidgetLabel(widgetType)} (@+id/$initialId)",
-                style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono),
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = rawId,
-                onValueChange = { rawId = it },
-                singleLine = true,
-                label = { Text("android:id") },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = JetBrainsMono,
-                    color = Ink,
-                ),
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Ink,
-                    unfocusedTextColor = Ink,
-                    cursorColor = Cyan,
-                    focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0x14FFFFFF),
-                    unfocusedContainerColor = Color(0x0AFFFFFF),
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val cleaned = rawId.trim()
-                        .replace(Regex("[^a-zA-Z0-9_]+"), "_")
-                        .ifBlank { initialId }
-                    onConfirm(cleaned)
-                },
-            ) {
-                Text(stringResource(R.string.dialog_save), color = Cyan)
+    fun applyAndSave(raw: String = textInput) {
+        val trimmed = raw.trim()
+        val updated = when (property) {
+            IdeWidgetProperty.CUSTOM_ATTRIBUTES -> node.copy(customAttributes = trimmed)
+            IdeWidgetProperty.CONVERT -> {
+                val chosenType = runCatching { IdeWidgetType.valueOf(trimmed) }.getOrDefault(node.type)
+                node.copy(type = chosenType)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel), color = Muted)
+            IdeWidgetProperty.WIDTH -> {
+                val clean = when {
+                    trimmed.equals("match_parent", ignoreCase = true) -> "match_parent"
+                    trimmed.equals("wrap_content", ignoreCase = true) -> "wrap_content"
+                    trimmed.endsWith("dp", ignoreCase = true) -> trimmed.lowercase()
+                    trimmed.toIntOrNull() != null -> "${trimmed}dp"
+                    else -> node.layoutWidth
+                }
+                node.copy(layoutWidth = clean)
             }
-        },
-    )
-}
+            IdeWidgetProperty.SEE_ALL -> node
+            IdeWidgetProperty.HEIGHT -> {
+                val clean = when {
+                    trimmed.equals("match_parent", ignoreCase = true) -> "match_parent"
+                    trimmed.equals("wrap_content", ignoreCase = true) -> "wrap_content"
+                    trimmed.endsWith("dp", ignoreCase = true) -> trimmed.lowercase()
+                    trimmed.toIntOrNull() != null -> "${trimmed}dp"
+                    else -> node.layoutHeight
+                }
+                node.copy(layoutHeight = clean)
+            }
+            IdeWidgetProperty.PADDING -> {
+                val dpVal = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 200) ?: node.paddingDp
+                node.copy(paddingDp = dpVal)
+            }
+            IdeWidgetProperty.MARGIN -> {
+                val dpVal = trimmed.removeSuffix("dp").trim().toIntOrNull()?.coerceIn(0, 200) ?: node.marginDp
+                node.copy(marginDp = dpVal)
+            }
+            IdeWidgetProperty.GRAVITY -> node.copy(gravity = trimmed.ifBlank { "left|top" })
+            IdeWidgetProperty.LAYOUT_GRAVITY -> node.copy(layoutGravity = trimmed.ifBlank { "left|top" })
+            IdeWidgetProperty.WEIGHT -> {
+                val w = trimmed.toIntOrNull()?.coerceIn(0, 100) ?: node.weight
+                node.copy(weight = w)
+            }
+            IdeWidgetProperty.TEXT -> node.copy(text = raw.ifBlank { "TextView" })
+            IdeWidgetProperty.TEXT_SIZE -> {
+                val spVal = trimmed.removeSuffix("sp").trim().toIntOrNull()?.coerceIn(8, 96) ?: node.textSizeSp
+                node.copy(textSizeSp = spVal)
+            }
+            IdeWidgetProperty.TEXT_STYLE -> node.copy(textStyle = trimmed.ifBlank { "normal" })
+            IdeWidgetProperty.TEXT_COLOR -> {
+                val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                node.copy(textColor = if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.textColor)
+            }
+            IdeWidgetProperty.LINES -> {
+                val l = trimmed.toIntOrNull()?.coerceIn(0, 100) ?: node.lines
+                node.copy(lines = l)
+            }
+            IdeWidgetProperty.BACKGROUND_RESOURCE -> node.copy(backgroundResource = trimmed.ifBlank { "none" })
+            IdeWidgetProperty.BACKGROUND_COLOR -> {
+                val clean = if (trimmed.equals("transparent", ignoreCase = true) || trimmed.isBlank()) {
+                    "transparent"
+                } else {
+                    val hex = if (trimmed.startsWith("#")) trimmed else "#$trimmed"
+                    if (parseHexColorOrNull(hex) != null) hex.uppercase() else node.backgroundColor
+                }
+                node.copy(backgroundColor = clean)
+            }
+            IdeWidgetProperty.ROTATE -> {
+                val deg = trimmed.removeSuffix("°").trim().toFloatOrNull()?.coerceIn(-360f, 360f) ?: node.rotation
+                node.copy(rotation = deg)
+            }
+            IdeWidgetProperty.ALPHA -> {
+                val a = trimmed.toFloatOrNull()?.coerceIn(0f, 1f) ?: node.alpha
+                node.copy(alpha = a)
+            }
+            IdeWidgetProperty.TRANSLATION_X -> {
+                val tx = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-500f, 500f) ?: node.translationX
+                node.copy(translationX = tx)
+            }
+            IdeWidgetProperty.TRANSLATION_Y -> {
+                val ty = trimmed.removeSuffix("dp").trim().toFloatOrNull()?.coerceIn(-500f, 500f) ?: node.translationY
+                node.copy(translationY = ty)
+            }
+            IdeWidgetProperty.SCALE_X -> {
+                val sx = trimmed.toFloatOrNull()?.coerceIn(0.1f, 5f) ?: node.scaleX
+                node.copy(scaleX = sx)
+            }
+            IdeWidgetProperty.SCALE_Y -> {
+                val sy = trimmed.toFloatOrNull()?.coerceIn(0.1f, 5f) ?: node.scaleY
+                node.copy(scaleY = sy)
+            }
+            IdeWidgetProperty.ID -> {
+                val cleanedId = trimmed.removePrefix("@+id/").replace(Regex("[^a-zA-Z0-9_]+"), "_").ifBlank { node.viewId }
+                node.copy(viewId = cleanedId)
+            }
+        }
+        onUpdateNode(updated)
+    }
 
-@Composable
-private fun EditWidgetDimensionDialog(
-    viewId: String,
-    isWidth: Boolean,
-    currentValue: String,
-    onDismiss: () -> Unit,
-    onSelectValue: (String) -> Unit,
-) {
-    val options = listOf("match_parent", "wrap_content")
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
-        titleContentColor = Ink,
-        textContentColor = Ink,
-        shape = RoundedCornerShape(24.dp),
-        title = {
-            Text(
-                text = "${if (isWidth) "Width" else "Height"} (@+id/$viewId)",
-                style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono),
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.forEach { opt ->
-                    val selected = opt == currentValue
-                    Row(
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) Cyan.copy(alpha = 0.18f) else Color(0x14FFFFFF))
-                            .border(
-                                width = 1.dp,
-                                color = if (selected) Cyan else Color(0x28FFFFFF),
-                                shape = RoundedCornerShape(12.dp),
-                            )
-                            .clickable { onSelectValue(opt) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Cyan.copy(alpha = 0.16f))
+                            .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center,
                     ) {
+                        SketchPropertyVectorIcon(property = property, tint = Cyan)
+                    }
+                    Column {
                         Text(
-                            text = opt,
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            text = property.title,
+                            style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = JetBrainsMono,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                             ),
-                            color = if (selected) Cyan else Ink,
+                            color = Ink,
                         )
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = Cyan,
-                                modifier = Modifier.size(16.dp),
+                        Text(
+                            text = "${sketchWidgetLabel(node.type)} • @+id/${node.viewId}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    when (property) {
+                        IdeWidgetProperty.SEE_ALL -> {
+                            val allPropsForWidget = IdeWidgetProperty.entries.filter { prop ->
+                                prop != IdeWidgetProperty.SEE_ALL &&
+                                    (!prop.textViewOnly || node.type == IdeWidgetType.TEXT_VIEW)
+                            }
+                            allPropsForWidget.forEach { prop ->
+                                val valSummary = propertyValueSummary(node, prop)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0x14FFFFFF))
+                                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(12.dp))
+                                        .clickable { onSelectFromSeeAll(prop) }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        SketchPropertyVectorIcon(property = prop, tint = Cyan)
+                                        Text(
+                                            text = prop.title,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            ),
+                                            color = Ink,
+                                        )
+                                    }
+                                    Text(
+                                        text = valSummary,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = Cyan,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+
+                        IdeWidgetProperty.CONVERT -> {
+                            val candidateTypes = if (node.type.isContainer) {
+                                listOf(
+                                    IdeWidgetType.LINEAR_H,
+                                    IdeWidgetType.LINEAR_V,
+                                    IdeWidgetType.SCROLL_H,
+                                    IdeWidgetType.SCROLL_V,
+                                )
+                            } else {
+                                IdeWidgetType.entries
+                            }
+                            candidateTypes.forEach { t ->
+                                val selected = textInput == t.name
+                                DialogOptionRow(
+                                    label = t.displayName,
+                                    subtitle = if (t.isContainer) "Layout Container" else "View Widget",
+                                    selected = selected,
+                                    onClick = {
+                                        textInput = t.name
+                                        applyAndSave(t.name)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.WIDTH, IdeWidgetProperty.HEIGHT -> {
+                            val presets = listOf("match_parent", "wrap_content", "48dp", "80dp", "120dp", "160dp", "220dp")
+                            presets.forEach { opt ->
+                                DialogOptionRow(
+                                    label = opt,
+                                    selected = textInput.equals(opt, ignoreCase = true),
+                                    onClick = {
+                                        textInput = opt
+                                        applyAndSave(opt)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = if (property == IdeWidgetProperty.WIDTH) "Custom Width (e.g. 140dp)" else "Custom Height (e.g. 90dp)",
+                            )
+                        }
+
+                        IdeWidgetProperty.PADDING, IdeWidgetProperty.MARGIN -> {
+                            val presets = listOf("0", "4", "8", "12", "16", "24", "32")
+                            DialogPresetChipsGrid(
+                                presets = presets,
+                                selectedValue = textInput,
+                                suffix = "dp",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "${property.title} in dp",
+                            )
+                        }
+
+                        IdeWidgetProperty.GRAVITY, IdeWidgetProperty.LAYOUT_GRAVITY -> {
+                            val gravities = listOf(
+                                "left|top",
+                                "center",
+                                "center_horizontal",
+                                "center_vertical",
+                                "left|center_vertical",
+                                "right|center_vertical",
+                                "right|top",
+                                "left|bottom",
+                                "right|bottom",
+                            )
+                            gravities.forEach { g ->
+                                DialogOptionRow(
+                                    label = g,
+                                    selected = textInput == g,
+                                    onClick = {
+                                        textInput = g
+                                        applyAndSave(g)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.WEIGHT -> {
+                            val presets = listOf("0", "1", "2", "3", "4", "5")
+                            DialogPresetChipsGrid(
+                                presets = presets,
+                                selectedValue = textInput,
+                                suffix = "",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:layout_weight",
+                            )
+                        }
+
+                        IdeWidgetProperty.TEXT -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:text",
+                                singleLine = false,
+                            )
+                        }
+
+                        IdeWidgetProperty.TEXT_SIZE -> {
+                            val sizes = listOf("10", "12", "14", "16", "18", "20", "24", "30", "36")
+                            DialogPresetChipsGrid(
+                                presets = sizes,
+                                selectedValue = textInput,
+                                suffix = "sp",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:textSize (sp)",
+                            )
+                        }
+
+                        IdeWidgetProperty.TEXT_STYLE -> {
+                            val styles = listOf("normal", "bold", "italic", "bold|italic")
+                            styles.forEach { st ->
+                                DialogOptionRow(
+                                    label = st,
+                                    selected = textInput == st,
+                                    onClick = {
+                                        textInput = st
+                                        applyAndSave(st)
+                                    },
+                                )
+                            }
+                        }
+
+                        IdeWidgetProperty.TEXT_COLOR -> {
+                            val colors = listOf(
+                                "#000000",
+                                "#1E293B",
+                                "#E11D48",
+                                "#2563EB",
+                                "#0284C7",
+                                "#16A34A",
+                                "#D97706",
+                                "#7C3AED",
+                                "#DB2777",
+                                "#FFFFFF",
+                            )
+                            DialogColorSwatches(
+                                colors = colors,
+                                selectedHex = textInput,
+                                onSelectHex = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Hex Color (#RRGGBB)",
+                            )
+                        }
+
+                        IdeWidgetProperty.LINES -> {
+                            val linePresets = listOf("0", "1", "2", "3", "4", "5", "8")
+                            DialogPresetChipsGrid(
+                                presets = linePresets,
+                                selectedValue = textInput,
+                                suffix = "",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:lines (0 = default)",
+                            )
+                        }
+
+                        IdeWidgetProperty.BACKGROUND_RESOURCE -> {
+                            val resList = listOf(
+                                "none",
+                                "@drawable/rounded_card",
+                                "@drawable/outline_border",
+                                "@drawable/pill_button",
+                                "@android:drawable/dialog_holo_light_frame",
+                            )
+                            resList.forEach { res ->
+                                DialogOptionRow(
+                                    label = res,
+                                    selected = textInput == res,
+                                    onClick = {
+                                        textInput = res
+                                        applyAndSave(res)
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:background (@drawable/...)",
+                            )
+                        }
+
+                        IdeWidgetProperty.BACKGROUND_COLOR -> {
+                            val bgColors = listOf(
+                                "transparent",
+                                "#FFFFFF",
+                                "#F1F5F9",
+                                "#DBEAFE",
+                                "#DCFCE7",
+                                "#FEF3C7",
+                                "#FEE2E2",
+                                "#F3E8FF",
+                                "#E0F2FE",
+                                "#1E293B",
+                            )
+                            DialogColorSwatches(
+                                colors = bgColors,
+                                selectedHex = textInput,
+                                onSelectHex = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Background Color (#RRGGBB or transparent)",
+                            )
+                        }
+
+                        IdeWidgetProperty.ROTATE -> {
+                            val angles = listOf("0", "45", "90", "180", "270", "-45", "-90")
+                            DialogPresetChipsGrid(
+                                presets = angles,
+                                selectedValue = textInput,
+                                suffix = "°",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:rotation (degrees)",
+                            )
+                        }
+
+                        IdeWidgetProperty.ALPHA -> {
+                            val alphas = listOf("1.0", "0.85", "0.7", "0.5", "0.3", "0.1")
+                            DialogPresetChipsGrid(
+                                presets = alphas,
+                                selectedValue = textInput,
+                                suffix = "",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:alpha (0.0 - 1.0)",
+                            )
+                        }
+
+                        IdeWidgetProperty.TRANSLATION_X, IdeWidgetProperty.TRANSLATION_Y -> {
+                            val offsets = listOf("-40", "-20", "-10", "0", "10", "20", "40")
+                            DialogPresetChipsGrid(
+                                presets = offsets,
+                                selectedValue = textInput,
+                                suffix = "dp",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:${property.title.replaceFirstChar { it.lowercase() }} (dp)",
+                            )
+                        }
+
+                        IdeWidgetProperty.SCALE_X, IdeWidgetProperty.SCALE_Y -> {
+                            val scales = listOf("0.5", "0.75", "1.0", "1.25", "1.5", "2.0")
+                            DialogPresetChipsGrid(
+                                presets = scales,
+                                selectedValue = textInput,
+                                suffix = "x",
+                                onSelect = { chosen ->
+                                    textInput = chosen
+                                    applyAndSave(chosen)
+                                },
+                            )
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:${property.title.replaceFirstChar { it.lowercase() }}",
+                            )
+                        }
+
+                        IdeWidgetProperty.CUSTOM_ATTRIBUTES -> {
+                            val sampleAttrs = listOf(
+                                """android:visibility="visible"""",
+                                """android:clickable="true"""",
+                                """android:elevation="4dp"""",
+                            )
+                            sampleAttrs.forEach { sample ->
+                                DialogOptionRow(
+                                    label = sample,
+                                    selected = textInput.contains(sample),
+                                    onClick = {
+                                        textInput = if (textInput.isBlank()) sample else "$textInput\n$sample"
+                                    },
+                                )
+                            }
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "Custom XML attributes",
+                                singleLine = false,
+                            )
+                        }
+
+                        IdeWidgetProperty.ID -> {
+                            DialogTextField(
+                                value = textInput,
+                                onValueChange = { textInput = it },
+                                label = "android:id (@+id/...)",
                             )
                         }
                     }
                 }
+            },
+            confirmButton = {
+                if (property != IdeWidgetProperty.SEE_ALL) {
+                    TextButton(onClick = { applyAndSave() }) {
+                        Text(stringResource(R.string.dialog_save), color = Cyan)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+}
+
+private fun propertyValueSummary(node: IdeWidgetNode, prop: IdeWidgetProperty): String = when (prop) {
+    IdeWidgetProperty.CUSTOM_ATTRIBUTES -> if (node.customAttributes.isBlank()) "none" else "custom"
+    IdeWidgetProperty.CONVERT -> node.type.displayName
+    IdeWidgetProperty.WIDTH -> node.layoutWidth
+    IdeWidgetProperty.SEE_ALL -> ""
+    IdeWidgetProperty.HEIGHT -> node.layoutHeight
+    IdeWidgetProperty.PADDING -> "${node.paddingDp}dp"
+    IdeWidgetProperty.MARGIN -> "${node.marginDp}dp"
+    IdeWidgetProperty.GRAVITY -> node.gravity
+    IdeWidgetProperty.LAYOUT_GRAVITY -> node.layoutGravity
+    IdeWidgetProperty.WEIGHT -> node.weight.toString()
+    IdeWidgetProperty.TEXT -> node.text
+    IdeWidgetProperty.TEXT_SIZE -> "${node.textSizeSp}sp"
+    IdeWidgetProperty.TEXT_STYLE -> node.textStyle
+    IdeWidgetProperty.TEXT_COLOR -> node.textColor
+    IdeWidgetProperty.LINES -> if (node.lines <= 0) "default" else node.lines.toString()
+    IdeWidgetProperty.BACKGROUND_RESOURCE -> node.backgroundResource
+    IdeWidgetProperty.BACKGROUND_COLOR -> node.backgroundColor
+    IdeWidgetProperty.ROTATE -> "${node.rotation.toInt()}°"
+    IdeWidgetProperty.ALPHA -> node.alpha.toString()
+    IdeWidgetProperty.TRANSLATION_X -> "${node.translationX.toInt()}dp"
+    IdeWidgetProperty.TRANSLATION_Y -> "${node.translationY.toInt()}dp"
+    IdeWidgetProperty.SCALE_X -> "${node.scaleX}x"
+    IdeWidgetProperty.SCALE_Y -> "${node.scaleY}x"
+    IdeWidgetProperty.ID -> node.viewId
+}
+
+@Composable
+private fun DialogOptionRow(
+    label: String,
+    subtitle: String? = null,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Cyan.copy(alpha = 0.18f) else Color(0x14FFFFFF))
+            .border(
+                width = 1.dp,
+                color = if (selected) Cyan else Color(0x28FFFFFF),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.5.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                ),
+                color = if (selected) Cyan else Ink,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = Muted,
+                )
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel), color = Muted)
+        }
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = Cyan,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DialogPresetChipsGrid(
+    presets: List<String>,
+    selectedValue: String,
+    suffix: String,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        presets.forEach { preset ->
+            val selected = selectedValue.trim() == preset
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
+                    .border(
+                        width = 1.dp,
+                        color = if (selected) Cyan else Color(0x2EFFFFFF),
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .clickable { onSelect(preset) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$preset$suffix",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = if (selected) Cyan else Ink,
+                )
             }
-        },
+        }
+    }
+}
+
+@Composable
+private fun DialogColorSwatches(
+    colors: List<String>,
+    selectedHex: String,
+    onSelectHex: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        colors.forEach { hex ->
+            val selected = selectedHex.equals(hex, ignoreCase = true)
+            val swatchColor = parseHexColorOrNull(hex) ?: Color.Transparent
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) Cyan.copy(alpha = 0.20f) else Color(0x16FFFFFF))
+                    .border(
+                        width = 1.dp,
+                        color = if (selected) Cyan else Color(0x2EFFFFFF),
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .clickable { onSelectHex(hex) }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(swatchColor)
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), CircleShape),
+                )
+                Text(
+                    text = hex,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.5.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = if (selected) Cyan else Ink,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    singleLine: Boolean = true,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = singleLine,
+        label = { Text(label) },
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            fontFamily = JetBrainsMono,
+            color = Ink,
+        ),
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Ink,
+            unfocusedTextColor = Ink,
+            cursorColor = Cyan,
+            focusedBorderColor = Cyan,
+            unfocusedBorderColor = Color(0x33FFFFFF),
+            focusedContainerColor = Color(0x14FFFFFF),
+            unfocusedContainerColor = Color(0x0AFFFFFF),
+        ),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
