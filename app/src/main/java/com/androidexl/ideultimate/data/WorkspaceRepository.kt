@@ -2392,6 +2392,155 @@ class WorkspaceRepository(context: Context) {
                     .writeText(jsonText, Charsets.UTF_8)
             }
         }
+        // Sync generated Kotlin & Java Activity source code for all enabled events & functions
+        val ktSource = generateKotlinActivityFromLogic(project, xmlPage, logicItems)
+        val javaSource = generateJavaActivityFromLogic(project, xmlPage, logicItems)
+        saveCodeForFlavor(project, xmlPage, CodeEditorFlavor.KOTLIN_ANDROID, ktSource)
+        saveCodeForFlavor(project, xmlPage, CodeEditorFlavor.JAVA_ANDROID, javaSource)
+    }
+
+    private fun generateKotlinActivityFromLogic(
+        project: WorkspaceItem,
+        page: ProjectXmlPage,
+        logicItems: List<IdeLogicItem>,
+    ): String {
+        val sb = StringBuilder()
+        sb.appendLine("package ${project.packageName}")
+        sb.appendLine()
+        sb.appendLine("import android.os.Bundle")
+        sb.appendLine("import android.view.View")
+        sb.appendLine("import android.widget.*")
+        sb.appendLine("import androidx.appcompat.app.AppCompatActivity")
+
+        val customImports = logicItems.filter {
+            it.section == IdeLogicSection.ACTIVITY && it.name.equals("Import", ignoreCase = true)
+        }
+        customImports.forEach { imp ->
+            if (imp.bodyCode.isNotBlank()) {
+                sb.appendLine(imp.bodyCode.trim())
+            }
+        }
+        sb.appendLine()
+        sb.appendLine("class ${page.activityName} : AppCompatActivity() {")
+        sb.appendLine()
+
+        val onCreateItem = logicItems.firstOrNull {
+            it.section == IdeLogicSection.ACTIVITY && it.name.equals("onCreate", ignoreCase = true)
+        }
+        sb.appendLine("    override fun onCreate(savedInstanceState: Bundle?) {")
+        sb.appendLine("        super.onCreate(savedInstanceState)")
+        if (onCreateItem != null && onCreateItem.bodyCode.isNotBlank()) {
+            onCreateItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+        } else {
+            sb.appendLine("        setContentView(R.layout.${page.layoutResourceName})")
+            sb.appendLine("        initializeLogic()")
+        }
+        sb.appendLine("    }")
+        sb.appendLine()
+
+        val initItem = logicItems.firstOrNull {
+            it.section == IdeLogicSection.ACTIVITY && it.name.equals("initializeLogic", ignoreCase = true)
+        }
+        val viewItems = logicItems.filter { it.section == IdeLogicSection.VIEW }
+        sb.appendLine("    private fun initializeLogic() {")
+        if (initItem != null && initItem.bodyCode.isNotBlank()) {
+            initItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+        }
+        viewItems.forEach { vItem ->
+            sb.appendLine()
+            sb.appendLine("        // Event: ${vItem.name}")
+            vItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+        }
+        sb.appendLine("    }")
+
+        // Other Activity lifecycle events
+        logicItems.filter {
+            it.section == IdeLogicSection.ACTIVITY &&
+                !it.name.equals("onCreate", ignoreCase = true) &&
+                !it.name.equals("initializeLogic", ignoreCase = true) &&
+                !it.name.equals("Import", ignoreCase = true)
+        }.forEach { actItem ->
+            sb.appendLine()
+            sb.appendLine("    // Activity Event: ${actItem.name} (${actItem.subtitle})")
+            sb.appendLine("    fun ${actItem.name}() {")
+            actItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+            sb.appendLine("    }")
+        }
+
+        // Component & Drawer events
+        logicItems.filter {
+            it.section == IdeLogicSection.COMPONENT || it.section == IdeLogicSection.DRAWER
+        }.forEach { cdItem ->
+            val safeMethod = cdItem.name.replace(Regex("[^A-Za-z0-9_]"), "_")
+            sb.appendLine()
+            sb.appendLine("    // ${cdItem.section.title}: ${cdItem.name}")
+            sb.appendLine("    private fun $safeMethod() {")
+            cdItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+            sb.appendLine("    }")
+        }
+
+        // Functions
+        logicItems.filter { it.section == IdeLogicSection.FUNCTIONS }.forEach { fn ->
+            val paramsSig = fn.parameters.joinToString(", ") { "${it.name}: ${it.type}" }
+            val retSig = if (fn.returnType.equals("void", ignoreCase = true) || fn.returnType.equals("Unit", ignoreCase = true)) {
+                ""
+            } else {
+                ": ${fn.returnType}"
+            }
+            sb.appendLine()
+            sb.appendLine("    fun ${fn.name}($paramsSig)$retSig {")
+            fn.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+            sb.appendLine("    }")
+        }
+
+        sb.appendLine("}")
+        return sb.toString()
+    }
+
+    private fun generateJavaActivityFromLogic(
+        project: WorkspaceItem,
+        page: ProjectXmlPage,
+        logicItems: List<IdeLogicItem>,
+    ): String {
+        val sb = StringBuilder()
+        sb.appendLine("package ${project.packageName};")
+        sb.appendLine()
+        sb.appendLine("import android.app.Activity;")
+        sb.appendLine("import android.os.Bundle;")
+        sb.appendLine("import android.view.View;")
+        sb.appendLine("import android.widget.*;")
+        sb.appendLine()
+        sb.appendLine("public class ${page.activityName} extends Activity {")
+        sb.appendLine()
+        sb.appendLine("    @Override")
+        sb.appendLine("    protected void onCreate(Bundle savedInstanceState) {")
+        sb.appendLine("        super.onCreate(savedInstanceState);")
+        sb.appendLine("        setContentView(R.layout.${page.layoutResourceName});")
+        sb.appendLine("        initializeLogic();")
+        sb.appendLine("    }")
+        sb.appendLine()
+        sb.appendLine("    private void initializeLogic() {")
+        logicItems.filter { it.section == IdeLogicSection.VIEW }.forEach { vItem ->
+            sb.appendLine("        // Event: ${vItem.name}")
+            vItem.bodyCode.lines().forEach { line ->
+                sb.appendLine("        $line")
+            }
+        }
+        sb.appendLine("    }")
+        sb.appendLine("}")
+        return sb.toString()
     }
 
     private fun parseLogicItemsJson(raw: String): List<IdeLogicItem> = runCatching {

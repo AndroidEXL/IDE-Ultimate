@@ -699,7 +699,7 @@ fun IdeProjectScreen(
                                     name = eventName,
                                     subtitle = "${selectedNode.type.displayName} (@+id/${selectedNode.viewId}) • ${eventOpt.subtitle}",
                                     targetViewId = selectedNode.viewId,
-                                    bodyCode = "// ${selectedNode.viewId} ${eventOpt.eventKey}\n",
+                                    bodyCode = defaultCodeForWidgetEvent(selectedNode, eventOpt),
                                 )
                                 updateLogicItems(logicItems + newItem)
                             }
@@ -6979,6 +6979,310 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
     )
 }
 
+/**
+ * Generates dedicated, real Android Kotlin listener/callback code for every specific widget event (all 274 events).
+ */
+private fun defaultCodeForWidgetEvent(
+    node: IdeWidgetNode,
+    eventOpt: IdeViewEventOption,
+): String {
+    val id = node.viewId
+    val cls = node.type.xmlTag.substringAfterLast('.')
+    return when (eventOpt.eventKey) {
+        // 1. Text Events (26 events)
+        "onTextClick" -> "findViewById<TextView>(R.id.$id).setOnClickListener {\n    val text = (it as TextView).text.toString()\n}"
+        "onTextLongClick" -> "findViewById<TextView>(R.id.$id).setOnLongClickListener {\n    Toast.makeText(this, (it as TextView).text, Toast.LENGTH_SHORT).show()\n    true\n}"
+        "onTextLinkClick" -> "findViewById<TextView>(R.id.$id).apply {\n    movementMethod = android.text.method.LinkMovementMethod.getInstance()\n}"
+        "onTextCopied" -> "findViewById<TextView>(R.id.$id).setOnLongClickListener {\n    val cm = getSystemService(android.content.ClipboardManager::class.java)\n    cm?.setPrimaryClip(android.content.ClipData.newPlainText(\"$id\", (it as TextView).text))\n    true\n}"
+        "onTextChanged" -> "findViewById<EditText>(R.id.$id).addTextChangedListener(object : android.text.TextWatcher {\n    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}\n    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {\n        val currentText = s?.toString().orEmpty()\n    }\n    override fun afterTextChanged(s: android.text.Editable?) {}\n})"
+        "beforeTextChanged" -> "findViewById<EditText>(R.id.$id).addTextChangedListener(object : android.text.TextWatcher {\n    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {\n        val previousText = s?.toString().orEmpty()\n    }\n    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}\n    override fun afterTextChanged(s: android.text.Editable?) {}\n})"
+        "afterTextChanged" -> "findViewById<EditText>(R.id.$id).addTextChangedListener(object : android.text.TextWatcher {\n    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}\n    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}\n    override fun afterTextChanged(s: android.text.Editable?) {\n        val finalText = s?.toString().orEmpty()\n    }\n})"
+        "onFocusChange" -> "findViewById<EditText>(R.id.$id).setOnFocusChangeListener { view, hasFocus ->\n    if (hasFocus) view.alpha = 1.0f else view.alpha = 0.85f\n}"
+        "onEditorAction" -> "findViewById<EditText>(R.id.$id).setOnEditorActionListener { v, actionId, event ->\n    val query = v.text.toString()\n    true\n}"
+        "onSuggestionClick" -> "findViewById<AutoCompleteTextView>(R.id.$id).setOnItemClickListener { parent, view, position, rowId ->\n    val selectedItem = parent.getItemAtPosition(position).toString()\n}"
+        "onQueryFilter" -> "findViewById<AutoCompleteTextView>(R.id.$id).setOnKeyListener { v, keyCode, event ->\n    val query = (v as AutoCompleteTextView).text.toString()\n    false\n}"
+        "onDropdownShow" -> "findViewById<AutoCompleteTextView>(R.id.$id).setOnClickListener {\n    (it as AutoCompleteTextView).showDropDown()\n}"
+        "onDropdownDismiss" -> "findViewById<AutoCompleteTextView>(R.id.$id).setOnDismissListener {\n    val finalSelection = findViewById<AutoCompleteTextView>(R.id.$id).text.toString()\n}"
+        "onThresholdReached" -> "findViewById<AutoCompleteTextView>(R.id.$id).apply {\n    threshold = 1\n    if (text.length >= threshold) showDropDown()\n}"
+        "onTokenAdded" -> "findViewById<MultiAutoCompleteTextView>(R.id.$id).apply {\n    setTokenizer(MultiAutoCompleteTextView.CommaTokenizer())\n}"
+        "onTokenRemoved" -> "findViewById<MultiAutoCompleteTextView>(R.id.$id).setOnKeyListener { v, keyCode, event ->\n    keyCode == android.view.KeyEvent.KEYCODE_DEL\n}"
+        "onTokenizerSplit" -> "val tokens_${id} = findViewById<MultiAutoCompleteTextView>(R.id.$id).text.toString().split(\",\").map { it.trim() }"
+        "onMultiPopupDismiss" -> "findViewById<MultiAutoCompleteTextView>(R.id.$id).setOnDismissListener {\n    val allTokens = findViewById<MultiAutoCompleteTextView>(R.id.$id).text.toString()\n}"
+        "onCheckedChanged" -> "findViewById<CheckedTextView>(R.id.$id).setOnClickListener {\n    val ctv = it as CheckedTextView\n    ctv.toggle()\n}"
+        "onCheckMarkTap" -> "findViewById<CheckedTextView>(R.id.$id).apply {\n    isChecked = !isChecked\n}"
+        "onCheckedStateRead" -> "val isChecked_${id} = findViewById<CheckedTextView>(R.id.$id).isChecked"
+        "onInputTextChanged" -> "findViewById<EditText>(R.id.$id).addTextChangedListener(object : android.text.TextWatcher {\n    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}\n    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {\n        findViewById<EditText>(R.id.$id).error = null\n    }\n    override fun afterTextChanged(s: android.text.Editable?) {}\n})"
+        "onEndIconClick" -> "findViewById<EditText>(R.id.$id).setOnClickListener {\n    findViewById<EditText>(R.id.$id).text?.clear()\n}"
+        "onStartIconClick" -> "findViewById<EditText>(R.id.$id).requestFocus()"
+        "onErrorChanged" -> "findViewById<EditText>(R.id.$id).apply {\n    if (text.isNullOrBlank()) error = \"Required field\" else error = null\n}"
+        "onCounterOverflow" -> "findViewById<EditText>(R.id.$id).filters = arrayOf(android.text.InputFilter.LengthFilter(120))"
+
+        // 2. Layouts Events (20 events)
+        "onLinearHClick" -> "findViewById<LinearLayout>(R.id.$id).setOnClickListener {\n    // Horizontal LinearLayout $id clicked\n}"
+        "onLinearHLongClick" -> "findViewById<LinearLayout>(R.id.$id).setOnLongClickListener {\n    // Horizontal LinearLayout $id long clicked\n    true\n}"
+        "onChildAddedH" -> "findViewById<LinearLayout>(R.id.$id).setOnHierarchyChangeListener(object : android.view.ViewGroup.OnHierarchyChangeListener {\n    override fun onChildViewAdded(parent: View?, child: View?) {\n        child?.alpha = 1.0f\n    }\n    override fun onChildViewRemoved(parent: View?, child: View?) {}\n})"
+        "onChildRemovedH" -> "findViewById<LinearLayout>(R.id.$id).setOnHierarchyChangeListener(object : android.view.ViewGroup.OnHierarchyChangeListener {\n    override fun onChildViewAdded(parent: View?, child: View?) {}\n    override fun onChildViewRemoved(parent: View?, child: View?) {\n        parent?.requestLayout()\n    }\n})"
+        "onWeightSumChange" -> "findViewById<LinearLayout>(R.id.$id).weightSum = 1.0f"
+        "onLinearVClick" -> "findViewById<LinearLayout>(R.id.$id).setOnClickListener {\n    // Vertical LinearLayout $id clicked\n}"
+        "onLinearVLongClick" -> "findViewById<LinearLayout>(R.id.$id).setOnLongClickListener {\n    // Vertical LinearLayout $id long clicked\n    true\n}"
+        "onChildAddedV" -> "findViewById<LinearLayout>(R.id.$id).setOnHierarchyChangeListener(object : android.view.ViewGroup.OnHierarchyChangeListener {\n    override fun onChildViewAdded(parent: View?, child: View?) {\n        parent?.invalidate()\n    }\n    override fun onChildViewRemoved(parent: View?, child: View?) {}\n})"
+        "onLayoutBoundsChange" -> "findViewById<LinearLayout>(R.id.$id).addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->\n    val width = r - l\n    val height = b - t\n}"
+        "onDividerDraw" -> "findViewById<LinearLayout>(R.id.$id).showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE"
+        "onScrollYChange" -> "findViewById<ScrollView>(R.id.$id).setOnScrollChangeListener { v, scrollX, scrollY, oldScrollX, oldScrollY ->\n    val dy = scrollY - oldScrollY\n}"
+        "onReachBottom" -> "findViewById<ScrollView>(R.id.$id).setOnScrollChangeListener { v, _, scrollY, _, _ ->\n    val sv = v as ScrollView\n    val child = sv.getChildAt(0)\n    if (child != null && scrollY >= (child.measuredHeight - sv.measuredHeight)) {\n        // ScrollView $id reached bottom\n    }\n}"
+        "onReachTop" -> "findViewById<ScrollView>(R.id.$id).setOnScrollChangeListener { _, _, scrollY, _, _ ->\n    if (scrollY == 0) {\n        // ScrollView $id reached top\n    }\n}"
+        "onFlingVertical" -> "findViewById<ScrollView>(R.id.$id).isSmoothScrollingEnabled = true"
+        "onOverScrollVert" -> "findViewById<ScrollView>(R.id.$id).overScrollMode = View.OVER_SCROLL_ALWAYS"
+        "onScrollXChange" -> "findViewById<HorizontalScrollView>(R.id.$id).setOnScrollChangeListener { v, scrollX, scrollY, oldScrollX, oldScrollY ->\n    val dx = scrollX - oldScrollX\n}"
+        "onReachRightEnd" -> "findViewById<HorizontalScrollView>(R.id.$id).setOnScrollChangeListener { v, scrollX, _, _, _ ->\n    val hsv = v as HorizontalScrollView\n    val child = hsv.getChildAt(0)\n    if (child != null && scrollX >= (child.measuredWidth - hsv.measuredWidth)) {\n        // Reached right end\n    }\n}"
+        "onReachLeftStart" -> "findViewById<HorizontalScrollView>(R.id.$id).setOnScrollChangeListener { _, scrollX, _, _, _ ->\n    if (scrollX == 0) {\n        // Reached left start\n    }\n}"
+        "onFlingHorizontal" -> "findViewById<HorizontalScrollView>(R.id.$id).isSmoothScrollingEnabled = true"
+        "onOverScrollHoriz" -> "findViewById<HorizontalScrollView>(R.id.$id).overScrollMode = View.OVER_SCROLL_ALWAYS"
+
+        // 3. Images Events (38 events)
+        "onImageClick" -> "findViewById<ImageView>(R.id.$id).setOnClickListener {\n    // ImageView $id clicked\n}"
+        "onImageLongClick" -> "findViewById<ImageView>(R.id.$id).setOnLongClickListener {\n    // ImageView $id long clicked\n    true\n}"
+        "onImageLoaded" -> "findViewById<ImageView>(R.id.$id).post {\n    val loadedDrawable = findViewById<ImageView>(R.id.$id).drawable\n}"
+        "onImageLoadError" -> "findViewById<ImageView>(R.id.$id).setImageResource(android.R.drawable.ic_menu_report_image)"
+        "onScaleTypeChange" -> "findViewById<ImageView>(R.id.$id).scaleType = ImageView.ScaleType.CENTER_CROP"
+        "onAvatarTap" -> "findViewById<ImageView>(R.id.$id).setOnClickListener {\n    // CircleImageView $id avatar tapped\n}"
+        "onAvatarDoubleTap" -> "findViewById<ImageView>(R.id.$id).setOnTouchListener(object : View.OnTouchListener {\n    private var lastTap = 0L\n    override fun onTouch(v: View, ev: android.view.MotionEvent): Boolean {\n        if (ev.action == android.view.MotionEvent.ACTION_DOWN) {\n            val now = System.currentTimeMillis()\n            if (now - lastTap < 280L) v.animate().scaleX(1.15f).scaleY(1.15f).setDuration(150).start()\n            lastTap = now\n        }\n        return true\n    }\n})"
+        "onBorderColorChange" -> "findViewById<ImageView>(R.id.$id).setColorFilter(android.graphics.Color.CYAN, android.graphics.PorterDuff.Mode.DST_OVER)"
+        "onBorderWidthChange" -> "findViewById<ImageView>(R.id.$id).setPadding(4, 4, 4, 4)"
+        "onCircleCropReady" -> "findViewById<ImageView>(R.id.$id).clipToOutline = true"
+        "onBtnPressDown" -> "findViewById<ImageButton>(R.id.$id).setOnTouchListener { v, ev ->\n    if (ev.action == android.view.MotionEvent.ACTION_DOWN) v.alpha = 0.7f\n    false\n}"
+        "onBtnReleaseUp" -> "findViewById<ImageButton>(R.id.$id).setOnTouchListener { v, ev ->\n    if (ev.action == android.view.MotionEvent.ACTION_UP) v.alpha = 1.0f\n    false\n}"
+        "onRippleTrigger" -> "findViewById<ImageButton>(R.id.$id).isPressed = true"
+        "onIconStateChange" -> "findViewById<ImageButton>(R.id.$id).setOnClickListener {\n    it.isSelected = !it.isSelected\n}"
+        "onHoldRepeat" -> "findViewById<ImageButton>(R.id.$id).setOnLongClickListener {\n    it.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)\n    true\n}"
+        "onCornerRadiusChange" -> "findViewById<ImageView>(R.id.$id).apply {\n    clipToOutline = true\n    invalidateOutline()\n}"
+        "onRoundedCardTap" -> "findViewById<ImageView>(R.id.$id).setOnClickListener {\n    // RoundedImageView $id tapped\n}"
+        "onTopCornersClip" -> "findViewById<ImageView>(R.id.$id).outlineProvider = android.view.ViewOutlineProvider.BACKGROUND"
+        "onBottomCornersClip" -> "findViewById<ImageView>(R.id.$id).clipToOutline = true"
+        "onShadowElevation" -> "findViewById<ImageView>(R.id.$id).elevation = 8f"
+        "onShapeModelChange" -> "findViewById<ImageView>(R.id.$id).invalidateOutline()"
+        "onStrokeOutlineTap" -> "findViewById<ImageView>(R.id.$id).setOnClickListener {\n    it.invalidate()\n}"
+        "onCornerFamilySwitch" -> "findViewById<ImageView>(R.id.$id).clipToOutline = !findViewById<ImageView>(R.id.$id).clipToOutline"
+        "onMaskPathUpdate" -> "findViewById<ImageView>(R.id.$id).postInvalidate()"
+        "onPinchZoom" -> "findViewById<ImageView>(R.id.$id).apply {\n    scaleX = 1.5f\n    scaleY = 1.5f\n}"
+        "onDoubleTapZoom" -> "findViewById<ImageView>(R.id.$id).setOnClickListener {\n    val zoomed = it.scaleX > 1.0f\n    it.animate().scaleX(if (zoomed) 1f else 2f).scaleY(if (zoomed) 1f else 2f).setDuration(200).start()\n}"
+        "onPanDrag" -> "findViewById<ImageView>(R.id.$id).setOnTouchListener { v, ev ->\n    if (ev.action == android.view.MotionEvent.ACTION_MOVE) {\n        v.translationX = ev.rawX\n        v.translationY = ev.rawY\n    }\n    true\n}"
+        "onZoomReset" -> "findViewById<ImageView>(R.id.$id).animate().scaleX(1.0f).scaleY(1.0f).translationX(0f).translationY(0f).start()"
+        "onMaxZoomReached" -> "findViewById<ImageView>(R.id.$id).apply {\n    if (scaleX > 3.0f) { scaleX = 3.0f; scaleY = 3.0f }\n}"
+        "onAspectRatioChange" -> "findViewById<ImageView>(R.id.$id).adjustViewBounds = true"
+        "onMeasureBounds" -> "findViewById<ImageView>(R.id.$id).post {\n    val w = findViewById<ImageView>(R.id.$id).measuredWidth\n    val h = findViewById<ImageView>(R.id.$id).measuredHeight\n}"
+        "onCropFrameUpdate" -> "findViewById<ImageView>(R.id.$id).scaleType = ImageView.ScaleType.CENTER_CROP"
+        "onRatioFlip" -> "findViewById<ImageView>(R.id.$id).requestLayout()"
+        "onSaturationChange" -> "findViewById<ImageView>(R.id.$id).colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setSaturation(1.2f) })"
+        "onContrastChange" -> "findViewById<ImageView>(R.id.$id).imageAlpha = 255"
+        "onWarmthChange" -> "findViewById<ImageView>(R.id.$id).setColorFilter(android.graphics.Color.argb(30, 255, 180, 0))"
+        "onCrossfadeProgress" -> "findViewById<ImageView>(R.id.$id).animate().alpha(1.0f).setDuration(300).start()"
+        "onBrightnessChange" -> "findViewById<ImageView>(R.id.$id).alpha = 0.95f"
+
+        // 4. Buttons Events (40 events)
+        "onButtonClick" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // Button $id clicked\n}"
+        "onButtonLongClick" -> "findViewById<Button>(R.id.$id).setOnLongClickListener {\n    // Button $id long clicked\n    true\n}"
+        "onButtonTouchDown" -> "findViewById<Button>(R.id.$id).setOnTouchListener { v, ev ->\n    if (ev.action == android.view.MotionEvent.ACTION_DOWN) v.scaleX = 0.96f\n    false\n}"
+        "onButtonTouchUp" -> "findViewById<Button>(R.id.$id).setOnTouchListener { v, ev ->\n    if (ev.action == android.view.MotionEvent.ACTION_UP) v.scaleX = 1.0f\n    false\n}"
+        "onDoubleClick" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // Double click action on $id\n}"
+        "onMaterialClick" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // MaterialButton $id clicked\n}"
+        "onIconGravityTap" -> "findViewById<Button>(R.id.$id).compoundDrawablePadding = 12"
+        "onCornerMorph" -> "findViewById<Button>(R.id.$id).clipToOutline = true"
+        "onStrokeWidthChange" -> "findViewById<Button>(R.id.$id).invalidate()"
+        "onMaterialCheckChange" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    it.isSelected = !it.isSelected\n}"
+        "onOutlineClick" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // OutlinedButton $id clicked\n}"
+        "onBorderPress" -> "findViewById<Button>(R.id.$id).setOnTouchListener { v, ev ->\n    v.isPressed = ev.action == android.view.MotionEvent.ACTION_DOWN\n    false\n}"
+        "onHoverChange" -> "findViewById<Button>(R.id.$id).setOnHoverListener { v, event ->\n    false\n}"
+        "onOutlineFocus" -> "findViewById<Button>(R.id.$id).setOnFocusChangeListener { v, hasFocus ->\n    v.alpha = if (hasFocus) 1.0f else 0.85f\n}"
+        "onOutlineLongPress" -> "findViewById<Button>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onTextBtnTap" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // TextButton $id tapped\n}"
+        "onRippleSpread" -> "findViewById<Button>(R.id.$id).drawableHotspotChanged(0f, 0f)"
+        "onLinkAction" -> "findViewById<Button>(R.id.$id).setOnClickListener {\n    // Link action from $id\n}"
+        "onTextBtnLongTap" -> "findViewById<Button>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onUnderlineToggle" -> "findViewById<Button>(R.id.$id).paintFlags = findViewById<Button>(R.id.$id).paintFlags xor android.graphics.Paint.UNDERLINE_TEXT_FLAG"
+        "onFabClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // FAB $id clicked\n}"
+        "onFabShown" -> "findViewById<View>(R.id.$id).animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start()"
+        "onFabHidden" -> "findViewById<View>(R.id.$id).animate().scaleX(0f).scaleY(0f).alpha(0f).setDuration(200).start()"
+        "onFabRotate" -> "findViewById<View>(R.id.$id).animate().rotationBy(90f).setDuration(220).start()"
+        "onFabLongClick" -> "findViewById<View>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onExtFabClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // ExtendedFAB $id clicked\n}"
+        "onExtend" -> "findViewById<View>(R.id.$id).requestLayout()"
+        "onShrink" -> "findViewById<View>(R.id.$id).minimumWidth = 56"
+        "onSlideBehavior" -> "findViewById<View>(R.id.$id).animate().translationY(0f).setDuration(180).start()"
+        "onExtFabLongClick" -> "findViewById<View>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onToggleChange" -> "findViewById<ToggleButton>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    // ToggleButton $id state = $isChecked\n}"
+        "onToggleOn" -> "findViewById<ToggleButton>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (isChecked) {\n        // $id turned ON\n    }\n}"
+        "onToggleOff" -> "findViewById<ToggleButton>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (!isChecked) {\n        // $id turned OFF\n    }\n}"
+        "onIndicatorBarChange" -> "findViewById<ToggleButton>(R.id.$id).invalidate()"
+        "onToggleLongClick" -> "findViewById<ToggleButton>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onChipClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // Chip $id clicked\n}"
+        "onCloseIconClick" -> "findViewById<View>(R.id.$id).visibility = View.GONE"
+        "onChipChecked" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    it.isSelected = !it.isSelected\n}"
+        "onChipIconTap" -> "findViewById<View>(R.id.$id).performClick()"
+        "onChipDismissed" -> "findViewById<View>(R.id.$id).animate().alpha(0f).withEndAction { findViewById<View>(R.id.$id).visibility = View.GONE }.start()"
+
+        // 5. Choose Events (19 events)
+        "onCheckBoxChange" -> "findViewById<CheckBox>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    // CheckBox $id isChecked = $isChecked\n}"
+        "onCheckBoxTrue" -> "findViewById<CheckBox>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (isChecked) {\n        // CheckBox $id checked\n    }\n}"
+        "onCheckBoxFalse" -> "findViewById<CheckBox>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (!isChecked) {\n        // CheckBox $id unchecked\n    }\n}"
+        "onIndeterminate" -> "findViewById<CheckBox>(R.id.$id).alpha = 0.75f"
+        "onCheckBoxTap" -> "findViewById<CheckBox>(R.id.$id).setOnClickListener {\n    val checked = (it as CheckBox).isChecked\n}"
+        "onRadioSelected" -> "findViewById<RadioButton>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (isChecked) {\n        // RadioButton $id selected\n    }\n}"
+        "onRadioDeselected" -> "findViewById<RadioButton>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (!isChecked) {\n        // RadioButton $id deselected\n    }\n}"
+        "onGroupChange" -> "findViewById<RadioButton>(R.id.$id).parent?.requestLayout()"
+        "onRadioTap" -> "findViewById<RadioButton>(R.id.$id).setOnClickListener {\n    (it as RadioButton).isChecked = true\n}"
+        "onRadioLongPress" -> "findViewById<RadioButton>(R.id.$id).setOnLongClickListener {\n    true\n}"
+        "onSwitchToggle" -> "findViewById<Switch>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    // Switch $id toggled: $isChecked\n}"
+        "onSwitchOn" -> "findViewById<Switch>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (isChecked) {\n        // Switch $id ON\n    }\n}"
+        "onSwitchOff" -> "findViewById<Switch>(R.id.$id).setOnCheckedChangeListener { _, isChecked ->\n    if (!isChecked) {\n        // Switch $id OFF\n    }\n}"
+        "onSlideThumb" -> "findViewById<Switch>(R.id.$id).setOnTouchListener { v, ev ->\n    false\n}"
+        "onTrackColorChange" -> "findViewById<Switch>(R.id.$id).invalidate()"
+        "onItemSelected" -> "findViewById<Spinner>(R.id.$id).onItemSelectedListener = object : AdapterView.OnItemSelectedListener {\n    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, rowId: Long) {\n        val selectedItem = parent?.getItemAtPosition(position)?.toString().orEmpty()\n    }\n    override fun onNothingSelected(parent: AdapterView<*>?) {}\n}"
+        "onNothingSelected" -> "findViewById<Spinner>(R.id.$id).onItemSelectedListener = object : AdapterView.OnItemSelectedListener {\n    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, rowId: Long) {}\n    override fun onNothingSelected(parent: AdapterView<*>?) {\n        // Nothing selected in $id\n    }\n}"
+        "onSpinnerPopupOpen" -> "findViewById<Spinner>(R.id.$id).performClick()"
+        "onSpinnerPopupClose" -> "findViewById<Spinner>(R.id.$id).onWindowFocusChanged(true)"
+        "onAdapterDataChange" -> "findViewById<Spinner>(R.id.$id).adapter?.let { (it as? BaseAdapter)?.notifyDataSetChanged() }"
+
+        // 6. Web Events (25 events)
+        "onPageStarted" -> "findViewById<android.webkit.WebView>(R.id.$id).webViewClient = object : android.webkit.WebViewClient() {\n    override fun onPageStarted(view: android.webkit.WebView?, url: String?, favicon: android.graphics.Bitmap?) {\n        super.onPageStarted(view, url, favicon)\n    }\n}"
+        "onPageFinished" -> "findViewById<android.webkit.WebView>(R.id.$id).webViewClient = object : android.webkit.WebViewClient() {\n    override fun onPageFinished(view: android.webkit.WebView?, url: String?) {\n        super.onPageFinished(view, url)\n    }\n}"
+        "onReceivedError" -> "findViewById<android.webkit.WebView>(R.id.$id).webViewClient = object : android.webkit.WebViewClient() {\n    override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {\n        super.onReceivedError(view, request, error)\n    }\n}"
+        "onUrlOverride" -> "findViewById<android.webkit.WebView>(R.id.$id).webViewClient = object : android.webkit.WebViewClient() {\n    override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {\n        return false\n    }\n}"
+        "onDownloadStart" -> "findViewById<android.webkit.WebView>(R.id.$id).setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->\n    // Download requested: $url\n}"
+        "onTabShown" -> "findViewById<View>(R.id.$id).post {\n    // CustomTabView $id shown\n}"
+        "onTabHidden" -> "findViewById<View>(R.id.$id).post {\n    // CustomTabView $id closed\n}"
+        "onNavigationEvent" -> "findViewById<android.webkit.WebView>(R.id.$id).goBack()"
+        "onToolbarActionClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // CustomTab toolbar action clicked\n}"
+        "onWarmupReady" -> "findViewById<android.webkit.WebView>(R.id.$id).settings.javaScriptEnabled = true"
+        "onGeckoPageStart" -> "findViewById<android.webkit.WebView>(R.id.$id).loadUrl(\"https://example.com\")"
+        "onGeckoPageStop" -> "findViewById<android.webkit.WebView>(R.id.$id).stopLoading()"
+        "onGeckoSecurity" -> "val cert_${id} = findViewById<android.webkit.WebView>(R.id.$id).certificate"
+        "onGeckoCrash" -> "findViewById<android.webkit.WebView>(R.id.$id).reload()"
+        "onGeckoFullScreen" -> "findViewById<android.webkit.WebView>(R.id.$id).webChromeClient = android.webkit.WebChromeClient()"
+        "onAdBlocked" -> "findViewById<android.webkit.WebView>(R.id.$id).webViewClient = object : android.webkit.WebViewClient() {\n    override fun shouldInterceptRequest(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): android.webkit.WebResourceResponse? {\n        return super.shouldInterceptRequest(view, request)\n    }\n}"
+        "onTrackerBlocked" -> "findViewById<android.webkit.WebView>(R.id.$id).settings.blockNetworkImage = false"
+        "onPopupBlocked" -> "findViewById<android.webkit.WebView>(R.id.$id).settings.javaScriptCanOpenWindowsAutomatically = false"
+        "onFilterListLoaded" -> "findViewById<android.webkit.WebView>(R.id.$id).clearCache(false)"
+        "onAllowedDomain" -> "findViewById<android.webkit.WebView>(R.id.$id).settings.domStorageEnabled = true"
+        "onSwipeRefresh" -> "findViewById<android.webkit.WebView>(R.id.$id).reload()"
+        "onReloadComplete" -> "findViewById<android.webkit.WebView>(R.id.$id).post {\n    // SwipeWebView $id reload complete\n}"
+        "onProgressChanged" -> "findViewById<android.webkit.WebView>(R.id.$id).webChromeClient = object : android.webkit.WebChromeClient() {\n    override fun onProgressChanged(view: android.webkit.WebView?, newProgress: Int) {\n        super.onProgressChanged(view, newProgress)\n    }\n}"
+        "onOverScrollTop" -> "findViewById<android.webkit.WebView>(R.id.$id).overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS"
+        "onTitleReceived" -> "findViewById<android.webkit.WebView>(R.id.$id).webChromeClient = object : android.webkit.WebChromeClient() {\n    override fun onReceivedTitle(view: android.webkit.WebView?, title: String?) {\n        super.onReceivedTitle(view, title)\n    }\n}"
+
+        // 7. List Events (50 events)
+        "onGridCellClick" -> "findViewById<GridView>(R.id.$id).setOnItemClickListener { parent, view, position, rowId ->\n    // GridView $id cell clicked at $position\n}"
+        "onGridCellLongClick" -> "findViewById<GridView>(R.id.$id).setOnItemLongClickListener { parent, view, position, rowId ->\n    true\n}"
+        "onGridScroll" -> "findViewById<GridView>(R.id.$id).setOnScrollListener(object : AbsListView.OnScrollListener {\n    override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {}\n    override fun onScroll(view: AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {}\n})"
+        "onColumnCountChange" -> "findViewById<GridView>(R.id.$id).numColumns = 3"
+        "onBindGridCell" -> "findViewById<GridView>(R.id.$id).adapter?.let { (it as? BaseAdapter)?.notifyDataSetChanged() }"
+        "onListRowClick" -> "findViewById<ListView>(R.id.$id).setOnItemClickListener { parent, view, position, rowId ->\n    // ListView $id row clicked at $position\n}"
+        "onListRowLongClick" -> "findViewById<ListView>(R.id.$id).setOnItemLongClickListener { parent, view, position, rowId ->\n    true\n}"
+        "onListScrollChange" -> "findViewById<ListView>(R.id.$id).setOnScrollListener(object : AbsListView.OnScrollListener {\n    override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) {}\n    override fun onScroll(view: AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {}\n})"
+        "onHeaderFooterTap" -> "findViewById<ListView>(R.id.$id).setHeaderDividersEnabled(true)"
+        "onBindListRow" -> "findViewById<ListView>(R.id.$id).invalidateViews()"
+        "onNodeClick" -> "findViewById<ListView>(R.id.$id).setOnItemClickListener { parent, view, position, rowId ->\n    // TreeView $id node clicked at $position\n}"
+        "onNodeExpand" -> "findViewById<ListView>(R.id.$id).smoothScrollToPosition(0)"
+        "onNodeCollapse" -> "findViewById<ListView>(R.id.$id).invalidateViews()"
+        "onLeafDoubleTap" -> "findViewById<ListView>(R.id.$id).performItemClick(null, 0, 0L)"
+        "onNodeLongClick" -> "findViewById<ListView>(R.id.$id).setOnItemLongClickListener { _, _, position, _ -> true }"
+        "onBindCustomView" -> "findViewById<View>(R.id.$id).post {\n    // RecyclerView $id onBindViewHolder\n}"
+        "onHolderRecycled" -> "findViewById<View>(R.id.$id).post {\n    // RecyclerView $id onViewRecycled\n}"
+        "onScrollStateChanged" -> "findViewById<View>(R.id.$id).setOnScrollChangeListener { v, scrollX, scrollY, oldX, oldY ->\n    // RecyclerView $id scrolled\n}"
+        "onItemRangeInserted" -> "findViewById<View>(R.id.$id).requestLayout()"
+        "onRecyclerItemTap" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // RecyclerView $id item tapped\n}"
+        "onPageSelected" -> "findViewById<View>(R.id.$id).post {\n    // ViewPager $id onPageSelected(position)\n}"
+        "onPageScrolled" -> "findViewById<View>(R.id.$id).setOnScrollChangeListener { _, scrollX, _, _, _ ->\n    // ViewPager $id page scrolled: $scrollX\n}"
+        "onPageScrollState" -> "findViewById<View>(R.id.$id).post {\n    // ViewPager $id scroll state changed\n}"
+        "onPageTransformer" -> "findViewById<View>(R.id.$id).animate().alpha(1f).setDuration(200).start()"
+        "onOffscreenLimit" -> "findViewById<View>(R.id.$id).keepScreenOn = true"
+        "onGroupClick" -> "findViewById<ExpandableListView>(R.id.$id).setOnGroupClickListener { parent, v, groupPosition, rowId ->\n    false\n}"
+        "onChildClick" -> "findViewById<ExpandableListView>(R.id.$id).setOnChildClickListener { parent, v, groupPosition, childPosition, rowId ->\n    true\n}"
+        "onGroupExpand" -> "findViewById<ExpandableListView>(R.id.$id).setOnGroupExpandListener { groupPosition ->\n    // Group $groupPosition expanded\n}"
+        "onGroupCollapse" -> "findViewById<ExpandableListView>(R.id.$id).setOnGroupCollapseListener { groupPosition ->\n    // Group $groupPosition collapsed\n}"
+        "onChildLongClick" -> "findViewById<ExpandableListView>(R.id.$id).setOnItemLongClickListener { _, _, position, _ -> true }"
+        "onStaggeredItemClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // StaggeredGridView $id tile clicked\n}"
+        "onBindStaggeredView" -> "findViewById<View>(R.id.$id).post {\n    // StaggeredGridView $id tile bound\n}"
+        "onSpanChanged" -> "findViewById<View>(R.id.$id).requestLayout()"
+        "onGapStrategyUpdate" -> "findViewById<View>(R.id.$id).invalidate()"
+        "onTileLongClick" -> "findViewById<View>(R.id.$id).setOnLongClickListener { true }"
+        "onHorizItemClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // HorizontalListView $id item clicked\n}"
+        "onHorizScrollEnd" -> "findViewById<View>(R.id.$id).setOnScrollChangeListener { _, scrollX, _, _, _ ->\n    // HorizontalListView $id scrollX = $scrollX\n}"
+        "onHorizSnapItem" -> "findViewById<View>(R.id.$id).post {\n    // HorizontalListView $id item snapped\n}"
+        "onHorizItemHold" -> "findViewById<View>(R.id.$id).setOnLongClickListener { true }"
+        "onBindHorizCard" -> "findViewById<View>(R.id.$id).invalidate()"
+        "onCarouselSnap" -> "findViewById<View>(R.id.$id).post {\n    // CarouselView $id card snapped to center\n}"
+        "onCarouselClick" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // CarouselView $id center card clicked\n}"
+        "onAutoPlayStep" -> "findViewById<View>(R.id.$id).postDelayed({ /* Auto slide $id */ }, 3000L)"
+        "onCarouselScale" -> "findViewById<View>(R.id.$id).animate().scaleX(1.0f).scaleY(1.0f).start()"
+        "onCarouselLoop" -> "findViewById<View>(R.id.$id).scrollTo(0, 0)"
+        "onSwipeDismissLeft" -> "findViewById<ListView>(R.id.$id).post {\n    // SwipeListView $id swiped left\n}"
+        "onSwipeDismissRight" -> "findViewById<ListView>(R.id.$id).post {\n    // SwipeListView $id swiped right\n}"
+        "onUndoSwipe" -> "findViewById<ListView>(R.id.$id).invalidateViews()"
+        "onDragReorder" -> "findViewById<ListView>(R.id.$id).requestLayout()"
+        "onSwipeActionReveal" -> "findViewById<ListView>(R.id.$id).invalidate()"
+
+        // 8. Date & Time Events (55 events)
+        "onMinuteHandTick" -> "findViewById<View>(R.id.$id).postDelayed({\n    // AnalogClock $id minute hand tick\n}, 60_000L)"
+        "onHourChime" -> "findViewById<View>(R.id.$id).post {\n    // AnalogClock $id full hour chime\n}"
+        "onDialFaceTap" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // AnalogClock $id dial face tapped\n}"
+        "onHandSweepUpdate" -> "findViewById<View>(R.id.$id).postInvalidateOnAnimation()"
+        "onTwelveOClock" -> "findViewById<View>(R.id.$id).post {\n    // AnalogClock $id reached 12:00\n}"
+        "onSecondTick" -> "findViewById<View>(R.id.$id).postDelayed({\n    // DigitalClock $id second tick\n}, 1_000L)"
+        "onFormatChange" -> "findViewById<TextView>(R.id.$id).text = java.text.SimpleDateFormat(\"HH:mm:ss\", java.util.Locale.getDefault()).format(java.util.Date())"
+        "onColonBlink" -> "findViewById<TextView>(R.id.$id).animate().alpha(0.6f).setDuration(500).withEndAction { findViewById<TextView>(R.id.$id).alpha = 1f }.start()"
+        "onDigitsTap" -> "findViewById<TextView>(R.id.$id).setOnClickListener {\n    // DigitalClock $id digits tapped\n}"
+        "onMidnightRoll" -> "findViewById<TextView>(R.id.$id).post {\n    // DigitalClock $id 00:00 rollover\n}"
+        "onTimeChanged" -> "findViewById<TimePicker>(R.id.$id).setOnTimeChangedListener { view, hourOfDay, minute ->\n    val formattedTime = String.format(\"%02d:%02d\", hourOfDay, minute)\n}"
+        "onAmPmChanged" -> "findViewById<TimePicker>(R.id.$id).setOnTimeChangedListener { _, hourOfDay, _ ->\n    val isPm = hourOfDay >= 12\n}"
+        "onHourWheelSpin" -> "findViewById<TimePicker>(R.id.$id).setOnTimeChangedListener { _, hourOfDay, _ ->\n    val selectedHour = hourOfDay\n}"
+        "onMinuteWheelSpin" -> "findViewById<TimePicker>(R.id.$id).setOnTimeChangedListener { _, _, minute ->\n    val selectedMinute = minute\n}"
+        "onTimeConfirm" -> "val confirmedTime_${id} = \"${'$'}{findViewById<TimePicker>(R.id.$id).hour}:${'$'}{findViewById<TimePicker>(R.id.$id).minute}\""
+        "onDateChanged" -> "findViewById<DatePicker>(R.id.$id).setOnDateChangedListener { view, year, monthOfYear, dayOfMonth ->\n    val selectedDate = \"$year-${monthOfYear + 1}-$dayOfMonth\"\n}"
+        "onYearSelected" -> "findViewById<DatePicker>(R.id.$id).setOnDateChangedListener { _, year, _, _ ->\n    val selectedYear = year\n}"
+        "onCalendarModeFlip" -> "findViewById<DatePicker>(R.id.$id).requestLayout()"
+        "onMonthSpin" -> "findViewById<DatePicker>(R.id.$id).setOnDateChangedListener { _, _, monthOfYear, _ ->\n    val selectedMonth = monthOfYear + 1\n}"
+        "onDaySpin" -> "findViewById<DatePicker>(R.id.$id).setOnDateChangedListener { _, _, _, dayOfMonth ->\n    val selectedDay = dayOfMonth\n}"
+        "onSelectedDayChange" -> "findViewById<CalendarView>(R.id.$id).setOnDateChangeListener { view, year, month, dayOfMonth ->\n    val dateStr = \"$year-${month + 1}-$dayOfMonth\"\n}"
+        "onMonthChanged" -> "findViewById<CalendarView>(R.id.$id).setOnDateChangeListener { _, year, month, _ ->\n    val newMonth = month + 1\n}"
+        "onWeekNumberTap" -> "findViewById<CalendarView>(R.id.$id).showWeekNumber = true"
+        "onTodayHighlight" -> "findViewById<CalendarView>(R.id.$id).date = System.currentTimeMillis()"
+        "onDateOutOfBounds" -> "findViewById<CalendarView>(R.id.$id).minDate = 0L"
+        "onClockPatternTick" -> "findViewById<TextClock>(R.id.$id).format12Hour = \"hh:mm:ss a\""
+        "onTimeZoneChanged" -> "findViewById<TextClock>(R.id.$id).timeZone = java.util.TimeZone.getDefault().id"
+        "onPatternChanged" -> "findViewById<TextClock>(R.id.$id).format24Hour = \"HH:mm:ss\""
+        "onLocaleTimeChange" -> "findViewById<TextClock>(R.id.$id).refreshTime()"
+        "onTextClockTap" -> "findViewById<TextClock>(R.id.$id).setOnClickListener {\n    (it as TextClock).refreshTime()\n}"
+        "onChronometerTick" -> "findViewById<Chronometer>(R.id.$id).setOnChronometerTickListener { chronometer ->\n    val elapsedSec = (android.os.SystemClock.elapsedRealtime() - chronometer.base) / 1000L\n}"
+        "onChronometerStart" -> "findViewById<Chronometer>(R.id.$id).apply {\n    base = android.os.SystemClock.elapsedRealtime()\n    start()\n}"
+        "onChronometerStop" -> "findViewById<Chronometer>(R.id.$id).stop()"
+        "onBaseTimeReset" -> "findViewById<Chronometer>(R.id.$id).base = android.os.SystemClock.elapsedRealtime()"
+        "onElapsedHour" -> "findViewById<Chronometer>(R.id.$id).format = \"%s\""
+        "onCountDownTick" -> "object : android.os.CountDownTimer(60_000L, 1_000L) {\n    override fun onTick(millisUntilFinished: Long) {\n        findViewById<TextView>(R.id.$id).text = \"${'$'}{millisUntilFinished / 1000}s\"\n    }\n    override fun onFinish() {}\n}.start()"
+        "onCountDownFinish" -> "object : android.os.CountDownTimer(60_000L, 1_000L) {\n    override fun onTick(millisUntilFinished: Long) {}\n    override fun onFinish() {\n        findViewById<TextView>(R.id.$id).text = \"00:00\"\n    }\n}.start()"
+        "onCountDownPause" -> "findViewById<TextView>(R.id.$id).tag = \"PAUSED\""
+        "onCountDownResume" -> "findViewById<TextView>(R.id.$id).tag = \"RUNNING\""
+        "onFinalTenSeconds" -> "findViewById<TextView>(R.id.$id).setTextColor(android.graphics.Color.RED)"
+        "onLapRecorded" -> "val lapTime_${id} = findViewById<TextView>(R.id.$id).text.toString()"
+        "onStopwatchReset" -> "findViewById<TextView>(R.id.$id).text = \"00:00.00\""
+        "onSplitMillis" -> "val splitTimestamp_${id} = android.os.SystemClock.elapsedRealtime()"
+        "onBestLapAchieved" -> "findViewById<TextView>(R.id.$id).setTextColor(android.graphics.Color.GREEN)"
+        "onStopwatchResume" -> "findViewById<TextView>(R.id.$id).isActivated = true"
+        "onRangeSelected" -> "findViewById<TextView>(R.id.$id).setOnClickListener {\n    // DateRangePicker $id range selected\n}"
+        "onRangeCleared" -> "findViewById<TextView>(R.id.$id).text = \"Select Date Range\""
+        "onStartDatePick" -> "val startRangeMillis_${id} = System.currentTimeMillis()"
+        "onEndDatePick" -> "val endRangeMillis_${id} = System.currentTimeMillis() + 86_400_000L"
+        "onDurationDaysCalc" -> "val rangeDays_${id} = 7"
+        "onCityChanged" -> "findViewById<TextView>(R.id.$id).text = java.util.TimeZone.getDefault().displayName"
+        "onDayNightSwitch" -> "val isDayTime_${id} = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 6..18"
+        "onUtcOffsetUpdate" -> "val utcOffsetHours_${id} = java.util.TimeZone.getDefault().rawOffset / 3_600_000"
+        "onDstTransition" -> "val usesDst_${id} = java.util.TimeZone.getDefault().useDaylightTime()"
+        "onWorldCardTap" -> "findViewById<View>(R.id.$id).setOnClickListener {\n    // WorldClockView $id card tapped\n}"
+
+        else -> "findViewById<$cls>(R.id.$id).apply {\n    // Event: ${eventOpt.title} (${eventOpt.subtitle})\n}"
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun IdeLogicEventWorkspace(
@@ -7247,7 +7551,7 @@ private fun IdeLogicEventWorkspace(
                         name = eventName,
                         subtitle = "${widgetNode.type.displayName} (@+id/${widgetNode.viewId}) • ${eventOpt.subtitle}",
                         targetViewId = widgetNode.viewId,
-                        bodyCode = "// ${widgetNode.viewId} ${eventOpt.eventKey}\n",
+                        bodyCode = defaultCodeForWidgetEvent(widgetNode, eventOpt),
                     )
                     onUpdateLogicItems(logicItems + newItem)
                 }
@@ -7617,7 +7921,7 @@ private fun IdeLogicEventCard(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = titleDisplay,
@@ -7643,6 +7947,28 @@ private fun IdeLogicEventCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (item.bodyCode.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF0B112B))
+                        .border(1.dp, Color(0x2438BDF8), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = item.bodyCode.trim(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.sp,
+                        ),
+                        color = Cyan.copy(alpha = 0.92f),
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         Icon(
