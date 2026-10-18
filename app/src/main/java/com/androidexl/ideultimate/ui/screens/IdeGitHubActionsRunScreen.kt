@@ -938,7 +938,7 @@ fun IdeGitHubActionsRunScreen(
                             else -> Color(0xFFFBBF24)
                         },
                     )
-                    if (s.conclusion == "failure" && !detail.errorMessage.isNullOrBlank()) {
+                    if (s.conclusion == "failure" && !runDetail?.errorMessage.isNullOrBlank()) {
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = "تفاصيل الخطأ:",
@@ -946,7 +946,7 @@ fun IdeGitHubActionsRunScreen(
                             color = Color(0xFFF87171),
                         )
                         Text(
-                            text = detail.errorMessage ?: "",
+                            text = runDetail?.errorMessage ?: "",
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono, fontSize = 10.sp),
                             color = Color(0xFFFDA4AF),
                         )
