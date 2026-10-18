@@ -118,7 +118,7 @@ internal object ShortNameGenerator {
     fun generateShortName(lfnName: String,
                                         existingShortNames: Collection<ShortName>): ShortName {
         var lfnName = lfnName
-        lfnName = lfnName.toUpperCase(Locale.ROOT).trim { it <= ' ' }
+        lfnName = lfnName.uppercase(Locale.ROOT).trim { it <= ' ' }
 
         // remove leading periods
         var i = 0
