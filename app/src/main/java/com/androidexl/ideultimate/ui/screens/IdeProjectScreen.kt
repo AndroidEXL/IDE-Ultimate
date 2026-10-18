@@ -430,6 +430,7 @@ fun IdeProjectScreen(
     var showManifestManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showPermissionManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showFilesManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showStringsTranslationScreen by rememberSaveable { mutableStateOf(false) }
     var showGitHubToolsScreen by rememberSaveable { mutableStateOf(false) }
     var showGitHubActionsRunScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
@@ -506,6 +507,7 @@ fun IdeProjectScreen(
             showManifestManagerScreen -> showManifestManagerScreen = false
             showPermissionManagerScreen -> showPermissionManagerScreen = false
             showFilesManagerScreen -> showFilesManagerScreen = false
+            showStringsTranslationScreen -> showStringsTranslationScreen = false
             showGitHubToolsScreen -> showGitHubToolsScreen = false
             showGitHubActionsRunScreen -> showGitHubActionsRunScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
@@ -761,6 +763,16 @@ fun IdeProjectScreen(
             project = project,
             repository = repository,
             onBack = { showFilesManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showStringsTranslationScreen) {
+        IdeStringsTranslationScreen(
+            project = project,
+            repository = repository,
+            onBack = { showStringsTranslationScreen = false },
             modifier = modifier,
         )
         return
@@ -1092,6 +1104,9 @@ fun IdeProjectScreen(
                         }
                         IdeSideMenuItem.FILES_MANAGER -> {
                             showFilesManagerScreen = true
+                        }
+                        IdeSideMenuItem.STRINGS_TRANSLATION -> {
+                            showStringsTranslationScreen = true
                         }
                         IdeSideMenuItem.GITHUB_TOOLS -> {
                             showGitHubToolsScreen = true
@@ -3623,8 +3638,9 @@ private fun RenderWidgetNodeOnPhone(
                     .then(widthModifier)
                     .then(
                         when {
-                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
-                            isEmpty -> Modifier.height(28.dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 400).dp)
+                            node.layoutHeight == "match_parent" -> Modifier.fillMaxHeight().defaultMinSize(minHeight = 120.dp)
+                            isEmpty -> Modifier.height(30.dp)
                             else -> Modifier.heightIn(min = 32.dp)
                         },
                     )
@@ -3669,37 +3685,12 @@ private fun RenderWidgetNodeOnPhone(
                         )
                     },
             ) {
-                // Dedicated clickable Layout Header Strip when the layout contains children,
-                // so the user can ALWAYS reach/select/drag even a tiny layout filled with match_parent children!
-                if (node.children.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isSelected) Color(0xFF0284C7).copy(alpha = 0.22f) else Color(0xFFE2E8F0).copy(alpha = 0.85f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { onSelectWidget(node) }
-                            .padding(horizontal = 5.dp, vertical = 1.5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = "[${node.type.shortTag}] ${node.viewId}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF475569),
-                            maxLines = 1,
-                        )
-                    }
-                }
+
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(if (node.layoutHeight == "match_parent") Modifier.fillMaxHeight() else Modifier)
                         .then(scrollMod)
                         .padding(if (isEmpty) 0.dp else containerVisualPad),
                     verticalAlignment = verticalAlign,
@@ -3761,8 +3752,9 @@ private fun RenderWidgetNodeOnPhone(
                     .then(widthModifier)
                     .then(
                         when {
-                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
-                            isEmpty -> Modifier.height(28.dp)
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 400).dp)
+                            node.layoutHeight == "match_parent" -> Modifier.fillMaxHeight().defaultMinSize(minHeight = 120.dp)
+                            isEmpty -> Modifier.height(30.dp)
                             node.type == IdeWidgetType.SCROLL_H -> Modifier.heightIn(min = 38.dp, max = 180.dp)
                             else -> Modifier.heightIn(min = 32.dp)
                         },
@@ -3811,37 +3803,12 @@ private fun RenderWidgetNodeOnPhone(
                 verticalArrangement = verticalArr,
                 horizontalAlignment = horizontalAlign,
             ) {
-                // Dedicated clickable Layout Header Strip when the layout contains children,
-                // so the user can ALWAYS reach/select/drag even a tiny layout filled with match_parent children!
-                if (node.children.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isSelected) Color(0xFF0284C7).copy(alpha = 0.22f) else Color(0xFFE2E8F0).copy(alpha = 0.85f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { onSelectWidget(node) }
-                            .padding(horizontal = 5.dp, vertical = 1.5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = "[${node.type.shortTag}] ${node.viewId}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF475569),
-                            maxLines = 1,
-                        )
-                    }
-                }
+
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(if (node.layoutHeight == "match_parent") Modifier.fillMaxHeight() else Modifier)
                         .padding(if (isEmpty) 0.dp else containerVisualPad),
                     verticalArrangement = verticalArr,
                     horizontalAlignment = horizontalAlign,
