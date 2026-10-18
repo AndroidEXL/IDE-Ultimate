@@ -160,11 +160,11 @@ fun IdeTerminalGradleBuildSheet(
 
             // Check tools via Ubuntu exec
             val checks = listOf(
-                "OpenJDK 17" to "command -v java",
-                "AAPT2 / Android Build Tools" to "command -v aapt2 || command -v aapt",
-                "Gradle Engine" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ]",
-                "Kotlin & Android Plugins" to "command -v kotlin || [ -d /root/.gradle/caches ] || command -v java",
-                "Android SDK Manager" to "command -v sdkmanager || [ -d /root/android-sdk ] || [ -d /opt/android-sdk ]",
+                "OpenJDK 17" to "java -version",
+                "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
+                "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
+                "Commandline Tools & sdkmanager" to "command -v sdkmanager || [ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ] || [ -f /root/Android/Sdk/cmdline-tools/latest/bin/sdkmanager ]",
+                "Gradle Wrapper & Environment" to "[ -d /root/.gradle ] || [ -f /root/project_build/gradlew ]",
             )
 
             val results = mutableListOf<AndroidToolStatus>()
@@ -172,11 +172,11 @@ fun IdeTerminalGradleBuildSheet(
                 val (rc, _) = TerminalManager.execInUbuntu(context, cmd, timeoutSec = 15)
                 val ok = (rc == 0)
                 val desc = when (name) {
-                    "OpenJDK 17" -> "محرك جافا الأساسي لتشغيل Gradle وتجميع الأكواد"
-                    "AAPT2 / Android Build Tools" -> "أداة تجميع موارد الأندرويد والـ Manifest"
-                    "Gradle Engine" -> "محرك بناء حزم APK وإدارة التبعيات"
-                    "Kotlin & Android Plugins" -> "إضافات ومترجمات Kotlin و Android Gradle Plugin المدمجة"
-                    else -> "مدير حزم وأدوات Android SDK"
+                    "OpenJDK 17" -> "محرك جافا الرسمي لتشغيل Gradle وتجميع الأكواد"
+                    "Android SDK (Platform 34/35)" -> "منصات ومكتبات أندرويد الرسمية لبناء الحزم"
+                    "Android Build Tools (aapt2/zipalign)" -> "أدوات بناء وضغط وتوقيع ملفات الـ APK"
+                    "Commandline Tools & sdkmanager" -> "أدوات Google الرسمية لإدارة وتنزيل الحزم"
+                    else -> "بيئة تشغيل ومحرك Gradle Wrapper"
                 }
                 results.add(AndroidToolStatus(name, cmd, ok, desc))
             }
@@ -203,29 +203,37 @@ fun IdeTerminalGradleBuildSheet(
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
         coroutineScope.launch(Dispatchers.IO) {
-            val installScript = """
-                export DEBIAN_FRONTEND=noninteractive
-                apt-get update -y
-                apt-get install -y --no-install-recommends \
-                    openjdk-17-jdk-headless \
-                    aapt \
-                    gradle \
-                    kotlin \
-                    wget \
-                    curl \
-                    unzip \
-                    git || apt-get install -y --no-install-recommends \
-                    openjdk-17-jdk-headless \
-                    aapt \
-                    gradle \
-                    wget \
-                    curl \
-                    unzip \
-                    git
-                mkdir -p /root/.gradle
-                mkdir -p /root/android-sdk
-                mkdir -p /root/.gradle/caches
-            """.trimIndent()
+            val installScript = listOf(
+                "export DEBIAN_FRONTEND=noninteractive",
+                "echo '===> تنظيف حزم Gradle و Kotlin القديمة من apt...'",
+                "apt-get remove -y gradle kotlin ant 2>/dev/null || true",
+                "apt-get autoremove -y 2>/dev/null || true",
+                "echo '===> تثبيت OpenJDK 17 والأدوات الأساسية...'",
+                "apt-get update -y",
+                "apt-get install -y --no-install-recommends openjdk-17-jdk-headless wget curl unzip git ca-certificates",
+                "echo '===> تجهيز مسارات Android SDK...'",
+                "mkdir -p /root/android-sdk/cmdline-tools",
+                "mkdir -p /root/Android/Sdk/cmdline-tools",
+                "mkdir -p /root/.gradle/caches",
+                "cd /root/android-sdk/cmdline-tools",
+                "if [ ! -d latest ]; then",
+                "    echo '===> تحميل وتثبيت Google Android Commandline Tools الرسمي...'",
+                "    wget -q --show-progress -O cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip",
+                "    unzip -q -o cmdline-tools.zip",
+                "    rm -rf latest",
+                "    mv cmdline-tools latest",
+                "    rm -f cmdline-tools.zip",
+                "fi",
+                "export ANDROID_HOME=/root/android-sdk",
+                "export ANDROID_SDK_ROOT=/root/android-sdk",
+                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:$PATH",
+                "echo '===> تثبيت منصات الأندرويد و Build Tools المطلوبة...'",
+                "yes | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --install \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\" 2>&1 || true",
+                "echo 'export ANDROID_HOME=/root/android-sdk' >> /root/.bashrc",
+                "echo 'export ANDROID_SDK_ROOT=/root/android-sdk' >> /root/.bashrc",
+                "echo 'export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:$PATH' >> /root/.bashrc",
+                "echo '✓ تم تجهيز بيئة وأدوات Android SDK الرسمية بنجاح!'",
+            ).joinToString("\n")
 
             val (rc, output) = TerminalManager.execInUbuntu(
                 context,
@@ -268,6 +276,7 @@ fun IdeTerminalGradleBuildSheet(
                 "export GRADLE_USER_HOME=/root/.gradle",
                 "export ANDROID_HOME=/root/android-sdk",
                 "export ANDROID_SDK_ROOT=/root/android-sdk",
+                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:$PATH",
                 "cd /root/project_build",
                 "echo \"===> مسار مجلد المشروع: \$(pwd)\"",
                 "echo \"===> ذاكرة التخزين المؤقت الدائمة: /root/.gradle\"",
