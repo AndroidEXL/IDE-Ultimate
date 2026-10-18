@@ -1,6 +1,7 @@
 package com.androidexl.ideultimate.ui.screens
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.core.content.FileProvider
 
 import android.content.ClipData
@@ -99,13 +100,30 @@ fun IdeTerminalGradleBuildSheet(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { WorkspaceRepository(context) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var isBuilding by remember { mutableStateOf(false) }
+    var isInstallingTools by remember { mutableStateOf(false) }
+
+    val canDismiss = !isBuilding && !isInstallingTools
+
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { targetValue ->
+            if (targetValue == androidx.compose.material3.SheetValue.Hidden) {
+                canDismiss
+            } else {
+                true
+            }
+        },
+    )
+
+    BackHandler(enabled = !canDismiss) {
+        // Block back press while building or installing
+        Toast.makeText(context, "يرجى الانتظار حتى اكتمال العملية الحالية...", Toast.LENGTH_SHORT).show()
+    }
 
     var isCheckingEnv by remember { mutableStateOf(true) }
     var isUbuntuReady by remember { mutableStateOf(false) }
     var toolStatuses by remember { mutableStateOf<List<AndroidToolStatus>>(emptyList()) }
-    var isInstallingTools by remember { mutableStateOf(false) }
-    var isBuilding by remember { mutableStateOf(false) }
 
     var logOutput by remember { mutableStateOf("") }
     var currentTaskName by remember { mutableStateOf("جاري فحص بيئة البناء...") }
