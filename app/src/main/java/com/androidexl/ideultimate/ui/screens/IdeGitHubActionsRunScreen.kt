@@ -58,6 +58,15 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.data.GitHubActionsBuildEngine
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextButton
+import com.androidexl.ideultimate.data.GitHubRepoItem
+import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.data.GitHubToolsRepository
 import com.androidexl.ideultimate.data.WorkflowJobItem
 import com.androidexl.ideultimate.data.WorkflowRunDetail
@@ -80,19 +89,29 @@ fun IdeGitHubActionsRunScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val ghTools = remember { GitHubToolsRepository(context) }
+    val workspaceRepo = remember { WorkspaceRepository(context) }
     val account = remember { ghTools.getSavedAccount() }
 
-    val owner = remember(account) { account?.login ?: "AndroidEXL" }
-    val repoName = remember(project) {
-        val candidate = project.name.replace(" ", "-")
-        if (candidate.isNotBlank() && candidate != "IDE-Ultimate") candidate else "IDE-Ultimate"
+    val linkedPair = remember(project.id) { ghTools.getLinkedRepoForProject(project.id) }
+    var currentOwner by remember(account, linkedPair) {
+        mutableStateOf(linkedPair?.first ?: account?.login ?: "AndroidEXL")
+    }
+    var currentRepo by remember(project, linkedPair) {
+        val defaultRepo = project.name.replace(" ", "-").ifBlank { "IDE-Ultimate" }
+        mutableStateOf(linkedPair?.second ?: defaultRepo)
     }
 
-    val engine = remember(account, owner, repoName) {
+    var showRepoSelectorDialog by remember { mutableStateOf(false) }
+    var showCreateRepoDialog by remember { mutableStateOf(false) }
+    var isTriggeringWorkflow by remember { mutableStateOf(false) }
+    var userReposList by remember { mutableStateOf<List<GitHubRepoItem>>(emptyList()) }
+    var isFetchingRepos by remember { mutableStateOf(false) }
+
+    val engine = remember(account, currentOwner, currentRepo) {
         GitHubActionsBuildEngine(
             token = account?.token.orEmpty(),
-            owner = owner,
-            repo = repoName,
+            owner = currentOwner,
+            repo = currentRepo,
         )
     }
 
@@ -208,7 +227,7 @@ fun IdeGitHubActionsRunScreen(
                     }
 
                     Text(
-                        text = "$owner/$repoName • ${project.name}",
+                        text = "$currentOwner/$currentRepo • ${project.name}",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMono,
                             fontSize = 10.sp,
@@ -216,6 +235,24 @@ fun IdeGitHubActionsRunScreen(
                         color = Cyan,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                IconButton(onClick = {
+                    showRepoSelectorDialog = true
+                    isFetchingRepos = true
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val res = ghTools.listUserRepositories()
+                        withContext(Dispatchers.Main) {
+                            isFetchingRepos = false
+                            userReposList = res.getOrDefault(emptyList())
+                        }
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Repository",
+                        tint = Cyan,
                     )
                 }
 
@@ -273,17 +310,142 @@ fun IdeGitHubActionsRunScreen(
                     CircularProgressIndicator(color = Cyan)
                 }
             } else if (runDetail == null) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center,
+                        .weight(1f)
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0F1735))
+                            .border(1.dp, Cyan.copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Cyan,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
                     Text(
-                        text = "لا توجد سجلات متاحة حالياً. تأكد من رفع المشروع وبدء البناء.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Muted,
+                        text = "لا يوجد تشغيل سابق لكود هذا المشروع",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                        ),
+                        color = Ink,
                     )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "المستودع المرتبط حالياً: $currentOwner/$currentRepo\nيمكنك ربط مستودع GitHub مخصص أو تشغيل بناء جديد عبر GitHub Actions مباشرة.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                        ),
+                        color = Muted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Cyan.copy(alpha = 0.2f))
+                                .border(1.dp, Cyan, RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showRepoSelectorDialog = true
+                                    isFetchingRepos = true
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val res = ghTools.listUserRepositories()
+                                        withContext(Dispatchers.Main) {
+                                            isFetchingRepos = false
+                                            userReposList = res.getOrDefault(emptyList())
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Filled.Settings, contentDescription = null, tint = Cyan, modifier = Modifier.size(16.dp))
+                                Text("ربط مستودع GitHub", color = Cyan, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF10B981))
+                                .clickable(enabled = !isTriggeringWorkflow) {
+                                    isTriggeringWorkflow = true
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        // 1. Ensure workflow file
+                                        val workflowYaml = """name: Build APK
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+concurrency:
+  group: apk-\${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  build:
+    name: Assemble debug & release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Ensure Android SDK platform 35
+        run: |
+          SDK="\${ANDROID_HOME:-\$ANDROID_SDK_ROOT}"
+          if [ ! -d "\$SDK/platforms/android-35" ] || [ ! -d "\$SDK/build-tools/35.0.0" ]; then
+            yes | "\$SDK/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0"
+          fi
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew || true
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log
+"""
+                                        engine.ensureWorkflowFileExists("build-apk.yml", workflowYaml)
+                                        val trigRes = engine.triggerWorkflowDispatch("build-apk.yml", "main")
+                                        withContext(Dispatchers.Main) {
+                                            isTriggeringWorkflow = false
+                                            trigRes.onSuccess {
+                                                Toast.makeText(context, "تم إطلاق عملية البناء بنجاح! جاري التحديث...", Toast.LENGTH_LONG).show()
+                                                refreshRun()
+                                            }
+                                            trigRes.onFailure {
+                                                Toast.makeText(context, it.message ?: "فشل بدء تشغيل السير العمل", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Text(if (isTriggeringWorkflow) "جاري الإطلاق..." else "بدء بناء جديد", color = Color.White, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
                 }
             } else {
                 val detail = runDetail!!
@@ -529,6 +691,158 @@ fun IdeGitHubActionsRunScreen(
                     }
                 }
             }
+
+    if (showRepoSelectorDialog) {
+        AlertDialog(
+            onDismissRequest = { showRepoSelectorDialog = false },
+            title = {
+                Text(
+                    text = "ربط مستودع GitHub بالمشروع",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink,
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "اختر المستودع الذي تريد تشغيل GitHub Actions ومتابعة بنائه:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    if (isFetchingRepos) {
+                        Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Cyan, modifier = Modifier.size(24.dp))
+                        }
+                    } else {
+                        userReposList.forEach { r ->
+                            val isSelected = (r.ownerLogin == currentOwner && r.name == currentRepo)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) Cyan.copy(alpha = 0.2f) else Color(0xFF131D44))
+                                    .border(1.dp, if (isSelected) Cyan else Color(0x22FFFFFF), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        currentOwner = r.ownerLogin
+                                        currentRepo = r.name
+                                        ghTools.setLinkedRepoForProject(project.id, r.ownerLogin, r.name)
+                                        showRepoSelectorDialog = false
+                                        refreshRun()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = r.fullName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Ink,
+                                    )
+                                    Text(
+                                        text = if (r.isPrivate) "مستودع خاص (Private)" else "مستودع عام (Public)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Muted,
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Filled.Check, contentDescription = null, tint = Cyan)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        onClick = {
+                            showRepoSelectorDialog = false
+                            showCreateRepoDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, tint = Cyan, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("إنشاء مستودع جديد وربطه بالمشروع", color = Cyan)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRepoSelectorDialog = false }) {
+                    Text("إغلاق", color = Cyan)
+                }
+            },
+            containerColor = Color(0xFF0C1330),
+        )
+    }
+
+    if (showCreateRepoDialog) {
+        var newRepoName by remember { mutableStateOf(project.name.replace(" ", "-")) }
+        var isCreating by remember { mutableStateOf(false) }
+        var createError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isCreating) showCreateRepoDialog = false },
+            title = { Text("إنشاء مستودع جديد في GitHub", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("سيتم إنشاء المستودع في حسابك وربطه تلقائياً مع رفع سير العمل:", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = newRepoName,
+                        onValueChange = { newRepoName = it },
+                        label = { Text("اسم المستودع") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                        ),
+                    )
+                    if (createError != null) {
+                        Text(createError!!, color = Color(0xFFF87171), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isCreating && newRepoName.isNotBlank(),
+                    onClick = {
+                        isCreating = true
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val res = ghTools.createRepository(newRepoName, "Repository created from IDE Ultimate", isPrivate = false, autoInit = true)
+                            withContext(Dispatchers.Main) {
+                                isCreating = false
+                                res.onSuccess { created ->
+                                    currentOwner = created.ownerLogin
+                                    currentRepo = created.name
+                                    ghTools.setLinkedRepoForProject(project.id, created.ownerLogin, created.name)
+                                    showCreateRepoDialog = false
+                                    Toast.makeText(context, "تم إنشاء وربط المستودع بنجاح!", Toast.LENGTH_SHORT).show()
+                                    refreshRun()
+                                }
+                                res.onFailure {
+                                    createError = it.message ?: "فشل إنشاء المستودع"
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text(if (isCreating) "جاري الإنشاء..." else "إنشاء المستودع", color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateRepoDialog = false }, enabled = !isCreating) {
+                    Text("إلغاء", color = Muted)
+                }
+            },
+            containerColor = Color(0xFF0C1330),
+        )
+    }
         }
     }
 }

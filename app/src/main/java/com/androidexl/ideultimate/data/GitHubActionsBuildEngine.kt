@@ -43,15 +43,28 @@ class GitHubActionsBuildEngine(
 ) {
     fun fetchLatestWorkflowRun(workflowFileName: String = "build-apk.yml"): Result<WorkflowRunDetail> = runCatching {
         val (code, body) = executeGet("https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowFileName/runs?per_page=1")
-        if (code !in 200..299) {
-            // Fallback to all runs
-            val (allCode, allBody) = executeGet("https://api.github.com/repos/$owner/$repo/actions/runs?per_page=1")
-            if (allCode !in 200..299) {
-                throw IllegalStateException("تعذر جلب سجلات البناء من GitHub Actions ($code)")
+        if (code in 200..299) {
+            val root = JSONObject(body)
+            val runs = root.optJSONArray("workflow_runs") ?: JSONArray()
+            if (runs.length() > 0) {
+                return@runCatching parseRunDetailFromRunJson(runs.getJSONObject(0))
             }
-            return@runCatching parseRunDetailFromBody(allBody)
         }
-        parseRunDetailFromBody(body)
+        // Fallback to all runs in the repo
+        val (allCode, allBody) = executeGet("https://api.github.com/repos/$owner/$repo/actions/runs?per_page=1")
+        if (allCode == 404) {
+            throw IllegalStateException("المستودع غير موجود أو لا يمكن الوصول إليه (404 Not Found). يرجى التأكد من ربط مستودع GitHub الخاص بك أو إنشائه ورفع سير العمل.")
+        }
+        if (allCode !in 200..299) {
+            val msg = runCatching { JSONObject(allBody).optString("message") }.getOrNull().orEmpty()
+            throw IllegalStateException("تعذر جلب تفاصيل البناء من GitHub ($allCode): ${msg.ifBlank { "تأكد من صلاحيات الـ Token" }}")
+        }
+        val rootAll = JSONObject(allBody)
+        val allRuns = rootAll.optJSONArray("workflow_runs") ?: JSONArray()
+        if (allRuns.length() == 0) {
+            throw IllegalStateException("لا يوجد تشغيل سابق للكود. يمكنك بدء بناء جديد الآن عبر تشغيل Workflow Dispatch.")
+        }
+        parseRunDetailFromRunJson(allRuns.getJSONObject(0))
     }
 
     fun fetchWorkflowRunById(runId: Long): Result<WorkflowRunDetail> = runCatching {
@@ -253,6 +266,90 @@ class GitHubActionsBuildEngine(
             setRequestProperty("User-Agent", "IDE-Ultimate-Android")
         }
         return try {
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            code to body
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun triggerWorkflowDispatch(
+        workflowFileName: String = "build-apk.yml",
+        ref: String = "main",
+        inputs: Map<String, String> = emptyMap(),
+    ): Result<Unit> = runCatching {
+        val url = "https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowFileName/dispatches"
+        val payload = JSONObject().apply {
+            put("ref", ref)
+            if (inputs.isNotEmpty()) {
+                val inpObj = JSONObject()
+                inputs.forEach { (k, v) -> inpObj.put(k, v) }
+                put("inputs", inpObj)
+            }
+        }
+        val (code, body) = executePost(url, payload.toString())
+        if (code !in 200..299 && code != 204) {
+            val msg = runCatching { JSONObject(body).optString("message") }.getOrNull().orEmpty()
+            throw IllegalStateException("تعذر بدء تشغيل GitHub Actions ($code): ${msg.ifBlank { "تأكد من وجود ملف $workflowFileName وصلاحيات الـ Token" }}")
+        }
+    }
+
+    fun ensureWorkflowFileExists(
+        workflowFileName: String = "build-apk.yml",
+        content: String,
+        branch: String = "main",
+    ): Result<Unit> = runCatching {
+        val path = ".github/workflows/$workflowFileName"
+        val apiUrl = "https://api.github.com/repos/$owner/$repo/contents/$path?ref=$branch"
+        val (getCode, getBody) = executeGet(apiUrl)
+        val existingSha = if (getCode in 200..299) {
+            JSONObject(getBody).optString("sha").takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+
+        val putUrl = "https://api.github.com/repos/$owner/$repo/contents/$path"
+        val payload = JSONObject().apply {
+            put("message", "Add GitHub Actions workflow $workflowFileName from IDE Ultimate")
+            put("content", android.util.Base64.encodeToString(content.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
+            put("branch", branch)
+            if (!existingSha.isNullOrBlank()) {
+                put("sha", existingSha)
+            }
+        }
+        val (putCode, putBody) = executePut(putUrl, payload.toString())
+        if (putCode !in 200..299 && putCode != 201) {
+            val msg = runCatching { JSONObject(putBody).optString("message") }.getOrNull().orEmpty()
+            throw IllegalStateException("تعذر رفع ملف سير العمل $workflowFileName ($putCode): $msg")
+        }
+    }
+
+    private fun executePost(url: String, jsonBody: String): Pair<Int, String> =
+        executeWrite("POST", url, jsonBody)
+
+    private fun executePut(url: String, jsonBody: String): Pair<Int, String> =
+        executeWrite("PUT", url, jsonBody)
+
+    private fun executeWrite(method: String, url: String, jsonBody: String): Pair<Int, String> {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 15_000
+            readTimeout = 25_000
+            doOutput = true
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            if (token.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+            setRequestProperty("User-Agent", "IDE-Ultimate-Android")
+        }
+        return try {
+            conn.outputStream.use { os ->
+                os.write(jsonBody.toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()

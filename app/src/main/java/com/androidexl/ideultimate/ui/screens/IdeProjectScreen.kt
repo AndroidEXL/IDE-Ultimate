@@ -417,6 +417,7 @@ fun IdeProjectScreen(
     var showXmlBottomSheet by rememberSaveable { mutableStateOf(false) }
     var showAddXmlDialog by rememberSaveable { mutableStateOf(false) }
     var showTempRunScreen by rememberSaveable { mutableStateOf(false) }
+    var showTerminalGradleBuildSheet by rememberSaveable { mutableStateOf(false) }
     var showBuildMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showSideMenuDrawer by rememberSaveable { mutableStateOf(false) }
     var showImageManagerScreen by rememberSaveable { mutableStateOf(false) }
@@ -508,6 +509,7 @@ fun IdeProjectScreen(
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
+            showTerminalGradleBuildSheet -> showTerminalGradleBuildSheet = false
             showTempRunScreen -> showTempRunScreen = false
             selectedWidgetUid != null -> selectedWidgetUid = null
             else -> onBack()
@@ -772,6 +774,12 @@ fun IdeProjectScreen(
         return
     }
 
+    if (showTerminalGradleBuildSheet) {
+        IdeTerminalGradleBuildSheet(
+            project = project,
+            onDismiss = { showTerminalGradleBuildSheet = false },
+        )
+    }
     if (showTempRunScreen) {
         TemporaryRunScreen(
             project = project,
@@ -925,10 +933,10 @@ fun IdeProjectScreen(
                     selectedBuildMethod = selectedBuildMethod,
                     onOpenPageSelector = { showXmlBottomSheet = true },
                     onRunClick = {
-                        if (selectedBuildMethod == IdeBuildMethod.GITHUB_ACTIONS) {
-                            showGitHubActionsRunScreen = true
-                        } else {
-                            showTempRunScreen = true
+                        when (selectedBuildMethod) {
+                            IdeBuildMethod.GITHUB_ACTIONS -> showGitHubActionsRunScreen = true
+                            IdeBuildMethod.GRADLE -> showTerminalGradleBuildSheet = true
+                            IdeBuildMethod.SIMPLE -> showTempRunScreen = true
                         }
                     },
                     onRunLongClick = { showBuildMethodSheet = true },

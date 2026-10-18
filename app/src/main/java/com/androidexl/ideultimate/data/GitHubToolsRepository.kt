@@ -126,6 +126,22 @@ class GitHubToolsRepository(
         account
     }
 
+    fun getLinkedRepoForProject(projectId: String): Pair<String, String>? {
+        val owner = prefs.getString("gh_linked_owner_$projectId", null)?.trim().orEmpty()
+        val repo = prefs.getString("gh_linked_repo_$projectId", null)?.trim().orEmpty()
+        if (owner.isNotEmpty() && repo.isNotEmpty()) {
+            return owner to repo
+        }
+        return null
+    }
+
+    fun setLinkedRepoForProject(projectId: String, owner: String, repo: String) {
+        prefs.edit()
+            .putString("gh_linked_owner_$projectId", owner.trim())
+            .putString("gh_linked_repo_$projectId", repo.trim())
+            .apply()
+    }
+
     fun listUserRepositories(): Result<List<GitHubRepoItem>> = runCatching {
         val account = getSavedAccount() ?: throw IllegalStateException("غير مسجل الدخول")
         val (code, body) = executeGitHubRequest(
