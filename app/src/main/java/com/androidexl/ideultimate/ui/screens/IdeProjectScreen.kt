@@ -67,6 +67,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -102,6 +103,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -121,6 +123,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.data.CodeEditorFlavor
 import com.androidexl.ideultimate.data.IdeFunctionParam
@@ -129,8 +132,11 @@ import com.androidexl.ideultimate.data.IdeLogicSection
 import com.androidexl.ideultimate.data.IdeWidgetCategory
 import com.androidexl.ideultimate.data.IdeWidgetNode
 import com.androidexl.ideultimate.data.IdeWidgetType
+import com.androidexl.ideultimate.data.ProjectFontItem
 import com.androidexl.ideultimate.data.ProjectImageItem
 import com.androidexl.ideultimate.data.ProjectLanguage
+import com.androidexl.ideultimate.data.ProjectResourceEntry
+import com.androidexl.ideultimate.data.ProjectSoundItem
 import com.androidexl.ideultimate.data.ProjectXmlPage
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
@@ -405,13 +411,32 @@ fun IdeProjectScreen(
     var showBuildMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showSideMenuDrawer by rememberSaveable { mutableStateOf(false) }
     var showImageManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showSoundManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showFontManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showResourcesManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showIconManagerScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
+    val context = LocalContext.current
 
     var projectImages by remember(project.id) {
         mutableStateOf(repository.getProjectImages(project))
     }
     fun refreshProjectImages() {
         projectImages = repository.getProjectImages(project)
+    }
+
+    var projectSounds by remember(project.id) {
+        mutableStateOf(repository.getProjectSounds(project))
+    }
+    fun refreshProjectSounds() {
+        projectSounds = repository.getProjectSounds(project)
+    }
+
+    var projectFonts by remember(project.id) {
+        mutableStateOf(repository.getProjectFonts(project))
+    }
+    fun refreshProjectFonts() {
+        projectFonts = repository.getProjectFonts(project)
     }
 
     var selectedBuildMethodName by rememberSaveable(project.id) {
@@ -455,6 +480,10 @@ fun IdeProjectScreen(
             imagePickerWidgetUid != null -> imagePickerWidgetUid = null
             editingPropertyRequest != null -> editingPropertyRequest = null
             showImageManagerScreen -> showImageManagerScreen = false
+            showSoundManagerScreen -> showSoundManagerScreen = false
+            showFontManagerScreen -> showFontManagerScreen = false
+            showResourcesManagerScreen -> showResourcesManagerScreen = false
+            showIconManagerScreen -> showIconManagerScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
@@ -558,6 +587,100 @@ fun IdeProjectScreen(
                 refreshProjectImages()
             },
             onBack = { showImageManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showSoundManagerScreen) {
+        IdeSoundManagerScreen(
+            project = project,
+            sounds = projectSounds,
+            onImportUris = { uris ->
+                uris.forEach { uri ->
+                    repository.importProjectSound(project, uri)
+                }
+                refreshProjectSounds()
+            },
+            onRenameSound = { oldName, newName ->
+                repository.renameProjectSound(project, oldName, newName)
+                refreshProjectSounds()
+            },
+            onDeleteSounds = { namesToDelete ->
+                repository.deleteProjectSounds(project, namesToDelete)
+                refreshProjectSounds()
+            },
+            onBack = { showSoundManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showFontManagerScreen) {
+        IdeFontManagerScreen(
+            project = project,
+            fonts = projectFonts,
+            onImportUris = { uris ->
+                uris.forEach { uri ->
+                    repository.importProjectFont(project, uri)
+                }
+                refreshProjectFonts()
+            },
+            onRenameFont = { oldName, newName ->
+                repository.renameProjectFont(project, oldName, newName)
+                refreshProjectFonts()
+            },
+            onDeleteFonts = { namesToDelete ->
+                repository.deleteProjectFonts(project, namesToDelete)
+                refreshProjectFonts()
+            },
+            onBack = { showFontManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showResourcesManagerScreen) {
+        IdeResourcesManagerScreen(
+            project = project,
+            repository = repository,
+            onBack = {
+                refreshProjectImages()
+                refreshProjectSounds()
+                refreshProjectFonts()
+                showResourcesManagerScreen = false
+            },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showIconManagerScreen) {
+        IdeIconManagerScreen(
+            project = project,
+            images = projectImages,
+            onSaveGeneratedIcon = { name, pngBytes, vectorXml ->
+                repository.saveGeneratedIconToProject(project, name, pngBytes, vectorXml)
+                refreshProjectImages()
+            },
+            onImportUris = { uris ->
+                uris.forEach { uri ->
+                    repository.importProjectImage(project, uri)
+                }
+                refreshProjectImages()
+            },
+            onRenameIcon = { oldName, newName ->
+                val renamed = repository.renameProjectImage(project, oldName, newName)
+                refreshProjectImages()
+                if (renamed != null && renamed != oldName) {
+                    updateWidgetNodes(renameImageResInTree(widgetNodes, oldName, renamed), recordHistory = false)
+                }
+            },
+            onDeleteIcons = { namesToDelete ->
+                repository.deleteProjectImages(project, namesToDelete)
+                refreshProjectImages()
+            },
+            onBack = { showIconManagerScreen = false },
             modifier = modifier,
         )
         return
@@ -817,11 +940,36 @@ fun IdeProjectScreen(
                 onDismiss = { showSideMenuDrawer = false },
                 onSelectItem = { item ->
                     showSideMenuDrawer = false
-                    if (item == IdeSideMenuItem.IMAGE_MANAGER) {
-                        refreshProjectImages()
-                        showImageManagerScreen = true
-                    } else {
-                        activeSideMenuItem = item
+                    when (item) {
+                        IdeSideMenuItem.IMAGE_MANAGER -> {
+                            refreshProjectImages()
+                            showImageManagerScreen = true
+                        }
+                        IdeSideMenuItem.SOUND_MANAGER -> {
+                            refreshProjectSounds()
+                            showSoundManagerScreen = true
+                        }
+                        IdeSideMenuItem.FONT_MANAGER -> {
+                            refreshProjectFonts()
+                            showFontManagerScreen = true
+                        }
+                        IdeSideMenuItem.RESOURCES_MANAGER -> {
+                            showResourcesManagerScreen = true
+                        }
+                        IdeSideMenuItem.ICON_MANAGER -> {
+                            refreshProjectImages()
+                            showIconManagerScreen = true
+                        }
+                        IdeSideMenuItem.TERMINAL_ANDROID -> {
+                            val intent = android.content.Intent(
+                                context,
+                                com.example.ubuntuterminal.MainActivity::class.java,
+                            )
+                            context.startActivity(intent)
+                        }
+                        else -> {
+                            activeSideMenuItem = item
+                        }
                     }
                 },
             )
@@ -14030,4 +14178,2903 @@ private fun IdeImageManagerScreen(
         )
     }
 }
+
+// ============================================================================
+// 9. Sound Manager Screen (Same concept as Image Manager: res/raw audio manager)
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IdeSoundManagerScreen(
+    project: WorkspaceItem,
+    sounds: List<ProjectSoundItem>,
+    onImportUris: (List<android.net.Uri>) -> Unit,
+    onRenameSound: (String, String) -> Unit,
+    onDeleteSounds: (Set<String>) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedResNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var activeSheetSound by remember { mutableStateOf<ProjectSoundItem?>(null) }
+    var showMultiSelectSheet by remember { mutableStateOf(false) }
+    var renameTargetSound by remember { mutableStateOf<ProjectSoundItem?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+    var playingSoundName by remember { mutableStateOf<String?>(null) }
+    val mediaPlayerRef = remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+
+    fun stopAudio() {
+        runCatching {
+            mediaPlayerRef.value?.stop()
+            mediaPlayerRef.value?.release()
+        }
+        mediaPlayerRef.value = null
+        playingSoundName = null
+    }
+
+    fun togglePlaySound(item: ProjectSoundItem) {
+        if (playingSoundName == item.resName) {
+            stopAudio()
+        } else {
+            stopAudio()
+            runCatching {
+                val mp = android.media.MediaPlayer().apply {
+                    setDataSource(item.filePath)
+                    setOnCompletionListener {
+                        playingSoundName = null
+                    }
+                    prepare()
+                    start()
+                }
+                mediaPlayerRef.value = mp
+                playingSoundName = item.resName
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { stopAudio() }
+    }
+
+    val soundPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            onImportUris(uris)
+        }
+    }
+
+    BackHandler {
+        if (isMultiSelectMode) {
+            isMultiSelectMode = false
+            selectedResNames = emptySet()
+        } else {
+            stopAudio()
+            onBack()
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0A0F24))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        GlassIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            onClick = {
+                                if (isMultiSelectMode) {
+                                    isMultiSelectMode = false
+                                    selectedResNames = emptySet()
+                                } else {
+                                    stopAudio()
+                                    onBack()
+                                }
+                            },
+                            modifier = Modifier.size(40.dp),
+                        )
+
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (isMultiSelectMode) {
+                                    "تحديد متعدد (${selectedResNames.size}) • Multi-Select"
+                                } else {
+                                    "Sound Manager • مدير الأصوات"
+                                },
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = if (isMultiSelectMode) {
+                                    "اضغط لتحديد الأصوات أو اضغط مطولاً لحذف الملفات"
+                                } else {
+                                    "${project.name} • ${sounds.size} raw audio files (@raw/...)"
+                                },
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.5.sp,
+                                ),
+                                color = Cyan,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+
+                    if (isMultiSelectMode) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Cyan.copy(alpha = 0.16f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                    .clickable {
+                                        selectedResNames = if (selectedResNames.size == sounds.size) {
+                                            emptySet()
+                                        } else {
+                                            sounds.map { it.resName }.toSet()
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = if (selectedResNames.size == sounds.size) "إلغاء الكل" else "تحديد الكل",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0x22FFFFFF))
+                                    .clickable {
+                                        isMultiSelectMode = false
+                                        selectedResNames = emptySet()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = "إلغاء",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Ink,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0x24FFFFFF)),
+                )
+
+                if (sounds.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Cyan.copy(alpha = 0.14f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                                    .clickable { soundPickerLauncher.launch("audio/*") },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                    modifier = Modifier.size(34.dp),
+                                )
+                            }
+                            Text(
+                                text = "لا توجد ملفات صوتية في المشروع حالياً",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                            )
+                            Text(
+                                text = "اضغط على زر الإضافة العائم (+) بالأسفل لاستيراد أصوات (MP3 / WAV / OGG) إلى res/raw",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        sounds.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowItems.forEach { item ->
+                                    val isSelected = item.resName in selectedResNames
+                                    val isPlaying = playingSoundName == item.resName
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                            )
+                                            .border(
+                                                width = if (isSelected || isPlaying) 1.8.dp else 1.dp,
+                                                color = when {
+                                                    isSelected -> Cyan
+                                                    isPlaying -> Color(0xFF22C55E)
+                                                    else -> Color(0x28FFFFFF)
+                                                },
+                                                shape = RoundedCornerShape(16.dp),
+                                            )
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (isMultiSelectMode) {
+                                                        selectedResNames = if (isSelected) {
+                                                            selectedResNames - item.resName
+                                                        } else {
+                                                            selectedResNames + item.resName
+                                                        }
+                                                    } else {
+                                                        togglePlaySound(item)
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    if (isMultiSelectMode) {
+                                                        if (!isSelected) {
+                                                            selectedResNames = selectedResNames + item.resName
+                                                        }
+                                                        showMultiSelectSheet = true
+                                                    } else {
+                                                        activeSheetSound = item
+                                                    }
+                                                },
+                                            )
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(96.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(
+                                                    if (isPlaying) Color(0xFF0E2923) else Color(0xFF0B112B),
+                                                )
+                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(42.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (isPlaying) Color(0xFF22C55E).copy(alpha = 0.25f) else Cyan.copy(alpha = 0.18f),
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isPlaying) Icons.Filled.Close else Icons.Filled.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = if (isPlaying) Color(0xFF4ADE80) else Cyan,
+                                                        modifier = Modifier.size(22.dp),
+                                                    )
+                                                }
+                                                Text(
+                                                    text = if (isPlaying) "جاري التشغيل..." else "اضغط للتشغيل",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                    color = if (isPlaying) Color(0xFF4ADE80) else Muted,
+                                                )
+                                            }
+
+                                            if (isMultiSelectMode) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(6.dp)
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                        )
+                                                        .border(
+                                                            width = 1.5.dp,
+                                                            color = if (isSelected) Cyan else Color.White,
+                                                            shape = CircleShape,
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    if (isSelected) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF050816),
+                                                            modifier = Modifier.size(15.dp),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = "${item.resName}.${item.extension}",
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = if (isSelected) Cyan else Ink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = "@raw/${item.resName} • ${(item.sizeBytes / 1024L).coerceAtLeast(1L)} KB",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 10.sp,
+                                                ),
+                                                color = Muted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rowItems.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+            }
+
+            // FAB (+) to import sound files
+            FloatingActionButton(
+                onClick = { soundPickerLauncher.launch("audio/*") },
+                containerColor = Cyan,
+                contentColor = Color(0xFF050816),
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = if (isMultiSelectMode && selectedResNames.isNotEmpty()) 76.dp else 20.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Import Sound",
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            if (isMultiSelectMode && selectedResNames.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xFF131B3A))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
+                        .navigationBarsPadding()
+                        .clickable { showMultiSelectSheet = true }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تم تحديد ${selectedResNames.size} ملفات صوتية",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFF43F5E))
+                            .clickable { showMultiSelectSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "حذف الملفات (${selectedResNames.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Long-press sheet in normal mode (Rename, Multi-select, Delete)
+    val sheetItem = activeSheetSound
+    if (sheetItem != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { activeSheetSound = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "@raw/${sheetItem.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Cyan,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetSound = null
+                            renameInput = target.resName
+                            renameTargetSound = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تعديل الاسم • Rename",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Text(
+                        text = sheetItem.resName,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                        color = Cyan,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetSound = null
+                            isMultiSelectMode = true
+                            selectedResNames = setOf(target.resName)
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تحديد متعدد • Multi-select",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetSound = null
+                            stopAudio()
+                            onDeleteSounds(setOf(target.resName))
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف العنصر • Delete Item",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFDA4AF),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    if (showMultiSelectSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showMultiSelectSheet = false },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "تم تحديد ${selectedResNames.size} ملفات • Selected Files",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF4C0519))
+                        .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val targets = selectedResNames
+                            showMultiSelectSheet = false
+                            stopAudio()
+                            if (targets.isNotEmpty()) {
+                                onDeleteSounds(targets)
+                            }
+                            isMultiSelectMode = false
+                            selectedResNames = emptySet()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف الملفات (${selectedResNames.size}) • Delete Files",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    val renameTarget = renameTargetSound
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetSound = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename Sound",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "أدخل الاسم الجديد للملف الصوتي (أحرف إنجليزية صغيرة وأرقام و _):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        OutlinedTextField(
+                            value = renameInput,
+                            onValueChange = { renameInput = it },
+                            singleLine = true,
+                            label = { Text("@raw/...") },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                focusedContainerColor = Color(0x14FFFFFF),
+                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameInput.trim()
+                        if (newName.isNotEmpty()) {
+                            onRenameSound(renameTarget.resName, newName)
+                        }
+                        renameTargetSound = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetSound = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+}
+
+// ============================================================================
+// 10. Font Manager Screen (Same concept as Image Manager: res/font manager)
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IdeFontManagerScreen(
+    project: WorkspaceItem,
+    fonts: List<ProjectFontItem>,
+    onImportUris: (List<android.net.Uri>) -> Unit,
+    onRenameFont: (String, String) -> Unit,
+    onDeleteFonts: (Set<String>) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedResNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var activeSheetFont by remember { mutableStateOf<ProjectFontItem?>(null) }
+    var showMultiSelectSheet by remember { mutableStateOf(false) }
+    var renameTargetFont by remember { mutableStateOf<ProjectFontItem?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+    var previewFont by remember { mutableStateOf<ProjectFontItem?>(null) }
+    var samplePreviewText by remember { mutableStateOf("بسم الله الرحمن الرحيم • IDE Ultimate 123") }
+
+    val fontPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            onImportUris(uris)
+        }
+    }
+
+    BackHandler {
+        if (isMultiSelectMode) {
+            isMultiSelectMode = false
+            selectedResNames = emptySet()
+        } else {
+            onBack()
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0A0F24))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        GlassIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            onClick = {
+                                if (isMultiSelectMode) {
+                                    isMultiSelectMode = false
+                                    selectedResNames = emptySet()
+                                } else {
+                                    onBack()
+                                }
+                            },
+                            modifier = Modifier.size(40.dp),
+                        )
+
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = if (isMultiSelectMode) {
+                                    "تحديد متعدد (${selectedResNames.size}) • Multi-Select"
+                                } else {
+                                    "Font Manager • مدير الخطوط"
+                                },
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = if (isMultiSelectMode) {
+                                    "اضغط لتحديد الخطوط أو اضغط مطولاً لحذف الملفات"
+                                } else {
+                                    "${project.name} • ${fonts.size} fonts (@font/...)"
+                                },
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.5.sp,
+                                ),
+                                color = Cyan,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+
+                    if (isMultiSelectMode) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Cyan.copy(alpha = 0.16f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                    .clickable {
+                                        selectedResNames = if (selectedResNames.size == fonts.size) {
+                                            emptySet()
+                                        } else {
+                                            fonts.map { it.resName }.toSet()
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = if (selectedResNames.size == fonts.size) "إلغاء الكل" else "تحديد الكل",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0x22FFFFFF))
+                                    .clickable {
+                                        isMultiSelectMode = false
+                                        selectedResNames = emptySet()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = "إلغاء",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Ink,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0x24FFFFFF)),
+                )
+
+                if (fonts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Cyan.copy(alpha = 0.14f))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                                    .clickable { fontPickerLauncher.launch("*/*") },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                    modifier = Modifier.size(34.dp),
+                                )
+                            }
+                            Text(
+                                text = "لا توجد خطوط مضافة في المشروع حالياً",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                            )
+                            Text(
+                                text = "اضغط على زر الإضافة العائم (+) بالأسفل لاستيراد خطوط (.ttf / .otf) إلى res/font",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        fonts.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowItems.forEach { item ->
+                                    val isSelected = item.resName in selectedResNames
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                            )
+                                            .border(
+                                                width = if (isSelected) 1.8.dp else 1.dp,
+                                                color = if (isSelected) Cyan else Color(0x28FFFFFF),
+                                                shape = RoundedCornerShape(16.dp),
+                                            )
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (isMultiSelectMode) {
+                                                        selectedResNames = if (isSelected) {
+                                                            selectedResNames - item.resName
+                                                        } else {
+                                                            selectedResNames + item.resName
+                                                        }
+                                                    } else {
+                                                        previewFont = item
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    if (isMultiSelectMode) {
+                                                        if (!isSelected) {
+                                                            selectedResNames = selectedResNames + item.resName
+                                                        }
+                                                        showMultiSelectSheet = true
+                                                    } else {
+                                                        activeSheetFont = item
+                                                    }
+                                                },
+                                            )
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(96.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF0A1026))
+                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            AndroidView(
+                                                factory = { ctx ->
+                                                    android.widget.TextView(ctx).apply {
+                                                        text = "Aa أبجد"
+                                                        textSize = 20f
+                                                        setTextColor(android.graphics.Color.WHITE)
+                                                        gravity = android.view.Gravity.CENTER
+                                                    }
+                                                },
+                                                update = { tv ->
+                                                    runCatching {
+                                                        val tf = android.graphics.Typeface.createFromFile(item.filePath)
+                                                        tv.typeface = tf
+                                                    }
+                                                },
+                                            )
+
+                                            if (isMultiSelectMode) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(6.dp)
+                                                        .size(24.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                        )
+                                                        .border(
+                                                            width = 1.5.dp,
+                                                            color = if (isSelected) Cyan else Color.White,
+                                                            shape = CircleShape,
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    if (isSelected) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF050816),
+                                                            modifier = Modifier.size(15.dp),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = "${item.resName}.${item.extension}",
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = if (isSelected) Cyan else Ink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = "@font/${item.resName} • ${(item.sizeBytes / 1024L).coerceAtLeast(1L)} KB",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 10.sp,
+                                                ),
+                                                color = Muted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rowItems.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+            }
+
+            // FAB (+) to import font files
+            FloatingActionButton(
+                onClick = { fontPickerLauncher.launch("*/*") },
+                containerColor = Cyan,
+                contentColor = Color(0xFF050816),
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = if (isMultiSelectMode && selectedResNames.isNotEmpty()) 76.dp else 20.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Import Font",
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            if (isMultiSelectMode && selectedResNames.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xFF131B3A))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
+                        .navigationBarsPadding()
+                        .clickable { showMultiSelectSheet = true }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تم تحديد ${selectedResNames.size} خطوط",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFFF43F5E))
+                            .clickable { showMultiSelectSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "حذف الملفات (${selectedResNames.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Long-press sheet in normal mode (Rename, Multi-select, Delete)
+    val sheetItem = activeSheetFont
+    if (sheetItem != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { activeSheetFont = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "@font/${sheetItem.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Cyan,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetFont = null
+                            renameInput = target.resName
+                            renameTargetFont = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تعديل الاسم • Rename",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Text(
+                        text = sheetItem.resName,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                        color = Cyan,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetFont = null
+                            isMultiSelectMode = true
+                            selectedResNames = setOf(target.resName)
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تحديد متعدد • Multi-select",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetItem
+                            activeSheetFont = null
+                            onDeleteFonts(setOf(target.resName))
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف العنصر • Delete Item",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFDA4AF),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    if (showMultiSelectSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showMultiSelectSheet = false },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "تم تحديد ${selectedResNames.size} خطوط • Selected Fonts",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF4C0519))
+                        .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val targets = selectedResNames
+                            showMultiSelectSheet = false
+                            if (targets.isNotEmpty()) {
+                                onDeleteFonts(targets)
+                            }
+                            isMultiSelectMode = false
+                            selectedResNames = emptySet()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف الملفات (${selectedResNames.size}) • Delete Files",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    val renameTarget = renameTargetFont
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetFont = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename Font",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "أدخل الاسم الجديد للخط (أحرف إنجليزية صغيرة وأرقام و _):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        OutlinedTextField(
+                            value = renameInput,
+                            onValueChange = { renameInput = it },
+                            singleLine = true,
+                            label = { Text("@font/...") },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                focusedContainerColor = Color(0x14FFFFFF),
+                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameInput.trim()
+                        if (newName.isNotEmpty()) {
+                            onRenameFont(renameTarget.resName, newName)
+                        }
+                        renameTargetFont = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetFont = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+
+    val currentPreviewFont = previewFont
+    if (currentPreviewFont != null) {
+        AlertDialog(
+            onDismissRequest = { previewFont = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "@font/${currentPreviewFont.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF080D22))
+                            .border(1.dp, Cyan.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                android.widget.TextView(ctx).apply {
+                                    textSize = 20f
+                                    setTextColor(android.graphics.Color.WHITE)
+                                    gravity = android.view.Gravity.CENTER
+                                }
+                            },
+                            update = { tv ->
+                                tv.text = samplePreviewText
+                                runCatching {
+                                    tv.typeface = android.graphics.Typeface.createFromFile(currentPreviewFont.filePath)
+                                }
+                            },
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = samplePreviewText,
+                        onValueChange = { samplePreviewText = it },
+                        singleLine = true,
+                        label = { Text("نص المعاينة • Sample Text") },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                            cursorColor = Cyan,
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = Color(0x33FFFFFF),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { previewFont = null }) {
+                    Text(stringResource(R.string.ide_temp_run_close), color = Cyan)
+                }
+            },
+        )
+    }
+}
+
+// ============================================================================
+// 11. Resources Manager Screen (Folder Browser for app/src/main/res + FAB New File/Folder in Root + Long-Press Bottom Sheet Rename/Delete)
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IdeResourcesManagerScreen(
+    project: WorkspaceItem,
+    repository: WorkspaceRepository,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var currentRelativePath by remember { mutableStateOf("") }
+    var refreshTrigger by remember { mutableStateOf(0) }
+    val entries = remember(project.id, currentRelativePath, refreshTrigger) {
+        repository.listProjectResourceEntries(project, currentRelativePath)
+    }
+
+    var longPressedEntry by remember { mutableStateOf<ProjectResourceEntry?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var createIsDirectory by remember { mutableStateOf(true) }
+    var createInRoot by remember { mutableStateOf(true) }
+    var createNameInput by remember { mutableStateOf("") }
+
+    var renameTargetEntry by remember { mutableStateOf<ProjectResourceEntry?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+
+    var editingFileEntry by remember { mutableStateOf<ProjectResourceEntry?>(null) }
+    var editingFileContent by remember { mutableStateOf("") }
+
+    BackHandler {
+        when {
+            editingFileEntry != null -> editingFileEntry = null
+            currentRelativePath.isNotEmpty() -> {
+                currentRelativePath = currentRelativePath.substringBeforeLast('/', "")
+            }
+            else -> onBack()
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0A0F24))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = {
+                            if (editingFileEntry != null) {
+                                editingFileEntry = null
+                            } else if (currentRelativePath.isNotEmpty()) {
+                                currentRelativePath = currentRelativePath.substringBeforeLast('/', "")
+                            } else {
+                                onBack()
+                            }
+                        },
+                        modifier = Modifier.size(40.dp),
+                    )
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Resources Manager • مدير الموارد",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (currentRelativePath.isEmpty()) {
+                                "app/src/main/res (Root) • ${entries.size} items"
+                            } else {
+                                "app/src/main/res/$currentRelativePath • ${entries.size} items"
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                            ),
+                            color = Cyan,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                // Folder Browser Breadcrumb Bar (متصفح الفولدرات)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0D1430))
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (currentRelativePath.isEmpty()) Cyan.copy(alpha = 0.22f) else Color(0x18FFFFFF),
+                            )
+                            .border(
+                                1.dp,
+                                if (currentRelativePath.isEmpty()) Cyan else Color(0x28FFFFFF),
+                                RoundedCornerShape(8.dp),
+                            )
+                            .clickable {
+                                editingFileEntry = null
+                                currentRelativePath = ""
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = "📁 res (Root)",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = if (currentRelativePath.isEmpty()) Cyan else Ink,
+                        )
+                    }
+
+                    val parts = currentRelativePath.split('/').filter { it.isNotBlank() }
+                    parts.forEachIndexed { idx, segment ->
+                        Text(text = "/", color = Muted, fontSize = 12.sp)
+                        val subRel = parts.take(idx + 1).joinToString("/")
+                        val isLast = idx == parts.lastIndex
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isLast) Cyan.copy(alpha = 0.22f) else Color(0x18FFFFFF),
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isLast) Cyan else Color(0x28FFFFFF),
+                                    RoundedCornerShape(8.dp),
+                                )
+                                .clickable {
+                                    editingFileEntry = null
+                                    currentRelativePath = subRel
+                                }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = "📂 $segment",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = if (isLast) Cyan else Ink,
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0x24FFFFFF)),
+                )
+
+                val currentEditFile = editingFileEntry
+                if (currentEditFile != null) {
+                    // Built-in Resource File Editor
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = "res/${currentEditFile.relativePath}",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Cyan,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color(0x22FFFFFF))
+                                        .clickable { editingFileEntry = null }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "رجوع للفولدر",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Ink,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Cyan)
+                                        .clickable {
+                                            repository.writeProjectResourceFile(
+                                                project,
+                                                currentEditFile.relativePath,
+                                                editingFileContent,
+                                            )
+                                            refreshTrigger++
+                                            editingFileEntry = null
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Save • حفظ",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Color(0xFF050816),
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = editingFileContent,
+                            onValueChange = { editingFileContent = it },
+                            singleLine = false,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 12.sp,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                focusedContainerColor = Color(0xFF060A1C),
+                                unfocusedContainerColor = Color(0xFF060A1C),
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        )
+                    }
+                } else {
+                    // Folder Browser List (متصفح الفولدرات والملفات)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (currentRelativePath.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF141E42))
+                                    .border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        currentRelativePath = currentRelativePath.substringBeforeLast('/', "")
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(text = "⬆️", fontSize = 16.sp)
+                                Text(
+                                    text = ".. (الرجوع إلى المجلد الأعلى)",
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+                        }
+
+                        entries.forEach { entry ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF121A3A))
+                                    .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (entry.isDirectory) {
+                                                currentRelativePath = entry.relativePath
+                                            } else {
+                                                editingFileContent = repository.readProjectResourceFile(project, entry.relativePath)
+                                                editingFileEntry = entry
+                                            }
+                                        },
+                                        onLongClick = {
+                                            longPressedEntry = entry
+                                        },
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                if (entry.isDirectory) Color(0xFFFBBF24).copy(alpha = 0.16f) else Cyan.copy(alpha = 0.14f),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = if (entry.isDirectory) "📁" else "📄",
+                                            fontSize = 18.sp,
+                                        )
+                                    }
+
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = entry.name,
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = if (entry.isDirectory) {
+                                                "مجلد • ${entry.childCount} عنصر داخل res/${entry.relativePath}"
+                                            } else {
+                                                "ملف • ${(entry.sizeBytes / 1024L).coerceAtLeast(1L)} KB • res/${entry.relativePath}"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 10.sp,
+                                            ),
+                                            color = Muted,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = if (entry.isDirectory) "فتح ❯" else "تحرير",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = if (entry.isDirectory) Color(0xFFFBBF24) else Cyan,
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+            }
+
+            // FAB (+) to create a new File or Folder in Root (res/) or current folder
+            if (editingFileEntry == null) {
+                FloatingActionButton(
+                    onClick = {
+                        createNameInput = ""
+                        createIsDirectory = true
+                        createInRoot = currentRelativePath.isEmpty()
+                        showCreateDialog = true
+                    },
+                    containerColor = Cyan,
+                    contentColor = Color(0xFF050816),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(end = 20.dp, bottom = 20.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Create File or Folder",
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    // Long-press Bottom Sheet (تعديل الاسم • Rename | حذف العنصر • Delete Item)
+    val activeSheetEntry = longPressedEntry
+    if (activeSheetEntry != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { longPressedEntry = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "res/${activeSheetEntry.relativePath}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Cyan,
+                )
+
+                // 1. تعديل الاسم (Rename)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = activeSheetEntry
+                            longPressedEntry = null
+                            renameInput = target.name
+                            renameTargetEntry = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تعديل الاسم • Rename",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                // 2. حذف العنصر (Delete Item)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = activeSheetEntry
+                            longPressedEntry = null
+                            repository.deleteProjectResourceEntry(project, target.relativePath)
+                            refreshTrigger++
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف العنصر • Delete Item",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFDA4AF),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    // FAB Create File / Folder Dialog
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "إنشاء ملف أو فولدر جديد • New Resource",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Type selector: Folder vs File
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(true to "📁 فولدر جديد (Folder)", false to "📄 ملف جديد (File)").forEach { (isDir, label) ->
+                            val selected = createIsDirectory == isDir
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                    .border(1.dp, if (selected) Cyan else Color(0x28FFFFFF), RoundedCornerShape(10.dp))
+                                    .clickable { createIsDirectory = isDir }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    ),
+                                    color = if (selected) Cyan else Ink,
+                                )
+                            }
+                        }
+                    }
+
+                    // Location selector: Root (res/) vs Current Folder
+                    if (currentRelativePath.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(true to "في الروت (res/)", false to "في المجلد الحالي ($currentRelativePath)").forEach { (inRoot, label) ->
+                                val selected = createInRoot == inRoot
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (selected) VioletSoft.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                        .border(1.dp, if (selected) VioletSoft else Color(0x28FFFFFF), RoundedCornerShape(10.dp))
+                                        .clickable { createInRoot = inRoot }
+                                        .padding(vertical = 7.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = if (selected) VioletSoft else Ink,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        OutlinedTextField(
+                            value = createNameInput,
+                            onValueChange = { createNameInput = it },
+                            singleLine = true,
+                            label = {
+                                Text(
+                                    if (createIsDirectory) "Folder name (e.g. drawable-v24, anim)" else "File name (e.g. dimens.xml, custom.xml)",
+                                )
+                            },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = createNameInput.trim()
+                        if (name.isNotEmpty()) {
+                            val targetParent = if (createInRoot) "" else currentRelativePath
+                            repository.createProjectResourceEntry(
+                                project = project,
+                                parentRelativePath = targetParent,
+                                rawName = name,
+                                isDirectory = createIsDirectory,
+                            )
+                            refreshTrigger++
+                        }
+                        showCreateDialog = false
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+
+    // Rename Entry Dialog
+    val renameEntry = renameTargetEntry
+    if (renameEntry != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetEntry = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename Resource",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    OutlinedTextField(
+                        value = renameInput,
+                        onValueChange = { renameInput = it },
+                        singleLine = true,
+                        label = { Text("New Name") },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = JetBrainsMono,
+                            color = Ink,
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                            cursorColor = Cyan,
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = Color(0x33FFFFFF),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameInput.trim()
+                        if (newName.isNotEmpty()) {
+                            repository.renameProjectResourceEntry(project, renameEntry.relativePath, newName)
+                            refreshTrigger++
+                        }
+                        renameTargetEntry = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetEntry = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+}
+
+// ============================================================================
+// 12. Full Icon Manager Screen (Built-in Vector Icon Pack + Color/Size Studio + Project Icons)
+// ============================================================================
+
+private data class BuiltInVectorIconSpec(
+    val id: String,
+    val title: String,
+    val category: String,
+    val glyph: String,
+    val pathData: String,
+)
+
+private val BUILT_IN_VECTOR_ICONS: List<BuiltInVectorIconSpec> = listOf(
+    BuiltInVectorIconSpec("ic_home", "Home", "Navigation", "🏠", "M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"),
+    BuiltInVectorIconSpec("ic_arrow_back", "Arrow Back", "Navigation", "⬅", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"),
+    BuiltInVectorIconSpec("ic_arrow_forward", "Arrow Forward", "Navigation", "➡", "M12,4l-1.41,1.41L16.17,11H4v2h12.17l-5.58,5.59L12,20l8,-8z"),
+    BuiltInVectorIconSpec("ic_menu", "Menu", "Navigation", "☰", "M3,18h18v-2H3v2zm0,-5h18v-2H3v2zm0,-7v2h18V6H3z"),
+    BuiltInVectorIconSpec("ic_close", "Close", "Navigation", "✕", "M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"),
+    BuiltInVectorIconSpec("ic_search", "Search", "Actions", "🔍", "M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5z"),
+    BuiltInVectorIconSpec("ic_settings", "Settings", "Actions", "⚙", "M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94 0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58L19.24,6.1l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.87,3.5h-3.84L10.67,6.12c-0.59,0.24 -1.13,0.56 -1.62,0.94L6.66,6.1 4.74,9.38l2.03,1.58C6.72,11.36 6.7,11.68 6.7,12s0.02,0.64 0.07,0.94l-2.03,1.58 1.92,3.28 2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.62h3.84l0.36,-2.62c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96 1.92,-3.28 -2.03,-1.58z"),
+    BuiltInVectorIconSpec("ic_add", "Add / Plus", "Actions", "➕", "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"),
+    BuiltInVectorIconSpec("ic_delete", "Delete / Trash", "Actions", "🗑", "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z"),
+    BuiltInVectorIconSpec("ic_edit", "Edit / Pen", "Actions", "✎", "M3,17.25V21h3.75L17.81,9.94l-3.75,-3.75L3,17.25zM20.71,7.04c0.39,-0.39 0.39,-1.02 0,-1.41l-2.34,-2.34c-0.39,-0.39 -1.02,-0.39 -1.41,0l-1.83,1.83 3.75,3.75 1.83,-1.83z"),
+    BuiltInVectorIconSpec("ic_check", "Check / Done", "Actions", "✔", "M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"),
+    BuiltInVectorIconSpec("ic_share", "Share", "Actions", "🔗", "M18,16.08c-0.76,0 -1.44,0.3 -1.96,0.77L8.91,12.7c0.05,-0.23 0.09,-0.46 0.09,-0.7s-0.04,-0.47 -0.09,-0.7l7.05,-4.11c0.54,0.5 1.25,0.81 2.04,0.81 1.66,0 3,-1.34 3,-3s-1.34,-3 -3,-3 -3,1.34 -3,3c0,0.24 0.04,0.47 0.09,0.7L8.04,9.81C7.5,9.31 6.79,9 6,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3c0.79,0 1.5,-0.31 2.04,-0.81l7.12,4.16c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.61 1.31,2.92 2.92,2.92 1.61,0 2.92,-1.31 2.92,-2.92s-1.31,-2.92 -2.92,-2.92z"),
+    BuiltInVectorIconSpec("ic_favorite", "Heart / Favorite", "Actions", "❤", "M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z"),
+    BuiltInVectorIconSpec("ic_star", "Star / Rating", "Actions", "⭐", "M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z"),
+    BuiltInVectorIconSpec("ic_download", "Download", "Actions", "⬇", "M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z"),
+    BuiltInVectorIconSpec("ic_upload", "Upload", "Actions", "⬆", "M9,16h6v-6h4l-7,-7 -7,7h4zm-4,2h14v2H5z"),
+    BuiltInVectorIconSpec("ic_play", "Play Audio/Video", "Media", "▶", "M8,5v14l11,-7z"),
+    BuiltInVectorIconSpec("ic_pause", "Pause", "Media", "⏸", "M6,19h4V5H6v14zm8,-14v14h4V5h-4z"),
+    BuiltInVectorIconSpec("ic_stop", "Stop", "Media", "⏹", "M6,6h12v12H6z"),
+    BuiltInVectorIconSpec("ic_music_note", "Music / Sound", "Media", "🎵", "M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55 -2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3h-6z"),
+    BuiltInVectorIconSpec("ic_camera", "Camera", "Media", "📷", "M12,12m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0M9,2L7.17,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2h-3.17L15,2H9z"),
+    BuiltInVectorIconSpec("ic_image", "Image / Gallery", "Media", "🖼", "M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z"),
+    BuiltInVectorIconSpec("ic_mic", "Microphone", "Media", "🎤", "M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3z"),
+    BuiltInVectorIconSpec("ic_email", "Email / Mail", "Communication", "✉", "M20,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zm0,4l-8,5 -8,-5V6l8,5 8,-5v2z"),
+    BuiltInVectorIconSpec("ic_chat", "Chat / Message", "Communication", "💬", "M20,2H4c-1.1,0 -2,0.9 -2,2v18l4,-4h14c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2z"),
+    BuiltInVectorIconSpec("ic_call", "Phone Call", "Communication", "📞", "M6.62,10.79c1.44,2.83 3.76,5.14 6.59,6.59l2.2,-2.2c0.27,-0.27 0.67,-0.36 1.02,-0.24 1.12,0.37 2.33,0.57 3.57,0.57 0.55,0 1,0.45 1,1V20c0,0.55 -0.45,1 -1,1 -9.39,0 -17,-7.61 -17,-17 0,-0.55 0.45,-1 1,-1h3.5c0.55,0 1,0.45 1,1 0,1.25 0.2,2.45 0.57,3.57 0.11,0.35 0.03,0.74 -0.25,1.02l-2.2,2.2z"),
+    BuiltInVectorIconSpec("ic_notifications", "Notification Bell", "Communication", "🔔", "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zm6,-6v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z"),
+    BuiltInVectorIconSpec("ic_person", "User Profile", "Communication", "👤", "M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zm0,2c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z"),
+    BuiltInVectorIconSpec("ic_folder", "Folder", "Files", "📁", "M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z"),
+    BuiltInVectorIconSpec("ic_file", "Document File", "Files", "📄", "M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6z"),
+    BuiltInVectorIconSpec("ic_code", "Code / Developer", "Files", "💻", "M9.4,16.6L4.8,12l4.6,-4.6L8,6l-6,6 6,6 1.4,-1.4zm5.2,0l4.6,-4.6 -4.6,-4.6L16,6l6,6 -6,6 -1.4,-1.4z"),
+    BuiltInVectorIconSpec("ic_cloud", "Cloud Sync", "Files", "☁", "M19.35,10.04C18.67,6.59 15.64,4 12,4 9.11,4 6.6,5.64 5.35,8.04 2.34,8.36 0,10.91 0,14c0,3.31 2.69,6 6,6h13c2.76,0 5,-2.24 5,-5 0,-2.64 -2.05,-4.78 -4.65,-4.96z"),
+    BuiltInVectorIconSpec("ic_lock", "Security Lock", "Device", "🔒", "M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2z"),
+    BuiltInVectorIconSpec("ic_wifi", "Wi-Fi Network", "Device", "📶", "M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zm8,8l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0z"),
+    BuiltInVectorIconSpec("ic_terminal", "Terminal Shell", "Device", "🖥", "M20,4H4c-1.11,0 -2,0.9 -2,2v12c0,1.1 0.89,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM7.5,17l-1.41,-1.41L9.67,12 6.09,8.41 7.5,7l5,5 -5,5zm9.5,0h-6v-2h6v2z"),
+    BuiltInVectorIconSpec("ic_calendar", "Calendar / Date", "Device", "📅", "M19,3h-1V1h-2v2H8V1H6v2H5c-1.11,0 -1.99,0.9 -1.99,2L3,19c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zm0,16H5V8h14v11z"),
+)
+
+private fun renderIconBitmapBytes(
+    glyph: String,
+    tintArgb: Int,
+    sizePx: Int = 128,
+): ByteArray {
+    val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bmp)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = tintArgb
+        textAlign = android.graphics.Paint.Align.CENTER
+        textSize = sizePx * 0.58f
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    val fm = paint.fontMetrics
+    val cy = sizePx / 2f - (fm.ascent + fm.descent) / 2f
+    canvas.drawText(glyph, sizePx / 2f, cy, paint)
+    val out = java.io.ByteArrayOutputStream()
+    bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+    return out.toByteArray()
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IdeIconManagerScreen(
+    project: WorkspaceItem,
+    images: List<ProjectImageItem>,
+    onSaveGeneratedIcon: (String, ByteArray, String) -> Unit,
+    onImportUris: (List<android.net.Uri>) -> Unit,
+    onRenameIcon: (String, String) -> Unit,
+    onDeleteIcons: (Set<String>) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // 0 = مكتبة الأيقونات (Icon Pack Library), 1 = أيقونات المشروع (Project Icons)
+    var activeTab by remember { mutableStateOf(0) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("All") }
+    var selectedColorHex by remember { mutableStateOf("#38BDF8") }
+    var selectedSizeDp by remember { mutableStateOf(48) }
+
+    var iconToAddDialog by remember { mutableStateOf<BuiltInVectorIconSpec?>(null) }
+    var customIconResName by remember { mutableStateOf("") }
+
+    var activeSheetIcon by remember { mutableStateOf<ProjectImageItem?>(null) }
+    var renameTargetIcon by remember { mutableStateOf<ProjectImageItem?>(null) }
+    var renameInput by remember { mutableStateOf("") }
+
+    val iconPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            onImportUris(uris)
+            activeTab = 1
+        }
+    }
+
+    val categories = remember {
+        listOf("All", "Navigation", "Actions", "Media", "Communication", "Files", "Device")
+    }
+    val colorOptions = remember {
+        listOf(
+            "#38BDF8" to Color(0xFF38BDF8),
+            "#FFFFFF" to Color(0xFFFFFFFF),
+            "#22C55E" to Color(0xFF22C55E),
+            "#FBBF24" to Color(0xFFFBBF24),
+            "#F43F5E" to Color(0xFFF43F5E),
+            "#A855F7" to Color(0xFFA855F7),
+            "#FB923C" to Color(0xFFFB923C),
+        )
+    }
+
+    val filteredBuiltInIcons = remember(searchQuery, selectedCategory) {
+        val q = searchQuery.trim().lowercase()
+        BUILT_IN_VECTOR_ICONS.filter { spec ->
+            (selectedCategory == "All" || spec.category == selectedCategory) &&
+                (q.isEmpty() || spec.title.lowercase().contains(q) || spec.id.lowercase().contains(q))
+        }
+    }
+
+    BackHandler(onBack = onBack)
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0A0F24))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack,
+                        modifier = Modifier.size(40.dp),
+                    )
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Icon Manager • مدير الأيقونات",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "${BUILT_IN_VECTOR_ICONS.size} Vector Icons + ${images.size} Project Drawables",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                }
+
+                // Mode Switcher Tabs: مكتبة الأيقونات | أيقونات المشروع
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0D1430))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        0 to "مكتبة الأيقونات • Icon Studio (${BUILT_IN_VECTOR_ICONS.size})",
+                        1 to "أيقونات المشروع • Project Icons (${images.size})",
+                    ).forEach { (idx, title) ->
+                        val selected = activeTab == idx
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                .border(1.dp, if (selected) Cyan else Color(0x28FFFFFF), RoundedCornerShape(10.dp))
+                                .clickable { activeTab = idx }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                ),
+                                color = if (selected) Cyan else Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+
+                if (activeTab == 0) {
+                    // Search + Category + Color & Size Studio
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF090E24))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            placeholder = { Text("ابحث عن أيقونة (Home, Search, Play, Terminal...)") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = Cyan,
+                                )
+                            },
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x28FFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        // Categories row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            categories.forEach { cat ->
+                                val selected = cat == selectedCategory
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
+                                        .border(1.dp, if (selected) Cyan else Color(0x24FFFFFF), RoundedCornerShape(50))
+                                        .clickable { selectedCategory = cat }
+                                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                                ) {
+                                    Text(
+                                        text = cat,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        ),
+                                        color = if (selected) Cyan else Ink,
+                                    )
+                                }
+                            }
+                        }
+
+                        // Color Palette Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = "Color:",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                                    color = Muted,
+                                )
+                                colorOptions.forEach { (hex, c) ->
+                                    val selected = selectedColorHex == hex
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(c)
+                                            .border(
+                                                width = if (selected) 2.dp else 1.dp,
+                                                color = if (selected) Cyan else Color.White.copy(alpha = 0.4f),
+                                                shape = CircleShape,
+                                            )
+                                            .clickable { selectedColorHex = hex },
+                                    )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                listOf(24, 48, 96).forEach { dpVal ->
+                                    val selected = selectedSizeDp == dpVal
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                            .clickable { selectedSizeDp = dpVal }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                    ) {
+                                        Text(
+                                            text = "${dpVal}dp",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 9.5.sp,
+                                            ),
+                                            color = if (selected) Cyan else Muted,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Built-in Icons Grid
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        val activeColor = colorOptions.firstOrNull { it.first == selectedColorHex }?.second ?: Cyan
+                        filteredBuiltInIcons.chunked(3).forEach { rowIcons ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowIcons.forEach { spec ->
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFF121A3A))
+                                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                            .clickable {
+                                                customIconResName = spec.id
+                                                iconToAddDialog = spec
+                                            }
+                                            .padding(10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color(0xFF090E24))
+                                                .border(1.dp, activeColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                text = spec.glyph,
+                                                fontSize = 24.sp,
+                                                color = activeColor,
+                                            )
+                                        }
+                                        Text(
+                                            text = spec.title,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = "@drawable/${spec.id}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 9.sp,
+                                            ),
+                                            color = Cyan,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                repeat(3 - rowIcons.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                } else {
+                    // Tab 1: Project Icons List
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        images.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                rowItems.forEach { item ->
+                                    val bmp = remember(item.filePath) {
+                                        runCatching { BitmapFactory.decodeFile(item.filePath) }.getOrNull()
+                                    }
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFF121A3A))
+                                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                            .combinedClickable(
+                                                onClick = { activeSheetIcon = item },
+                                                onLongClick = { activeSheetIcon = item },
+                                            )
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(92.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF090E24))
+                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (bmp != null) {
+                                                Image(
+                                                    bitmap = bmp.asImageBitmap(),
+                                                    contentDescription = item.resName,
+                                                    contentScale = ContentScale.Fit,
+                                                    modifier = Modifier
+                                                        .size(56.dp)
+                                                        .padding(4.dp),
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "@drawable/${item.resName}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                if (rowItems.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+            }
+
+            // FAB (+) to import external icon files
+            FloatingActionButton(
+                onClick = { iconPickerLauncher.launch("image/*") },
+                containerColor = Cyan,
+                contentColor = Color(0xFF050816),
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = 20.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Import Icon",
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+    }
+
+    // Add Built-in Vector Icon to Project Dialog
+    val targetSpec = iconToAddDialog
+    if (targetSpec != null) {
+        AlertDialog(
+            onDismissRequest = { iconToAddDialog = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "إضافة الأيقونة للمشروع • Add Icon",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "سيتم حفظ الأيقونة (${targetSpec.title}) باللون $selectedColorHex والحجم ${selectedSizeDp}dp في مجلد res/drawable:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        OutlinedTextField(
+                            value = customIconResName,
+                            onValueChange = { customIconResName = it },
+                            singleLine = true,
+                            label = { Text("Resource name (@drawable/ic_...)") },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = Ink,
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                                cursorColor = Cyan,
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val argb = runCatching { android.graphics.Color.parseColor(selectedColorHex) }
+                            .getOrDefault(android.graphics.Color.WHITE)
+                        val pngBytes = renderIconBitmapBytes(
+                            glyph = targetSpec.glyph,
+                            tintArgb = argb,
+                            sizePx = (selectedSizeDp * 2).coerceAtLeast(96),
+                        )
+                        val vectorXml = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="${selectedSizeDp}dp"
+    android:height="${selectedSizeDp}dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="$selectedColorHex">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="${targetSpec.pathData}" />
+</vector>
+"""
+                        onSaveGeneratedIcon(customIconResName.ifBlank { targetSpec.id }, pngBytes, vectorXml)
+                        iconToAddDialog = null
+                        activeTab = 1
+                    },
+                ) {
+                    Text("إضافة للمشروع • Add", color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { iconToAddDialog = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+
+    // Bottom sheet for Project Icon item (Rename / Delete)
+    val sheetIcon = activeSheetIcon
+    if (sheetIcon != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { activeSheetIcon = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0B1028),
+            contentColor = Ink,
+            scrimColor = Color(0xD903060F),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "@drawable/${sheetIcon.resName}",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Cyan,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141E42))
+                        .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetIcon
+                            activeSheetIcon = null
+                            renameInput = target.resName
+                            renameTargetIcon = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "تعديل الاسم • Rename",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            val target = sheetIcon
+                            activeSheetIcon = null
+                            onDeleteIcons(setOf(target.resName))
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "حذف العنصر • Delete Item",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFDA4AF),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+
+    val renameIcon = renameTargetIcon
+    if (renameIcon != null) {
+        AlertDialog(
+            onDismissRequest = { renameTargetIcon = null },
+            containerColor = Color(0xFF0D1230),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "تعديل الاسم • Rename Icon",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+            },
+            text = {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    OutlinedTextField(
+                        value = renameInput,
+                        onValueChange = { renameInput = it },
+                        singleLine = true,
+                        label = { Text("@drawable/...") },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = JetBrainsMono,
+                            color = Ink,
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                            cursorColor = Cyan,
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = Color(0x33FFFFFF),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newName = renameInput.trim()
+                        if (newName.isNotEmpty()) {
+                            onRenameIcon(renameIcon.resName, newName)
+                        }
+                        renameTargetIcon = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dialog_save), color = Cyan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTargetIcon = null }) {
+                    Text(stringResource(R.string.dialog_cancel), color = Muted)
+                }
+            },
+        )
+    }
+}
+
 

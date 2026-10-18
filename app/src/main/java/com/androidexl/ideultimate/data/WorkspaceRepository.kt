@@ -547,6 +547,42 @@ data class ProjectImageItem(
         get() = runCatching { File(filePath).length() }.getOrDefault(0L)
 }
 
+data class ProjectSoundItem(
+    val name: String,
+    val extension: String,
+    val filePath: String,
+    val addedAt: Long = System.currentTimeMillis(),
+) {
+    val resName: String
+        get() = name
+
+    val sizeBytes: Long
+        get() = runCatching { File(filePath).length() }.getOrDefault(0L)
+}
+
+data class ProjectFontItem(
+    val name: String,
+    val extension: String,
+    val filePath: String,
+    val addedAt: Long = System.currentTimeMillis(),
+) {
+    val resName: String
+        get() = name
+
+    val sizeBytes: Long
+        get() = runCatching { File(filePath).length() }.getOrDefault(0L)
+}
+
+data class ProjectResourceEntry(
+    val name: String,
+    val relativePath: String,
+    val absolutePath: String,
+    val isDirectory: Boolean,
+    val sizeBytes: Long,
+    val childCount: Int,
+    val lastModified: Long,
+)
+
 enum class IdeLogicSection(val title: String) {
     ACTIVITY("Activity"),
     VIEW("View"),
@@ -2300,6 +2336,722 @@ class WorkspaceRepository(context: Context) {
             }
         }
         saveProjectImagesMeta(project, remaining)
+    }
+
+    // =========================================================================
+    // Sound Manager (res/raw), Font Manager (res/font), Icon Manager & Resources Manager (res/*)
+    // =========================================================================
+
+    private fun projectSoundsKey(projectId: String) = "project_sounds_$projectId"
+    private fun projectFontsKey(projectId: String) = "project_fonts_$projectId"
+
+    fun getProjectSounds(project: WorkspaceItem): List<ProjectSoundItem> {
+        val list = mutableListOf<ProjectSoundItem>()
+        val seenNames = mutableSetOf<String>()
+
+        val rawJson = prefs.getString(projectSoundsKey(project.id), null)
+        if (!rawJson.isNullOrBlank()) {
+            runCatching {
+                val arr = JSONArray(rawJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val name = obj.optString("name").trim()
+                    val ext = obj.optString("extension", "mp3").trim()
+                    val path = obj.optString("filePath").trim()
+                    val addedAt = obj.optLong("addedAt", System.currentTimeMillis())
+                    if (name.isNotEmpty() && path.isNotEmpty() && File(path).exists() && seenNames.add(name)) {
+                        list.add(ProjectSoundItem(name = name, extension = ext, filePath = path, addedAt = addedAt))
+                    }
+                }
+            }
+        }
+
+        val internalRawDir = File(appContext.filesDir, "project_sounds/${project.id}")
+        val candidateDirs = buildList {
+            add(internalRawDir)
+            projectDirectoriesFor(project).forEach { projDir ->
+                add(File(projDir, "app/src/main/res/raw"))
+            }
+        }
+        candidateDirs.forEach { dir ->
+            runCatching {
+                if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles()?.forEach { file ->
+                        val ext = file.extension.lowercase(Locale.ROOT)
+                        if (file.isFile && ext in setOf("mp3", "wav", "ogg", "m4a", "aac", "flac")) {
+                            val resName = sanitizeDrawableName(file.nameWithoutExtension)
+                            if (seenNames.add(resName)) {
+                                list.add(
+                                    ProjectSoundItem(
+                                        name = resName,
+                                        extension = ext,
+                                        filePath = file.absolutePath,
+                                        addedAt = file.lastModified(),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return list.sortedByDescending { it.addedAt }
+    }
+
+    private fun saveProjectSoundsMeta(project: WorkspaceItem, sounds: List<ProjectSoundItem>) {
+        val arr = JSONArray()
+        sounds.forEach { item ->
+            arr.put(
+                JSONObject().apply {
+                    put("name", item.name)
+                    put("extension", item.extension)
+                    put("filePath", item.filePath)
+                    put("addedAt", item.addedAt)
+                },
+            )
+        }
+        prefs.edit().putString(projectSoundsKey(project.id), arr.toString()).apply()
+    }
+
+    fun importProjectSound(
+        project: WorkspaceItem,
+        uri: Uri,
+        customName: String? = null,
+    ): ProjectSoundItem? {
+        return runCatching {
+            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: return null
+            if (bytes.isEmpty()) return null
+
+            var displayFileName = customName
+            if (displayFileName.isNullOrBlank()) {
+                runCatching {
+                    appContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0 && cursor.moveToFirst()) {
+                            displayFileName = cursor.getString(idx)
+                        }
+                    }
+                }
+            }
+
+            val rawExt = displayFileName?.substringAfterLast('.', "mp3")?.lowercase(Locale.ROOT) ?: "mp3"
+            val ext = if (rawExt in setOf("mp3", "wav", "ogg", "m4a", "aac", "flac")) rawExt else "mp3"
+
+            val existing = getProjectSounds(project).toMutableList()
+            val baseName = sanitizeDrawableName(displayFileName?.substringBeforeLast('.') ?: "sound_${existing.size + 1}")
+            var uniqueName = baseName
+            var counter = 2
+            while (existing.any { it.name.equals(uniqueName, ignoreCase = true) }) {
+                uniqueName = "${baseName}_$counter"
+                counter++
+            }
+
+            val internalDir = File(appContext.filesDir, "project_sounds/${project.id}").apply { mkdirs() }
+            val internalFile = File(internalDir, "$uniqueName.$ext")
+            internalFile.writeBytes(bytes)
+
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val rawDir = File(projDir, "app/src/main/res/raw").apply { mkdirs() }
+                    File(rawDir, "$uniqueName.$ext").writeBytes(bytes)
+                }
+            }
+
+            val created = ProjectSoundItem(
+                name = uniqueName,
+                extension = ext,
+                filePath = internalFile.absolutePath,
+                addedAt = System.currentTimeMillis(),
+            )
+            existing.add(0, created)
+            saveProjectSoundsMeta(project, existing)
+            created
+        }.getOrNull()
+    }
+
+    fun renameProjectSound(
+        project: WorkspaceItem,
+        oldName: String,
+        rawNewName: String,
+    ): String? {
+        val cleanNew = sanitizeDrawableName(rawNewName)
+        if (cleanNew.isBlank() || cleanNew.equals(oldName, ignoreCase = true)) return oldName
+        val currentList = getProjectSounds(project).toMutableList()
+        val index = currentList.indexOfFirst { it.name == oldName }
+        if (index < 0) return null
+        if (currentList.any { it.name.equals(cleanNew, ignoreCase = true) && it.name != oldName }) {
+            return null
+        }
+
+        val currentItem = currentList[index]
+        val ext = currentItem.extension
+        val oldFile = File(currentItem.filePath)
+        val internalDir = File(appContext.filesDir, "project_sounds/${project.id}").apply { mkdirs() }
+        val newFile = File(internalDir, "$cleanNew.$ext")
+        runCatching {
+            if (oldFile.exists()) {
+                oldFile.copyTo(newFile, overwrite = true)
+                if (oldFile.absolutePath != newFile.absolutePath) {
+                    oldFile.delete()
+                }
+            }
+        }
+
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val rawDir = File(projDir, "app/src/main/res/raw")
+                val diskOld = File(rawDir, "$oldName.$ext")
+                val diskNew = File(rawDir, "$cleanNew.$ext")
+                if (diskOld.exists()) {
+                    diskOld.copyTo(diskNew, overwrite = true)
+                    diskOld.delete()
+                }
+            }
+        }
+
+        currentList[index] = currentItem.copy(
+            name = cleanNew,
+            filePath = if (newFile.exists()) newFile.absolutePath else currentItem.filePath,
+        )
+        saveProjectSoundsMeta(project, currentList)
+        return cleanNew
+    }
+
+    fun deleteProjectSounds(
+        project: WorkspaceItem,
+        namesToDelete: Set<String>,
+    ) {
+        if (namesToDelete.isEmpty()) return
+        val currentList = getProjectSounds(project)
+        val remaining = currentList.filter { item ->
+            if (item.name in namesToDelete) {
+                runCatching { File(item.filePath).delete() }
+                false
+            } else {
+                true
+            }
+        }
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val rawDir = File(projDir, "app/src/main/res/raw")
+                namesToDelete.forEach { name ->
+                    setOf("mp3", "wav", "ogg", "m4a", "aac", "flac").forEach { ext ->
+                        File(rawDir, "$name.$ext").delete()
+                    }
+                }
+            }
+        }
+        saveProjectSoundsMeta(project, remaining)
+    }
+
+    // -------------------------------------------------------------------------
+    // Font Manager (res/font)
+    // -------------------------------------------------------------------------
+
+    fun getProjectFonts(project: WorkspaceItem): List<ProjectFontItem> {
+        val list = mutableListOf<ProjectFontItem>()
+        val seenNames = mutableSetOf<String>()
+
+        val rawJson = prefs.getString(projectFontsKey(project.id), null)
+        if (!rawJson.isNullOrBlank()) {
+            runCatching {
+                val arr = JSONArray(rawJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val name = obj.optString("name").trim()
+                    val ext = obj.optString("extension", "ttf").trim()
+                    val path = obj.optString("filePath").trim()
+                    val addedAt = obj.optLong("addedAt", System.currentTimeMillis())
+                    if (name.isNotEmpty() && path.isNotEmpty() && File(path).exists() && seenNames.add(name)) {
+                        list.add(ProjectFontItem(name = name, extension = ext, filePath = path, addedAt = addedAt))
+                    }
+                }
+            }
+        }
+
+        val internalFontDir = File(appContext.filesDir, "project_fonts/${project.id}")
+        val candidateDirs = buildList {
+            add(internalFontDir)
+            projectDirectoriesFor(project).forEach { projDir ->
+                add(File(projDir, "app/src/main/res/font"))
+                add(File(projDir, "app/src/main/assets/fonts"))
+            }
+        }
+        candidateDirs.forEach { dir ->
+            runCatching {
+                if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles()?.forEach { file ->
+                        val ext = file.extension.lowercase(Locale.ROOT)
+                        if (file.isFile && ext in setOf("ttf", "otf")) {
+                            val resName = sanitizeDrawableName(file.nameWithoutExtension)
+                            if (seenNames.add(resName)) {
+                                list.add(
+                                    ProjectFontItem(
+                                        name = resName,
+                                        extension = ext,
+                                        filePath = file.absolutePath,
+                                        addedAt = file.lastModified(),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return list.sortedByDescending { it.addedAt }
+    }
+
+    private fun saveProjectFontsMeta(project: WorkspaceItem, fonts: List<ProjectFontItem>) {
+        val arr = JSONArray()
+        fonts.forEach { item ->
+            arr.put(
+                JSONObject().apply {
+                    put("name", item.name)
+                    put("extension", item.extension)
+                    put("filePath", item.filePath)
+                    put("addedAt", item.addedAt)
+                },
+            )
+        }
+        prefs.edit().putString(projectFontsKey(project.id), arr.toString()).apply()
+    }
+
+    fun importProjectFont(
+        project: WorkspaceItem,
+        uri: Uri,
+        customName: String? = null,
+    ): ProjectFontItem? {
+        return runCatching {
+            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: return null
+            if (bytes.isEmpty()) return null
+
+            var displayFileName = customName
+            if (displayFileName.isNullOrBlank()) {
+                runCatching {
+                    appContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0 && cursor.moveToFirst()) {
+                            displayFileName = cursor.getString(idx)
+                        }
+                    }
+                }
+            }
+
+            val rawExt = displayFileName?.substringAfterLast('.', "ttf")?.lowercase(Locale.ROOT) ?: "ttf"
+            val ext = if (rawExt in setOf("ttf", "otf")) rawExt else "ttf"
+
+            val existing = getProjectFonts(project).toMutableList()
+            val baseName = sanitizeDrawableName(displayFileName?.substringBeforeLast('.') ?: "font_${existing.size + 1}")
+            var uniqueName = baseName
+            var counter = 2
+            while (existing.any { it.name.equals(uniqueName, ignoreCase = true) }) {
+                uniqueName = "${baseName}_$counter"
+                counter++
+            }
+
+            val internalDir = File(appContext.filesDir, "project_fonts/${project.id}").apply { mkdirs() }
+            val internalFile = File(internalDir, "$uniqueName.$ext")
+            internalFile.writeBytes(bytes)
+
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val fontDir = File(projDir, "app/src/main/res/font").apply { mkdirs() }
+                    File(fontDir, "$uniqueName.$ext").writeBytes(bytes)
+                    val assetsFontDir = File(projDir, "app/src/main/assets/fonts").apply { mkdirs() }
+                    File(assetsFontDir, "$uniqueName.$ext").writeBytes(bytes)
+                }
+            }
+
+            val created = ProjectFontItem(
+                name = uniqueName,
+                extension = ext,
+                filePath = internalFile.absolutePath,
+                addedAt = System.currentTimeMillis(),
+            )
+            existing.add(0, created)
+            saveProjectFontsMeta(project, existing)
+            created
+        }.getOrNull()
+    }
+
+    fun renameProjectFont(
+        project: WorkspaceItem,
+        oldName: String,
+        rawNewName: String,
+    ): String? {
+        val cleanNew = sanitizeDrawableName(rawNewName)
+        if (cleanNew.isBlank() || cleanNew.equals(oldName, ignoreCase = true)) return oldName
+        val currentList = getProjectFonts(project).toMutableList()
+        val index = currentList.indexOfFirst { it.name == oldName }
+        if (index < 0) return null
+        if (currentList.any { it.name.equals(cleanNew, ignoreCase = true) && it.name != oldName }) {
+            return null
+        }
+
+        val currentItem = currentList[index]
+        val ext = currentItem.extension
+        val oldFile = File(currentItem.filePath)
+        val internalDir = File(appContext.filesDir, "project_fonts/${project.id}").apply { mkdirs() }
+        val newFile = File(internalDir, "$cleanNew.$ext")
+        runCatching {
+            if (oldFile.exists()) {
+                oldFile.copyTo(newFile, overwrite = true)
+                if (oldFile.absolutePath != newFile.absolutePath) {
+                    oldFile.delete()
+                }
+            }
+        }
+
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                listOf("app/src/main/res/font", "app/src/main/assets/fonts").forEach { sub ->
+                    val fDir = File(projDir, sub)
+                    val diskOld = File(fDir, "$oldName.$ext")
+                    val diskNew = File(fDir, "$cleanNew.$ext")
+                    if (diskOld.exists()) {
+                        diskOld.copyTo(diskNew, overwrite = true)
+                        diskOld.delete()
+                    }
+                }
+            }
+        }
+
+        currentList[index] = currentItem.copy(
+            name = cleanNew,
+            filePath = if (newFile.exists()) newFile.absolutePath else currentItem.filePath,
+        )
+        saveProjectFontsMeta(project, currentList)
+        return cleanNew
+    }
+
+    fun deleteProjectFonts(
+        project: WorkspaceItem,
+        namesToDelete: Set<String>,
+    ) {
+        if (namesToDelete.isEmpty()) return
+        val currentList = getProjectFonts(project)
+        val remaining = currentList.filter { item ->
+            if (item.name in namesToDelete) {
+                runCatching { File(item.filePath).delete() }
+                false
+            } else {
+                true
+            }
+        }
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                listOf("app/src/main/res/font", "app/src/main/assets/fonts").forEach { sub ->
+                    val fDir = File(projDir, sub)
+                    namesToDelete.forEach { name ->
+                        File(fDir, "$name.ttf").delete()
+                        File(fDir, "$name.otf").delete()
+                    }
+                }
+            }
+        }
+        saveProjectFontsMeta(project, remaining)
+    }
+
+    // -------------------------------------------------------------------------
+    // Icon Manager helper (saves generated PNG + Vector XML icon into drawable)
+    // -------------------------------------------------------------------------
+
+    fun saveGeneratedIconToProject(
+        project: WorkspaceItem,
+        rawName: String,
+        pngBytes: ByteArray,
+        vectorXml: String? = null,
+    ): ProjectImageItem? {
+        return runCatching {
+            val existing = getProjectImages(project).toMutableList()
+            val baseName = sanitizeDrawableName(rawName.ifBlank { "ic_icon_${existing.size + 1}" })
+            val finalName = if (baseName.startsWith("ic_")) baseName else "ic_$baseName"
+
+            val internalDir = File(appContext.filesDir, "project_drawables/${project.id}").apply { mkdirs() }
+            val internalFile = File(internalDir, "$finalName.png")
+            internalFile.writeBytes(pngBytes)
+
+            val resRoot = ensureProjectResRoot(project)
+            val resDrawDir = File(resRoot, "drawable").apply { mkdirs() }
+            File(resDrawDir, "$finalName.png").writeBytes(pngBytes)
+            if (!vectorXml.isNullOrBlank()) {
+                File(resDrawDir, "${finalName}_vector.xml").writeText(vectorXml, Charsets.UTF_8)
+            }
+
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val drawDir = File(projDir, "app/src/main/res/drawable").apply { mkdirs() }
+                    File(drawDir, "$finalName.png").writeBytes(pngBytes)
+                    if (!vectorXml.isNullOrBlank()) {
+                        File(drawDir, "${finalName}_vector.xml").writeText(vectorXml, Charsets.UTF_8)
+                    }
+                }
+            }
+
+            val created = ProjectImageItem(
+                name = finalName,
+                filePath = internalFile.absolutePath,
+                addedAt = System.currentTimeMillis(),
+            )
+            existing.removeAll { it.name.equals(finalName, ignoreCase = true) }
+            existing.add(0, created)
+            saveProjectImagesMeta(project, existing)
+            created
+        }.getOrNull()
+    }
+
+    // -------------------------------------------------------------------------
+    // Resources Manager (Full app/src/main/res Folder Browser + Create/Rename/Delete)
+    // -------------------------------------------------------------------------
+
+    fun ensureProjectResRoot(project: WorkspaceItem): File {
+        val internalResRoot = File(appContext.filesDir, "project_res/${project.id}/res").apply { mkdirs() }
+        val defaultFolders = listOf("drawable", "layout", "values", "raw", "font", "xml", "mipmap-anydpi-v26", "menu", "anim")
+        defaultFolders.forEach { folder ->
+            File(internalResRoot, folder).mkdirs()
+        }
+
+        // Sync existing drawables, layouts, sounds, fonts into internalResRoot so everything appears in Resources Manager
+        getProjectImages(project).forEach { img ->
+            val src = File(img.filePath)
+            if (src.exists()) {
+                val dst = File(internalResRoot, "drawable/${src.name}")
+                if (!dst.exists()) runCatching { src.copyTo(dst, overwrite = false) }
+            }
+        }
+        getProjectSounds(project).forEach { snd ->
+            val src = File(snd.filePath)
+            if (src.exists()) {
+                val dst = File(internalResRoot, "raw/${src.name}")
+                if (!dst.exists()) runCatching { src.copyTo(dst, overwrite = false) }
+            }
+        }
+        getProjectFonts(project).forEach { fnt ->
+            val src = File(fnt.filePath)
+            if (src.exists()) {
+                val dst = File(internalResRoot, "font/${src.name}")
+                if (!dst.exists()) runCatching { src.copyTo(dst, overwrite = false) }
+            }
+        }
+
+        // Default values files if missing
+        val stringsFile = File(internalResRoot, "values/strings.xml")
+        if (!stringsFile.exists()) {
+            stringsFile.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">${project.name}</string>
+</resources>
+""",
+                Charsets.UTF_8,
+            )
+        }
+        val colorsFile = File(internalResRoot, "values/colors.xml")
+        if (!colorsFile.exists()) {
+            colorsFile.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#38BDF8</color>
+    <color name="colorPrimaryDark">#050816</color>
+    <color name="colorAccent">#22C55E</color>
+</resources>
+""",
+                Charsets.UTF_8,
+            )
+        }
+        val stylesFile = File(internalResRoot, "values/styles.xml")
+        if (!stylesFile.exists()) {
+            stylesFile.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/colorPrimary</item>
+    </style>
+</resources>
+""",
+                Charsets.UTF_8,
+            )
+        }
+
+        // Sync layouts from projectDirectoriesFor(project)
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val extRes = File(projDir, "app/src/main/res")
+                if (extRes.exists()) {
+                    extRes.walkTopDown().forEach { f ->
+                        val rel = f.relativeTo(extRes).path
+                        if (rel.isNotEmpty()) {
+                            val target = File(internalResRoot, rel)
+                            if (f.isDirectory) {
+                                target.mkdirs()
+                            } else if (!target.exists()) {
+                                target.parentFile?.mkdirs()
+                                f.copyTo(target, overwrite = false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return internalResRoot
+    }
+
+    private fun syncResRootToExternal(project: WorkspaceItem, internalResRoot: File) {
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val extRes = File(projDir, "app/src/main/res").apply { mkdirs() }
+                internalResRoot.walkTopDown().forEach { f ->
+                    val rel = f.relativeTo(internalResRoot).path
+                    if (rel.isNotEmpty()) {
+                        val target = File(extRes, rel)
+                        if (f.isDirectory) {
+                            target.mkdirs()
+                        } else {
+                            target.parentFile?.mkdirs()
+                            f.copyTo(target, overwrite = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun listProjectResourceEntries(
+        project: WorkspaceItem,
+        relativePath: String,
+    ): List<ProjectResourceEntry> {
+        val root = ensureProjectResRoot(project)
+        val cleanRel = relativePath.trim('/')
+        val targetDir = if (cleanRel.isEmpty()) root else File(root, cleanRel)
+        if (!targetDir.exists() || !targetDir.isDirectory) return emptyList()
+
+        return (targetDir.listFiles() ?: emptyArray())
+            .sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
+            .map { f ->
+                val rel = f.relativeTo(root).path.replace('\\', '/')
+                ProjectResourceEntry(
+                    name = f.name,
+                    relativePath = rel,
+                    absolutePath = f.absolutePath,
+                    isDirectory = f.isDirectory,
+                    sizeBytes = if (f.isFile) f.length() else 0L,
+                    childCount = if (f.isDirectory) (f.listFiles()?.size ?: 0) else 0,
+                    lastModified = f.lastModified(),
+                )
+            }
+    }
+
+    fun createProjectResourceEntry(
+        project: WorkspaceItem,
+        parentRelativePath: String,
+        rawName: String,
+        isDirectory: Boolean,
+        initialContent: String = "",
+    ): Boolean {
+        val cleanName = rawName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        if (cleanName.isBlank()) return false
+        val root = ensureProjectResRoot(project)
+        val cleanRel = parentRelativePath.trim('/')
+        val parentDir = if (cleanRel.isEmpty()) root else File(root, cleanRel)
+        parentDir.mkdirs()
+
+        val target = File(parentDir, cleanName)
+        if (target.exists()) return false
+        val ok = runCatching {
+            if (isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                val defaultBody = initialContent.ifBlank {
+                    if (cleanName.endsWith(".xml", ignoreCase = true)) {
+                        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    \n</resources>\n"
+                    } else {
+                        ""
+                    }
+                }
+                target.writeText(defaultBody, Charsets.UTF_8)
+                true
+            }
+        }.getOrDefault(false)
+        if (ok) {
+            syncResRootToExternal(project, root)
+        }
+        return ok
+    }
+
+    fun renameProjectResourceEntry(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+        rawNewName: String,
+    ): Boolean {
+        val cleanNew = rawNewName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        if (cleanNew.isBlank()) return false
+        val root = ensureProjectResRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        if (!target.exists()) return false
+        val dest = File(target.parentFile ?: root, cleanNew)
+        if (dest.exists()) return false
+        val ok = runCatching { target.renameTo(dest) }.getOrDefault(false)
+        if (ok) {
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val extRes = File(projDir, "app/src/main/res")
+                    val extOld = File(extRes, entryRelativePath.trim('/'))
+                    val extNew = File(extOld.parentFile ?: extRes, cleanNew)
+                    if (extOld.exists()) extOld.renameTo(extNew)
+                }
+            }
+        }
+        return ok
+    }
+
+    fun deleteProjectResourceEntry(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+    ): Boolean {
+        val root = ensureProjectResRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        if (!target.exists()) return false
+        val ok = runCatching { target.deleteRecursively() }.getOrDefault(false)
+        if (ok) {
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val extRes = File(projDir, "app/src/main/res")
+                    File(extRes, entryRelativePath.trim('/')).deleteRecursively()
+                }
+            }
+        }
+        return ok
+    }
+
+    fun readProjectResourceFile(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+    ): String {
+        val root = ensureProjectResRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        if (!target.exists() || !target.isFile) return ""
+        return runCatching { target.readText(Charsets.UTF_8) }.getOrDefault("")
+    }
+
+    fun writeProjectResourceFile(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+        content: String,
+    ) {
+        val root = ensureProjectResRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        runCatching {
+            target.parentFile?.mkdirs()
+            target.writeText(content, Charsets.UTF_8)
+        }
+        syncResRootToExternal(project, root)
     }
 
     /**

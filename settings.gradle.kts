@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "IDE Ultimate"
-include(":app")
+include(":app", ":ubuntuterminal")

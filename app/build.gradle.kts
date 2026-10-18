@@ -22,8 +22,8 @@ android {
         applicationId = "com.androidexl.ideultimate"
         minSdk = 24
         targetSdk = 35
-        versionCode = 31
-        versionName = "1.30.0"
+        versionCode = 32
+        versionName = "1.31.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -79,6 +79,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -92,6 +95,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":ubuntuterminal"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
