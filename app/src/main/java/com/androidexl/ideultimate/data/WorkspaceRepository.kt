@@ -1240,8 +1240,14 @@ class WorkspaceRepository(context: Context) {
         val savedCustom = prefs.getStringSet("xml_pages_${project.id}", null).orEmpty()
         foundXmlNames.addAll(savedCustom.map { normalizeXmlFileName(it) })
 
+        val deletedSet = prefs.getStringSet("deleted_xml_pages_${project.id}", emptySet()).orEmpty()
+        foundXmlNames.removeAll(deletedSet.map { normalizeXmlFileName(it) }.toSet())
+
         if (foundXmlNames.isEmpty()) {
-            DEFAULT_XML_LAYOUTS.forEach { foundXmlNames.add(it) }
+            DEFAULT_XML_LAYOUTS.filterNot { it in deletedSet }.forEach { foundXmlNames.add(it) }
+            if (foundXmlNames.isEmpty()) {
+                foundXmlNames.add("activity_main.xml")
+            }
         }
 
         // Keep activity_main.xml first, followed by the rest sorted naturally
@@ -1273,14 +1279,168 @@ class WorkspaceRepository(context: Context) {
                 if (!layoutFile.exists()) {
                     layoutFile.writeText(defaultXml, Charsets.UTF_8)
                 }
-                val codeFile = activityFileInDir(projDir, project, page)
-                codeFile.parentFile?.mkdirs()
-                if (!codeFile.exists()) {
-                    codeFile.writeText(defaultCode, Charsets.UTF_8)
+                val pkgPath = project.packageName.replace('.', '/')
+                val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+                ktFile.parentFile?.mkdirs()
+                if (!ktFile.exists()) {
+                    ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
+                }
+                val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
+                javaFile.parentFile?.mkdirs()
+                if (!javaFile.exists()) {
+                    javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
                 }
             }
         }
+        syncActivityIntoManifest(project, page.activityName)
         return page
+    }
+
+    /**
+     * Renames an existing XML page (e.g. `activity_home.xml` -> `activity_profile.xml`) and its
+     * paired Java/Kotlin Activity class (`HomeActivity` -> `ProfileActivity`) across disk, preferences, and AndroidManifest.xml.
+     */
+    fun renameProjectXmlPage(
+        project: WorkspaceItem,
+        oldXmlFileName: String,
+        rawNewName: String,
+    ): ProjectXmlPage? {
+        val oldPage = xmlPageForName(project, oldXmlFileName)
+        val newPage = xmlPageForName(project, rawNewName)
+        if (newPage.xmlFileName.equals(oldPage.xmlFileName, ignoreCase = true)) return oldPage
+
+        val existingPages = listProjectXmlPages(project)
+        if (existingPages.any { it.xmlFileName.equals(newPage.xmlFileName, ignoreCase = true) }) {
+            return null
+        }
+
+        val currentSet = existingPages.map { it.xmlFileName }.toMutableSet()
+        currentSet.remove(oldPage.xmlFileName)
+        currentSet.add(newPage.xmlFileName)
+        val deletedSet = prefs.getStringSet("deleted_xml_pages_${project.id}", emptySet()).orEmpty().toMutableSet()
+        deletedSet.add(oldPage.xmlFileName)
+        deletedSet.remove(newPage.xmlFileName)
+        prefs.edit()
+            .putStringSet("xml_pages_${project.id}", currentSet)
+            .putStringSet("deleted_xml_pages_${project.id}", deletedSet)
+            .apply()
+
+        // Migrate saved widgets & logic items
+        val oldWidgets = prefs.getString("widgets_${project.id}_${oldPage.xmlFileName}", null)
+        if (oldWidgets != null) {
+            prefs.edit()
+                .putString("widgets_${project.id}_${newPage.xmlFileName}", oldWidgets)
+                .remove("widgets_${project.id}_${oldPage.xmlFileName}")
+                .apply()
+        }
+        val oldLogic = prefs.getString("logic_items_${project.id}_${oldPage.xmlFileName}", null)
+        if (oldLogic != null) {
+            prefs.edit()
+                .putString("logic_items_${project.id}_${newPage.xmlFileName}", oldLogic)
+                .remove("logic_items_${project.id}_${oldPage.xmlFileName}")
+                .apply()
+        }
+
+        val pkgPath = project.packageName.replace('.', '/')
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val oldXmlFile = File(projDir, "app/src/main/res/layout/${oldPage.xmlFileName}")
+                val newXmlFile = File(projDir, "app/src/main/res/layout/${newPage.xmlFileName}")
+                newXmlFile.parentFile?.mkdirs()
+                if (oldXmlFile.exists()) {
+                    val xmlText = oldXmlFile.readText(Charsets.UTF_8)
+                        .replace(".${oldPage.activityName}", ".${newPage.activityName}")
+                        .replace(oldPage.layoutResourceName, newPage.layoutResourceName)
+                    newXmlFile.writeText(xmlText, Charsets.UTF_8)
+                    oldXmlFile.delete()
+                } else {
+                    newXmlFile.writeText(defaultXmlLayoutContent(project, newPage), Charsets.UTF_8)
+                }
+
+                val oldKtFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.kt")
+                val newKtFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.kt")
+                newKtFile.parentFile?.mkdirs()
+                if (oldKtFile.exists()) {
+                    val ktText = oldKtFile.readText(Charsets.UTF_8)
+                        .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
+                        .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
+                    newKtFile.writeText(ktText, Charsets.UTF_8)
+                    oldKtFile.delete()
+                } else {
+                    newKtFile.writeText(defaultKotlinActivityContent(project, newPage), Charsets.UTF_8)
+                }
+
+                val oldJavaFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.java")
+                val newJavaFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.java")
+                newJavaFile.parentFile?.mkdirs()
+                if (oldJavaFile.exists()) {
+                    val javaText = oldJavaFile.readText(Charsets.UTF_8)
+                        .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
+                        .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
+                    newJavaFile.writeText(javaText, Charsets.UTF_8)
+                    oldJavaFile.delete()
+                } else {
+                    newJavaFile.writeText(defaultJavaActivityContent(project, newPage), Charsets.UTF_8)
+                }
+            }
+        }
+
+        // Update AndroidManifest.xml
+        val manifest = readProjectManifest(project)
+        if (manifest.contains(".${oldPage.activityName}")) {
+            writeProjectManifest(
+                project,
+                manifest.replace(".${oldPage.activityName}", ".${newPage.activityName}"),
+            )
+        } else {
+            syncActivityIntoManifest(project, newPage.activityName)
+        }
+
+        return newPage
+    }
+
+    /**
+     * Deletes an XML page and its paired Java/Kotlin Activity class from the project.
+     */
+    fun deleteProjectXmlPage(
+        project: WorkspaceItem,
+        xmlFileName: String,
+    ): Boolean {
+        val page = xmlPageForName(project, xmlFileName)
+        val currentPages = listProjectXmlPages(project)
+        if (currentPages.size <= 1) return false
+
+        val currentSet = currentPages.map { it.xmlFileName }.toMutableSet()
+        currentSet.remove(page.xmlFileName)
+        val deletedSet = prefs.getStringSet("deleted_xml_pages_${project.id}", emptySet()).orEmpty().toMutableSet()
+        deletedSet.add(page.xmlFileName)
+        prefs.edit()
+            .putStringSet("xml_pages_${project.id}", currentSet)
+            .putStringSet("deleted_xml_pages_${project.id}", deletedSet)
+            .remove("widgets_${project.id}_${page.xmlFileName}")
+            .remove("logic_items_${project.id}_${page.xmlFileName}")
+            .apply()
+
+        val pkgPath = project.packageName.replace('.', '/')
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                File(projDir, "app/src/main/res/layout/${page.xmlFileName}").delete()
+                File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt").delete()
+                File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java").delete()
+                File(projDir, ".ide_widgets_${page.layoutResourceName}.json").delete()
+                File(projDir, ".ide_logic_${page.layoutResourceName}.json").delete()
+            }
+        }
+
+        val manifest = readProjectManifest(project)
+        val cleanedManifest = manifest.replace(
+            Regex("""\s*<activity[^>]*android:name="\.${Regex.escape(page.activityName)}"[^>]*(?:/>|>[\s\S]*?</activity>)"""),
+            "",
+        )
+        if (cleanedManifest != manifest) {
+            writeProjectManifest(project, cleanedManifest)
+        }
+        return true
     }
 
     /**
@@ -3052,6 +3212,477 @@ class WorkspaceRepository(context: Context) {
             target.writeText(content, Charsets.UTF_8)
         }
         syncResRootToExternal(project, root)
+    }
+
+    // -------------------------------------------------------------------------
+    // AndroidManifest.xml Manager & Permission Manager
+    // -------------------------------------------------------------------------
+
+    private fun defaultProjectManifestXml(project: WorkspaceItem): String {
+        val pages = listProjectXmlPages(project)
+        val activitiesXml = buildString {
+            pages.forEachIndexed { idx, p ->
+                if (idx == 0 || p.activityName == "MainActivity") {
+                    appendLine(
+                        """        <activity
+            android:name=".${p.activityName}"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>""",
+                    )
+                } else {
+                    appendLine(
+                        """        <activity
+            android:name=".${p.activityName}"
+            android:exported="false" />""",
+                    )
+                }
+            }
+        }.trimEnd()
+
+        return """<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="${project.packageName}">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+$activitiesXml
+    </application>
+
+</manifest>
+"""
+    }
+
+    fun readProjectManifest(project: WorkspaceItem): String {
+        val prefKey = "manifest_xml_${project.id}"
+        val internalFile = File(appContext.filesDir, "project_manifest/${project.id}/AndroidManifest.xml")
+        if (internalFile.exists() && internalFile.isFile) {
+            val txt = runCatching { internalFile.readText(Charsets.UTF_8) }.getOrNull()
+            if (!txt.isNullOrBlank()) return txt
+        }
+        for (projDir in projectDirectoriesFor(project)) {
+            val extFile = File(projDir, "app/src/main/AndroidManifest.xml")
+            if (extFile.exists() && extFile.isFile) {
+                val txt = runCatching { extFile.readText(Charsets.UTF_8) }.getOrNull()
+                if (!txt.isNullOrBlank()) {
+                    runCatching {
+                        internalFile.parentFile?.mkdirs()
+                        internalFile.writeText(txt, Charsets.UTF_8)
+                    }
+                    return txt
+                }
+            }
+        }
+        val savedPref = prefs.getString(prefKey, null)
+        if (!savedPref.isNullOrBlank()) return savedPref
+
+        val defaultXml = defaultProjectManifestXml(project)
+        writeProjectManifest(project, defaultXml)
+        return defaultXml
+    }
+
+    fun writeProjectManifest(project: WorkspaceItem, xmlContent: String) {
+        val prefKey = "manifest_xml_${project.id}"
+        prefs.edit().putString(prefKey, xmlContent).apply()
+
+        val internalFile = File(appContext.filesDir, "project_manifest/${project.id}/AndroidManifest.xml")
+        runCatching {
+            internalFile.parentFile?.mkdirs()
+            internalFile.writeText(xmlContent, Charsets.UTF_8)
+        }
+        val fullRootManifest = File(appContext.filesDir, "project_full/${project.id}/app/src/main/AndroidManifest.xml")
+        runCatching {
+            fullRootManifest.parentFile?.mkdirs()
+            fullRootManifest.writeText(xmlContent, Charsets.UTF_8)
+        }
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                val extFile = File(projDir, "app/src/main/AndroidManifest.xml")
+                extFile.parentFile?.mkdirs()
+                extFile.writeText(xmlContent, Charsets.UTF_8)
+            }
+        }
+    }
+
+    private fun syncActivityIntoManifest(project: WorkspaceItem, activityName: String) {
+        val current = readProjectManifest(project)
+        if (current.contains("\".$activityName\"") || current.contains("\"${project.packageName}.$activityName\"")) {
+            return
+        }
+        val activityBlock = """
+        <activity
+            android:name=".$activityName"
+            android:exported="false" />
+"""
+        val updated = if (current.contains("</application>")) {
+            current.replaceFirst("</application>", "$activityBlock    </application>")
+        } else {
+            current
+        }
+        writeProjectManifest(project, updated)
+    }
+
+    fun getProjectPermissions(project: WorkspaceItem): Set<String> {
+        val manifest = readProjectManifest(project)
+        val regex = Regex("""<uses-permission\s+[^>]*android:name="([^"]+)"""")
+        return regex.findAll(manifest)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotEmpty() }
+            .toCollection(linkedSetOf())
+    }
+
+    fun toggleProjectPermission(project: WorkspaceItem, fullPermissionName: String): Set<String> {
+        val cleanPerm = if (fullPermissionName.contains('.')) {
+            fullPermissionName.trim()
+        } else {
+            "android.permission.${fullPermissionName.trim()}"
+        }
+        val currentManifest = readProjectManifest(project)
+        val existingPerms = getProjectPermissions(project)
+        val updatedManifest = if (cleanPerm in existingPerms) {
+            currentManifest.replace(
+                Regex("""[ \t]*<uses-permission\s+[^>]*android:name="${Regex.escape(cleanPerm)}"[^>]*/>\r?\n?"""),
+                "",
+            )
+        } else {
+            val permLine = """    <uses-permission android:name="$cleanPerm" />"""
+            when {
+                currentManifest.contains("<application") ->
+                    currentManifest.replaceFirst("<application", "$permLine\n\n    <application")
+                currentManifest.contains("</manifest>") ->
+                    currentManifest.replaceFirst("</manifest>", "$permLine\n</manifest>")
+                else -> "$currentManifest\n$permLine\n"
+            }
+        }
+        writeProjectManifest(project, updatedManifest)
+        return getProjectPermissions(project)
+    }
+
+    // -------------------------------------------------------------------------
+    // Files Manager (Full Android Project Folder & File Browser + Read/Write/Rename/Delete)
+    // -------------------------------------------------------------------------
+
+    fun ensureProjectFullRoot(project: WorkspaceItem): File {
+        val root = File(appContext.filesDir, "project_full/${project.id}").apply { mkdirs() }
+        val pkgPath = project.packageName.replace('.', '/')
+
+        // 1. Sync AndroidManifest.xml
+        val manifestFile = File(root, "app/src/main/AndroidManifest.xml")
+        manifestFile.parentFile?.mkdirs()
+        if (!manifestFile.exists()) {
+            manifestFile.writeText(readProjectManifest(project), Charsets.UTF_8)
+        }
+
+        // 2. Sync res/ folder
+        val resSource = ensureProjectResRoot(project)
+        val resTarget = File(root, "app/src/main/res").apply { mkdirs() }
+        runCatching {
+            resSource.walkTopDown().forEach { f ->
+                val rel = f.relativeTo(resSource).path
+                if (rel.isNotEmpty()) {
+                    val dst = File(resTarget, rel)
+                    if (f.isDirectory) {
+                        dst.mkdirs()
+                    } else if (!dst.exists()) {
+                        dst.parentFile?.mkdirs()
+                        f.copyTo(dst, overwrite = false)
+                    }
+                }
+            }
+        }
+
+        // 3. Sync all XML Layouts & Java/Kotlin Activities
+        listProjectXmlPages(project).forEach { page ->
+            val xmlFile = File(root, "app/src/main/res/layout/${page.xmlFileName}")
+            xmlFile.parentFile?.mkdirs()
+            if (!xmlFile.exists()) {
+                xmlFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.XML_ANDROID), Charsets.UTF_8)
+            }
+            val ktFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+            ktFile.parentFile?.mkdirs()
+            if (!ktFile.exists()) {
+                ktFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.KOTLIN_ANDROID), Charsets.UTF_8)
+            }
+            val javaFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.java")
+            javaFile.parentFile?.mkdirs()
+            if (!javaFile.exists()) {
+                javaFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.JAVA_ANDROID), Charsets.UTF_8)
+            }
+        }
+
+        // 4. Default Gradle & Project files
+        val appBuildGradle = File(root, "app/build.gradle.kts")
+        if (!appBuildGradle.exists()) {
+            appBuildGradle.parentFile?.mkdirs()
+            appBuildGradle.writeText(
+                """plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "${project.packageName}"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "${project.packageName}"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = ${project.versionCode}
+        versionName = "${project.versionName}"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+}
+""",
+                Charsets.UTF_8,
+            )
+        }
+
+        val settingsGradle = File(root, "settings.gradle.kts")
+        if (!settingsGradle.exists()) {
+            settingsGradle.writeText(
+                """rootProject.name = "${project.name}"
+include(":app")
+""",
+                Charsets.UTF_8,
+            )
+        }
+
+        val gradleProps = File(root, "gradle.properties")
+        if (!gradleProps.exists()) {
+            gradleProps.writeText(
+                """org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+""",
+                Charsets.UTF_8,
+            )
+        }
+
+        // Sync any existing external files from /storage/emulated/0/.IDE Ultimate/<project>
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                if (projDir.exists() && projDir.isDirectory) {
+                    projDir.walkTopDown().forEach { f ->
+                        val rel = f.relativeTo(projDir).path
+                        if (rel.isNotEmpty() && !rel.startsWith(".ide_")) {
+                            val dst = File(root, rel)
+                            if (f.isDirectory) {
+                                dst.mkdirs()
+                            } else if (!dst.exists()) {
+                                dst.parentFile?.mkdirs()
+                                f.copyTo(dst, overwrite = false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return root
+    }
+
+    private fun syncFullRootToExternal(project: WorkspaceItem, root: File) {
+        projectDirectoriesFor(project).forEach { projDir ->
+            runCatching {
+                if (!projDir.exists()) projDir.mkdirs()
+                root.walkTopDown().forEach { f ->
+                    val rel = f.relativeTo(root).path
+                    if (rel.isNotEmpty()) {
+                        val dst = File(projDir, rel)
+                        if (f.isDirectory) {
+                            dst.mkdirs()
+                        } else {
+                            dst.parentFile?.mkdirs()
+                            f.copyTo(dst, overwrite = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun listProjectFiles(
+        project: WorkspaceItem,
+        relativePath: String,
+    ): List<ProjectResourceEntry> {
+        val root = ensureProjectFullRoot(project)
+        val cleanRel = relativePath.trim('/')
+        val targetDir = if (cleanRel.isEmpty()) root else File(root, cleanRel)
+        if (!targetDir.exists() || !targetDir.isDirectory) return emptyList()
+
+        return (targetDir.listFiles() ?: emptyArray())
+            .filterNot { it.name.startsWith(".ide_") }
+            .sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
+            .map { f ->
+                val rel = f.relativeTo(root).path.replace('\\', '/')
+                ProjectResourceEntry(
+                    name = f.name,
+                    relativePath = rel,
+                    absolutePath = f.absolutePath,
+                    isDirectory = f.isDirectory,
+                    sizeBytes = if (f.isFile) f.length() else 0L,
+                    childCount = if (f.isDirectory) (f.listFiles()?.size ?: 0) else 0,
+                    lastModified = f.lastModified(),
+                )
+            }
+    }
+
+    fun createProjectFileOrFolder(
+        project: WorkspaceItem,
+        parentRelativePath: String,
+        rawName: String,
+        isDirectory: Boolean,
+        initialContent: String = "",
+    ): Boolean {
+        val cleanName = rawName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        if (cleanName.isBlank()) return false
+        val root = ensureProjectFullRoot(project)
+        val cleanRel = parentRelativePath.trim('/')
+        val parentDir = if (cleanRel.isEmpty()) root else File(root, cleanRel)
+        parentDir.mkdirs()
+
+        val target = File(parentDir, cleanName)
+        if (target.exists()) return false
+        val ok = runCatching {
+            if (isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                val defaultBody = initialContent.ifBlank {
+                    when {
+                        cleanName.endsWith(".xml", ignoreCase = true) ->
+                            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n    android:orientation=\"vertical\">\n\n</LinearLayout>\n"
+                        cleanName.endsWith(".kt", ignoreCase = true) ->
+                            "package ${project.packageName}\n\nclass ${cleanName.removeSuffix(".kt")} {\n    \n}\n"
+                        cleanName.endsWith(".java", ignoreCase = true) ->
+                            "package ${project.packageName};\n\npublic class ${cleanName.removeSuffix(".java")} {\n    \n}\n"
+                        else -> ""
+                    }
+                }
+                target.writeText(defaultBody, Charsets.UTF_8)
+                true
+            }
+        }.getOrDefault(false)
+        if (ok) {
+            syncFullRootToExternal(project, root)
+        }
+        return ok
+    }
+
+    fun renameProjectFileOrFolder(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+        rawNewName: String,
+    ): Boolean {
+        val cleanNew = rawNewName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        if (cleanNew.isBlank()) return false
+        val root = ensureProjectFullRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        if (!target.exists()) return false
+        val dest = File(target.parentFile ?: root, cleanNew)
+        if (dest.exists()) return false
+        val ok = runCatching { target.renameTo(dest) }.getOrDefault(false)
+        if (ok) {
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    val extOld = File(projDir, entryRelativePath.trim('/'))
+                    val extNew = File(extOld.parentFile ?: projDir, cleanNew)
+                    if (extOld.exists()) extOld.renameTo(extNew)
+                }
+            }
+        }
+        return ok
+    }
+
+    fun deleteProjectFileOrFolder(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+    ): Boolean {
+        val root = ensureProjectFullRoot(project)
+        val target = File(root, entryRelativePath.trim('/'))
+        if (!target.exists()) return false
+        val ok = runCatching { target.deleteRecursively() }.getOrDefault(false)
+        if (ok) {
+            projectDirectoriesFor(project).forEach { projDir ->
+                runCatching {
+                    File(projDir, entryRelativePath.trim('/')).deleteRecursively()
+                }
+            }
+        }
+        return ok
+    }
+
+    fun readProjectFileText(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+    ): String {
+        val cleanRel = entryRelativePath.trim('/').replace('\\', '/')
+        if (cleanRel.equals("app/src/main/AndroidManifest.xml", ignoreCase = true)) {
+            return readProjectManifest(project)
+        }
+        val root = ensureProjectFullRoot(project)
+        val target = File(root, cleanRel)
+        if (!target.exists() || !target.isFile) return ""
+        return runCatching { target.readText(Charsets.UTF_8) }.getOrDefault("")
+    }
+
+    fun writeProjectFileText(
+        project: WorkspaceItem,
+        entryRelativePath: String,
+        content: String,
+    ) {
+        val cleanRel = entryRelativePath.trim('/').replace('\\', '/')
+        if (cleanRel.equals("app/src/main/AndroidManifest.xml", ignoreCase = true)) {
+            writeProjectManifest(project, content)
+            return
+        }
+        val root = ensureProjectFullRoot(project)
+        val target = File(root, cleanRel)
+        runCatching {
+            target.parentFile?.mkdirs()
+            target.writeText(content, Charsets.UTF_8)
+        }
+        if (cleanRel.startsWith("app/src/main/res/")) {
+            val resRel = cleanRel.removePrefix("app/src/main/res/")
+            writeProjectResourceFile(project, resRel, content)
+        }
+        syncFullRootToExternal(project, root)
+    }
+
+    fun collectAllProjectFilesForUpload(
+        project: WorkspaceItem,
+    ): List<Pair<String, ByteArray>> {
+        val root = ensureProjectFullRoot(project)
+        val result = mutableListOf<Pair<String, ByteArray>>()
+        runCatching {
+            root.walkTopDown().forEach { f ->
+                if (f.isFile && !f.name.startsWith(".ide_")) {
+                    val rel = f.relativeTo(root).path.replace('\\', '/')
+                    val bytes = runCatching { f.readBytes() }.getOrNull()
+                    if (rel.isNotEmpty() && bytes != null) {
+                        result.add(rel to bytes)
+                    }
+                }
+            }
+        }
+        return result
     }
 
     /**

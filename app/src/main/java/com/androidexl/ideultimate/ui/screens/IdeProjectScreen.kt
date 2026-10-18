@@ -305,6 +305,12 @@ private enum class IdeSideMenuItem(
         badge = "COL",
         accentColor = Color(0xFFC084FC),
     ),
+    GITHUB_TOOLS(
+        title = "GitHub Tools",
+        subtitle = "تسجيل الدخول ورفع وتصفح وإدارة مستودعات GitHub",
+        badge = "GIT",
+        accentColor = Color(0xFFE2E8F0),
+    ),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -418,6 +424,11 @@ fun IdeProjectScreen(
     var showFontManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showResourcesManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showIconManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showActivityManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showManifestManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showPermissionManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showFilesManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showGitHubToolsScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
     val context = LocalContext.current
 
@@ -487,6 +498,11 @@ fun IdeProjectScreen(
             showFontManagerScreen -> showFontManagerScreen = false
             showResourcesManagerScreen -> showResourcesManagerScreen = false
             showIconManagerScreen -> showIconManagerScreen = false
+            showActivityManagerScreen -> showActivityManagerScreen = false
+            showManifestManagerScreen -> showManifestManagerScreen = false
+            showPermissionManagerScreen -> showPermissionManagerScreen = false
+            showFilesManagerScreen -> showFilesManagerScreen = false
+            showGitHubToolsScreen -> showGitHubToolsScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
@@ -684,6 +700,62 @@ fun IdeProjectScreen(
                 refreshProjectImages()
             },
             onBack = { showIconManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showActivityManagerScreen) {
+        IdeActivityManagerScreen(
+            project = project,
+            repository = repository,
+            xmlPages = xmlPages,
+            selectedXmlFileName = selectedXmlFileName,
+            onSelectPage = { page ->
+                selectedXmlFileName = page.xmlFileName
+                showActivityManagerScreen = false
+            },
+            onBack = { showActivityManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showManifestManagerScreen) {
+        IdeAndroidManifestScreen(
+            project = project,
+            repository = repository,
+            onBack = { showManifestManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showPermissionManagerScreen) {
+        IdePermissionManagerScreen(
+            project = project,
+            repository = repository,
+            onBack = { showPermissionManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showFilesManagerScreen) {
+        IdeFilesManagerScreen(
+            project = project,
+            repository = repository,
+            onBack = { showFilesManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showGitHubToolsScreen) {
+        IdeGitHubToolsScreen(
+            project = project,
+            repository = repository,
+            onBack = { showGitHubToolsScreen = false },
             modifier = modifier,
         )
         return
@@ -969,6 +1041,21 @@ fun IdeProjectScreen(
                                 com.example.ubuntuterminal.MainActivity::class.java,
                             )
                             context.startActivity(intent)
+                        }
+                        IdeSideMenuItem.ACTIVITY_MANAGER -> {
+                            showActivityManagerScreen = true
+                        }
+                        IdeSideMenuItem.ANDROID_MANIFEST_MANAGER -> {
+                            showManifestManagerScreen = true
+                        }
+                        IdeSideMenuItem.PERMISSION_MANAGER -> {
+                            showPermissionManagerScreen = true
+                        }
+                        IdeSideMenuItem.FILES_MANAGER -> {
+                            showFilesManagerScreen = true
+                        }
+                        IdeSideMenuItem.GITHUB_TOOLS -> {
+                            showGitHubToolsScreen = true
                         }
                         else -> {
                             activeSideMenuItem = item
@@ -9187,7 +9274,7 @@ private fun IdeLogicItemLongPressBottomSheet(
     }
 }
 
-private enum class IdeAutoCompleteCategory(
+internal enum class IdeAutoCompleteCategory(
     val badge: String,
     val color: Color,
 ) {
@@ -9197,9 +9284,12 @@ private enum class IdeAutoCompleteCategory(
     ANDROID_JAR_CLASS("android.jar • Class", Color(0xFF38BDF8)),
     ANDROID_JAR_METHOD("android.jar • Method", Color(0xFFA78BFA)),
     ANDROID_JAR_FIELD("android.jar • Constant", Color(0xFFF472B6)),
+    ANDROID_XML_TAG("XML • عنصر أندرويد", Color(0xFFFB923C)),
+    ANDROID_XML_ATTR("XML • خاصية أندرويد", Color(0xFF38BDF8)),
+    ANDROID_PERMISSION("Manifest • إذن أندرويد", Color(0xFFF87171)),
 }
 
-private data class IdeCodeCompletionSuggestion(
+internal data class IdeCodeCompletionSuggestion(
     val label: String,
     val insertText: String,
     val cursorBackOffset: Int = 0,
@@ -9425,7 +9515,7 @@ private fun reflectAndroidJarMembers(
     }.getOrDefault(emptyList())
 }
 
-private fun computeAndroidCodeCompletions(
+internal fun computeAndroidCodeCompletions(
     textBeforeCursor: String,
     allWidgets: List<IdeWidgetNode>,
     userFunctions: List<IdeLogicItem>,
@@ -10574,7 +10664,7 @@ private fun IdeLogicCodeEditor(
     }
 }
 
-private class AndroidCodeSyntaxTransformation(
+internal class AndroidCodeSyntaxTransformation(
     private val flavor: CodeEditorFlavor,
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
