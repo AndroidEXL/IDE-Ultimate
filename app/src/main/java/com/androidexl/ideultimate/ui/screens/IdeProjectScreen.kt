@@ -9056,34 +9056,29 @@ private fun resolveWidgetAndroidJarFqcn(type: IdeWidgetType): String {
         IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V -> "android.widget.LinearLayout"
         IdeWidgetType.SCROLL_H -> "android.widget.HorizontalScrollView"
         IdeWidgetType.SCROLL_V -> "android.widget.ScrollView"
-        IdeWidgetType.CARD_CONTAINER, IdeWidgetType.BOTTOM_SHEET_LAYOUT, IdeWidgetType.SWIPE_REFRESH -> "android.widget.FrameLayout"
-        IdeWidgetType.RELATIVE_CONTAINER -> "android.widget.RelativeLayout"
-        IdeWidgetType.TEXT_VIEW, IdeWidgetType.RICH_TEXT, IdeWidgetType.CODE_TEXT,
-        IdeWidgetType.MARQUEE_TEXT, IdeWidgetType.BADGE_TEXT, IdeWidgetType.DIGITAL_CLOCK,
+        IdeWidgetType.TEXT_VIEW, IdeWidgetType.DIGITAL_CLOCK,
         IdeWidgetType.COUNTDOWN_VIEW, IdeWidgetType.STOPWATCH_VIEW, IdeWidgetType.DATE_RANGE_PICKER,
-        IdeWidgetType.WORLD_CLOCK_VIEW, IdeWidgetType.CHIP_CHOICE, IdeWidgetType.SEGMENTED_CONTROL,
-        IdeWidgetType.STEP_COUNTER -> "android.widget.TextView"
-        IdeWidgetType.EDIT_TEXT, IdeWidgetType.PASS_TEXT, IdeWidgetType.NUMBER_INPUT,
-        IdeWidgetType.SEARCH_BOX -> "android.widget.EditText"
+        IdeWidgetType.WORLD_CLOCK_VIEW -> "android.widget.TextView"
+        IdeWidgetType.EDIT_TEXT, IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> "android.widget.EditText"
         IdeWidgetType.AUTO_COMPLETE_TEXT -> "android.widget.AutoCompleteTextView"
         IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "android.widget.MultiAutoCompleteTextView"
         IdeWidgetType.CHECKED_TEXT_VIEW -> "android.widget.CheckedTextView"
-        IdeWidgetType.BUTTON, IdeWidgetType.OUTLINE_BUTTON, IdeWidgetType.GRADIENT_BUTTON,
-        IdeWidgetType.CHIP_BUTTON -> "android.widget.Button"
-        IdeWidgetType.IMAGE_BUTTON, IdeWidgetType.FAB_BUTTON, IdeWidgetType.ICON_TOGGLE_BUTTON -> "android.widget.ImageButton"
+        IdeWidgetType.BUTTON, IdeWidgetType.MATERIAL_BUTTON, IdeWidgetType.OUTLINED_BUTTON,
+        IdeWidgetType.TEXT_BUTTON, IdeWidgetType.EXTENDED_FAB, IdeWidgetType.CHIP_BUTTON -> "android.widget.Button"
+        IdeWidgetType.IMAGE_BUTTON, IdeWidgetType.FAB_BUTTON -> "android.widget.ImageButton"
         IdeWidgetType.TOGGLE_BUTTON -> "android.widget.ToggleButton"
-        IdeWidgetType.IMAGE_VIEW, IdeWidgetType.CIRCLE_IMAGE, IdeWidgetType.ROUNDED_IMAGE,
-        IdeWidgetType.AVATAR_VIEW, IdeWidgetType.BANNER_IMAGE, IdeWidgetType.ICON_VIEW,
-        IdeWidgetType.ZOOM_IMAGE, IdeWidgetType.LOTTIE_PLACEHOLDER, IdeWidgetType.ANALOG_CLOCK -> "android.widget.ImageView"
+        IdeWidgetType.IMAGE_VIEW, IdeWidgetType.CIRCLE_IMAGE_VIEW, IdeWidgetType.ROUNDED_IMAGE_VIEW,
+        IdeWidgetType.SHAPEABLE_IMAGE_VIEW, IdeWidgetType.ZOOM_IMAGE_VIEW, IdeWidgetType.ASPECT_IMAGE_VIEW,
+        IdeWidgetType.IMAGE_FILTER_VIEW, IdeWidgetType.ANALOG_CLOCK -> "android.widget.ImageView"
         IdeWidgetType.CHECK_BOX -> "android.widget.CheckBox"
         IdeWidgetType.RADIO_BUTTON -> "android.widget.RadioButton"
-        IdeWidgetType.SWITCH_CONTROL -> "android.widget.Switch"
+        IdeWidgetType.SWITCH -> "android.widget.Switch"
         IdeWidgetType.SPINNER -> "android.widget.Spinner"
-        IdeWidgetType.WEB_VIEW, IdeWidgetType.MINI_BROWSER, IdeWidgetType.HTML_VIEWER,
-        IdeWidgetType.MARKDOWN_WEB, IdeWidgetType.URL_BAR_WEB, IdeWidgetType.API_TESTER_WEB,
-        IdeWidgetType.VIDEO_EMBED_WEB, IdeWidgetType.MAP_EMBED_WEB -> "android.webkit.WebView"
-        IdeWidgetType.LIST_VIEW, IdeWidgetType.RECYCLER_LIST, IdeWidgetType.CHAT_LIST_VIEW,
-        IdeWidgetType.TIMELINE_LIST, IdeWidgetType.SETTINGS_LIST, IdeWidgetType.HORIZONTAL_CAROUSEL -> "android.widget.ListView"
+        IdeWidgetType.WEB_VIEW, IdeWidgetType.CUSTOM_TAB_VIEW, IdeWidgetType.GECKO_WEB_VIEW,
+        IdeWidgetType.AD_WEB_VIEW, IdeWidgetType.SWIPE_WEB_VIEW -> "android.webkit.WebView"
+        IdeWidgetType.LIST_VIEW, IdeWidgetType.TREE_VIEW, IdeWidgetType.RECYCLER_VIEW,
+        IdeWidgetType.VIEW_PAGER, IdeWidgetType.STAGGERED_GRID_VIEW, IdeWidgetType.HORIZONTAL_LIST_VIEW,
+        IdeWidgetType.CAROUSEL_VIEW, IdeWidgetType.SWIPE_LIST_VIEW -> "android.widget.ListView"
         IdeWidgetType.GRID_VIEW -> "android.widget.GridView"
         IdeWidgetType.EXPANDABLE_LIST_VIEW -> "android.widget.ExpandableListView"
         IdeWidgetType.TIME_PICKER -> "android.widget.TimePicker"
