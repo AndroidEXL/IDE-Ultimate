@@ -62,11 +62,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.data.CodeEditorFlavor
@@ -888,154 +890,156 @@ private fun IdeProjectSingleFileEditor(
             }
         }
 
-        // Editor Body
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(Color(0xFF070B1E)),
-        ) {
-            val minEditorHeight = (linesCount * 20).coerceAtLeast(300).dp
-            Row(
+        // Editor Body (LTR for code and line numbers)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(verticalScroll)
-                    .padding(vertical = 8.dp),
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color(0xFF070B1E)),
             ) {
-                Column(
+                val minEditorHeight = (linesCount * 20).coerceAtLeast(300).dp
+                Row(
                     modifier = Modifier
-                        .padding(start = 8.dp, end = 6.dp)
-                        .defaultMinSize(minHeight = minEditorHeight),
-                    horizontalAlignment = Alignment.End,
+                        .fillMaxSize()
+                        .verticalScroll(verticalScroll)
+                        .padding(vertical = 8.dp),
                 ) {
-                    for (line in 1..linesCount) {
-                        Text(
-                            text = line.toString(),
-                            style = TextStyle(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 11.5.sp,
-                                lineHeight = 20.sp,
-                                color = Color(0xFF4A5578),
-                            ),
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(minEditorHeight)
-                        .background(Color(0x24FFFFFF)),
-                )
-
-                BasicTextField(
-                    value = textFieldValue,
-                    onValueChange = { newVal ->
-                        updateContent(newVal)
-                        showAutocomplete = true
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = minEditorHeight)
-                        .padding(start = 10.dp, end = 12.dp),
-                    textStyle = TextStyle(
-                        fontFamily = JetBrainsMono,
-                        fontSize = 12.sp,
-                        lineHeight = 20.sp,
-                        color = Ink,
-                    ),
-                    cursorBrush = SolidColor(Cyan),
-                    visualTransformation = AndroidCodeSyntaxTransformation(flavor),
-                )
-            }
-
-            if (showAutocomplete && suggestions.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xF00A0F26))
-                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0x2638BDF8))
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(start = 8.dp, end = 6.dp)
+                            .defaultMinSize(minHeight = minEditorHeight),
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        for (line in 1..linesCount) {
                             Text(
-                                text = "مكمل النصوص الذكي (${suggestions.size})",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
+                                text = line.toString(),
+                                style = TextStyle(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 20.sp,
+                                    color = Color(0xFF4A5578),
                                 ),
-                                color = Cyan,
-                            )
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Close",
-                                tint = Muted,
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { showAutocomplete = false },
                             )
                         }
+                    }
 
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 140.dp),
-                        ) {
-                            items(suggestions) { item ->
-                                Row(
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(minEditorHeight)
+                            .background(Color(0x24FFFFFF)),
+                    )
+
+                    BasicTextField(
+                        value = textFieldValue,
+                        onValueChange = { newVal ->
+                            updateContent(newVal)
+                            showAutocomplete = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = minEditorHeight)
+                            .padding(start = 10.dp, end = 12.dp),
+                        textStyle = TextStyle(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            lineHeight = 20.sp,
+                            color = Ink,
+                        ),
+                        cursorBrush = SolidColor(Cyan),
+                        visualTransformation = AndroidCodeSyntaxTransformation(flavor),
+                    )
+                }
+
+                if (showAutocomplete && suggestions.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xF00A0F26))
+                            .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0x2638BDF8))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = "مكمل النصوص الذكي (${suggestions.size})",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                    ),
+                                    color = Cyan,
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Close",
+                                    tint = Muted,
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { applyCompletion(item) }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(item.category.color.copy(alpha = 0.18f))
-                                            .padding(horizontal = 5.dp, vertical = 2.dp),
-                                    ) {
-                                        Text(
-                                            text = item.category.badge.substringBefore(" •"),
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                            ),
-                                            color = item.category.color,
-                                        )
-                                    }
+                                        .size(16.dp)
+                                        .clickable { showAutocomplete = false },
+                                )
+                            }
 
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.label,
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontFamily = JetBrainsMono,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                            ),
-                                            color = Ink,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        if (item.detail.isNotEmpty()) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 140.dp),
+                            ) {
+                                items(suggestions) { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { applyCompletion(item) }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(item.category.color.copy(alpha = 0.18f))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                                        ) {
                                             Text(
-                                                text = item.detail,
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                                color = Muted,
+                                                text = item.category.badge.substringBefore(" •"),
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = item.category.color,
+                                            )
+                                        }
+
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.label,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                ),
+                                                color = Ink,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                             )
+                                            if (item.detail.isNotEmpty()) {
+                                                Text(
+                                                    text = item.detail,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                                    color = Muted,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
                                         }
                                     }
                                 }

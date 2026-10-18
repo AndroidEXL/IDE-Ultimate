@@ -5,74 +5,125 @@ import androidx.compose.ui.graphics.Color
 object AndroidXmlCompletions {
 
     val ALL_ANDROID_PERMISSIONS: List<Pair<String, String>> = listOf(
-        // Common & Internet
+        // Connectivity & Network
         "android.permission.INTERNET" to "الوصول الكامل إلى شبكة الإنترنت",
         "android.permission.ACCESS_NETWORK_STATE" to "معرفة حالة الاتصال بالشبكة والإنترنت",
         "android.permission.ACCESS_WIFI_STATE" to "الوصول لمعلومات وتفاصيل شبكات Wi-Fi",
         "android.permission.CHANGE_WIFI_STATE" to "تغيير حالة اتصال Wi-Fi وتوصيل الشبكات",
         "android.permission.CHANGE_NETWORK_STATE" to "تغيير حالة اتصال شبكات البيانات",
-
-        // Storage & Media (Scoped storage + Legacy)
-        "android.permission.READ_EXTERNAL_STORAGE" to "قراءة الملفات من الذاكرة الخارجية",
-        "android.permission.WRITE_EXTERNAL_STORAGE" to "كتابة وتعديل الملفات على الذاكرة الخارجية",
-        "android.permission.MANAGE_EXTERNAL_STORAGE" to "إدارة الذاكرة بالكامل (كل الملفات - Android 11+)",
-        "android.permission.READ_MEDIA_IMAGES" to "الوصول إلى الصور (Android 13+)",
-        "android.permission.READ_MEDIA_VIDEO" to "الوصول إلى مقاطع الفيديو (Android 13+)",
-        "android.permission.READ_MEDIA_AUDIO" to "الوصول إلى المقاطع الصوتية (Android 13+)",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED" to "الوصول للصور والفيديوهات المحددة بواسطة المستخدم (Android 14+)",
-
-        // Camera & Audio
-        "android.permission.CAMERA" to "استخدام الكاميرا والتقاط الصور وتسجيل الفيديو",
-        "android.permission.RECORD_AUDIO" to "تسجيل الصوت من الميكروفون",
-        "android.permission.MODIFY_AUDIO_SETTINGS" to "تعديل إعدادات الصوت ومستويات الصوت",
-
-        // Location
-        "android.permission.ACCESS_FINE_LOCATION" to "الوصول الدقيق لموقع الجهاز (GPS)",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE" to "استقبال حزم البث المتعدد عبر Wi-Fi Multicast",
+        "android.permission.ACCESS_FINE_LOCATION" to "الوصول الدقيق لموقع الجهاز عبر GPS",
         "android.permission.ACCESS_COARSE_LOCATION" to "الوصول التقريبي لموقع الجهاز عبر الشبكة",
         "android.permission.ACCESS_BACKGROUND_LOCATION" to "الوصول لموقع الجهاز أثناء تشغيل التطبيق في الخلفية",
 
-        // Notifications & Foreground Services
+        // Storage & Media (Scoped Storage, Full Storage & Media)
+        "android.permission.READ_EXTERNAL_STORAGE" to "قراءة الملفات من الذاكرة الخارجية",
+        "android.permission.WRITE_EXTERNAL_STORAGE" to "كتابة وتعديل الملفات على الذاكرة الخارجية",
+        "android.permission.MANAGE_EXTERNAL_STORAGE" to "إدارة الذاكرة بالكامل وتصفح جميع الملفات (Android 11+)",
+        "android.permission.READ_MEDIA_IMAGES" to "الوصول للصور والمعرض (Android 13+)",
+        "android.permission.READ_MEDIA_VIDEO" to "الوصول لمقاطع الفيديو (Android 13+)",
+        "android.permission.READ_MEDIA_AUDIO" to "الوصول للملفات الصوتية والموسيقى (Android 13+)",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED" to "الوصول للوسائط التي يحددها المستخدم فقط (Android 14+)",
+        "android.permission.ACCESS_MEDIA_LOCATION" to "قراءة بيانات الموقع الجغرافي EXIF داخل الصور",
+
+        // Camera, Audio & Recording
+        "android.permission.CAMERA" to "استخدام الكاميرا والتقاط الصور وتسجيل الفيديو",
+        "android.permission.RECORD_AUDIO" to "تسجيل الصوت من الميكروفون",
+        "android.permission.MODIFY_AUDIO_SETTINGS" to "تعديل إعدادات ومستويات الصوت العالمية",
+
+        // Notifications & Foreground Services (Android 13, 14, 15)
         "android.permission.POST_NOTIFICATIONS" to "إرسال الإشعارات والتنبيهات للمستخدم (Android 13+)",
-        "android.permission.FOREGROUND_SERVICE" to "تشغيل الخدمات في الواجهة الأمامية (Foreground Service)",
+        "android.permission.FOREGROUND_SERVICE" to "تشغيل الخدمات في الواجهة الأمامية Foreground Service",
         "android.permission.FOREGROUND_SERVICE_DATA_SYNC" to "خدمة المزامنة ونقل البيانات في الواجهة الأمامية",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" to "خدمة تشغيل الصوت والوسائط في الواجهة الأمامية",
-        "android.permission.FOREGROUND_SERVICE_LOCATION" to "خدمة تتبع الموقع في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_LOCATION" to "خدمة تتبع الموقع الجغرافي في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" to "خدمة الاتصال بالأجهزة الخارجية في الواجهة الأمامية",
         "android.permission.FOREGROUND_SERVICE_CAMERA" to "خدمة استخدام الكاميرا في الواجهة الأمامية",
         "android.permission.FOREGROUND_SERVICE_MICROPHONE" to "خدمة الميكروفون في الواجهة الأمامية",
-        "android.permission.WAKE_LOCK" to "إبقاء المعالج في حالة نشطة ومنع الهاتف من النوم",
+        "android.permission.FOREGROUND_SERVICE_PHONE_CALL" to "خدمة المكالمات الهاتفية في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" to "خدمة الرسائل عن بعد في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE" to "خدمة ذات استخدام خاص ومحدد في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" to "خدمة معفاة للنظام في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" to "خدمة تسجيل ومشاركة الشاشة في الواجهة الأمامية",
+        "android.permission.FOREGROUND_SERVICE_HEALTH" to "خدمة الصحة وتتبع النشاط في الواجهة الأمامية",
+        "android.permission.WAKE_LOCK" to "إبقاء المعالج نشطاً ومنع الشاشة/الهاتف من النوم",
 
-        // Phone, Contacts, SMS & Hardware
-        "android.permission.READ_PHONE_STATE" to "قراءة حالة الهاتف وهوية الشريحة والمكالمات",
+        // Phone, Calls & SIM
+        "android.permission.READ_PHONE_STATE" to "قراءة حالة الهاتف وهوية الشريحة والمكالمات الواردة",
         "android.permission.READ_PHONE_NUMBERS" to "قراءة رقم هاتف الجهاز المسجل على الشريحة",
-        "android.permission.CALL_PHONE" to "إجراء المكالمات الهاتفية مباشرة دون الذهاب للاتصال",
-        "android.permission.READ_CONTACTS" to "قراءة جهات الاتصال المسجلة في الهاتف",
-        "android.permission.WRITE_CONTACTS" to "تعديل وإضافة جهات الاتصال في الهاتف",
-        "android.permission.READ_CALL_LOG" to "قراءة سجل المكالمات الهاتفية",
+        "android.permission.CALL_PHONE" to "إجراء المكالمات الهاتفية مباشرة دون فتح واجهة الاتصال",
+        "android.permission.ANSWER_PHONE_CALLS" to "الرد التلقائي على المكالمات الهاتفية الواردة",
+        "android.permission.MANAGE_OWN_CALLS" to "إدارة وتوجيه المكالمات الخاصة بالتطبيق",
+        "android.permission.READ_CALL_LOG" to "قراءة سجل المكالمات الهاتفية الصادرة والواردة",
         "android.permission.WRITE_CALL_LOG" to "تعديل وحذف سجل المكالمات الهاتفية",
-        "android.permission.SEND_SMS" to "إرسال رسائل SMS النصية",
-        "android.permission.RECEIVE_SMS" to "استقبال واعتراض رسائل SMS النصية",
-        "android.permission.READ_SMS" to "قراءة رسائل SMS المحفوظة في الهاتف",
-        "android.permission.RECEIVE_BOOT_COMPLETED" to "تشغيل التطبيق تلقائياً عند إعادة تشغيل الهاتف",
-        "android.permission.VIBRATE" to "استخدام هزاز الهاتف والاهتزازات",
+        "android.permission.PROCESS_OUTGOING_CALLS" to "اعتراض ومعالجة المكالمات الصادرة (قديم)",
+        "android.permission.USE_SIP" to "إجراء واستقبال مكالمات بروتوكول الإنترنت SIP",
+
+        // Contacts, Calendar & Accounts
+        "android.permission.READ_CONTACTS" to "قراءة جهات الاتصال ودفتر العناوين في الهاتف",
+        "android.permission.WRITE_CONTACTS" to "إضافة وتعديل وحذف جهات الاتصال في الهاتف",
+        "android.permission.GET_ACCOUNTS" to "الوصول لقائمة الحسابات المسجلة في الهاتف",
+        "android.permission.READ_CALENDAR" to "قراءة أحداث وتقويم ومواعيد المستخدم",
+        "android.permission.WRITE_CALENDAR" to "إضافة وتعديل وحذف الأحداث والمواعيد في التقويم",
+
+        // SMS & MMS
+        "android.permission.SEND_SMS" to "إرسال رسائل SMS النصية القصيرة",
+        "android.permission.RECEIVE_SMS" to "استقبال واعتراض رسائل SMS النصية الواردة",
+        "android.permission.READ_SMS" to "قراءة رسائل SMS المحفوظة في صندوق الوارد",
+        "android.permission.RECEIVE_WAP_PUSH" to "استقبال رسائل WAP الدفعية",
+        "android.permission.RECEIVE_MMS" to "استقبال رسائل الوسائط المتعددة MMS",
+
+        // Bluetooth & Nearby Devices
         "android.permission.BLUETOOTH" to "الاتصال بأجهزة البلوتوث المقترنة",
-        "android.permission.BLUETOOTH_ADMIN" to "البحث عن أجهزة بلوتوث واقترانها",
-        "android.permission.BLUETOOTH_CONNECT" to "الاتصال بأجهزة بلوتوث المحيطة (Android 12+)",
-        "android.permission.BLUETOOTH_SCAN" to "البحث عن أجهزة بلوتوث القريبة (Android 12+)",
-        "android.permission.BLUETOOTH_ADVERTISE" to "إعلان الجهاز عبر البلوتوث (Android 12+)",
-        "android.permission.NEARBY_WIFI_DEVICES" to "استكشاف أجهزة Wi-Fi القريبة المجاورة (Android 13+)",
-        "android.permission.NFC" to "الاتصال عبر تقنية المدى القريب NFC",
-        "android.permission.USE_BIOMETRIC" to "التحقق بواسطة البصمة والمستشعرات الحيوية",
-        "android.permission.USE_FINGERPRINT" to "التحقق ببصمة الإصبع (قديم)",
-        "android.permission.BODY_SENSORS" to "قراءة مستشعرات الجسم مثل معدل نبضات القلب",
-        "android.permission.BODY_SENSORS_BACKGROUND" to "قراءة مستشعرات الجسم في الخلفية",
-        "android.permission.ACTIVITY_RECOGNITION" to "التعرف على النشاط الحركي والمشي والركض",
-        "android.permission.REQUEST_INSTALL_PACKAGES" to "طلب تثبيت تطبيقات وحزم APK خارجية",
+        "android.permission.BLUETOOTH_ADMIN" to "البحث عن أجهزة بلوتوث واقترانها وإدارتها",
+        "android.permission.BLUETOOTH_CONNECT" to "الاتصال والتواصل مع أجهزة بلوتوث المقترنة (Android 12+)",
+        "android.permission.BLUETOOTH_SCAN" to "البحث واستكشاف أجهزة بلوتوث المحيطة (Android 12+)",
+        "android.permission.BLUETOOTH_ADVERTISE" to "إعلان وبث هوية الجهاز عبر البلوتوث (Android 12+)",
+        "android.permission.NEARBY_WIFI_DEVICES" to "استكشاف أجهزة Wi-Fi القريبة المجاورة دون موقع (Android 13+)",
+        "android.permission.UWB_RANGING" to "تحديد المدى والمسافة الدقيقة عبر النطاق فائق العرض Ultra-Wideband",
+        "android.permission.NFC" to "الاتصال وقراءة بطاقات المدى القريب NFC",
+        "android.permission.NFC_TRANSACTION_EVENT" to "استقبال أحداث معاملات الدفع عبر بطاقة NFC",
+        "android.permission.NFC_PREFERRED_PAYMENT_INFO" to "معرفة معلومات خدمة الدفع المفضلة عبر NFC",
+
+        // Sensors, Fitness & Biometrics
+        "android.permission.BODY_SENSORS" to "قراءة مستشعرات الجسم الحيوية مثل معدل نبضات القلب",
+        "android.permission.BODY_SENSORS_BACKGROUND" to "قراءة مستشعرات الجسم أثناء عمل التطبيق في الخلفية",
+        "android.permission.ACTIVITY_RECOGNITION" to "التعرف على النشاط الحركي والمشي والركض والقيادة",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS" to "قراءة بيانات المستشعرات بمعدل عينات فائق السرعة",
+        "android.permission.USE_BIOMETRIC" to "التحقق بواسطة البصمة والتعرف على الوجه والمستشعرات الحيوية",
+        "android.permission.USE_FINGERPRINT" to "التحقق بواسطة بصمة الإصبع (قديم)",
+
+        // System, Windows & Startup
         "android.permission.SYSTEM_ALERT_WINDOW" to "الرسم والظهور فوق التطبيقات الأخرى (نافذة عائمة)",
+        "android.permission.RECEIVE_BOOT_COMPLETED" to "بدء تشغيل التطبيق تلقائياً عند إقلاع وإعادة تشغيل الهاتف",
+        "android.permission.REQUEST_INSTALL_PACKAGES" to "طلب تثبيت تطبيقات وحزم APK خارجية غير معروفة",
+        "android.permission.REQUEST_DELETE_PACKAGES" to "طلب حذف وإلغاء تثبيت التطبيقات",
+        "android.permission.QUERY_ALL_PACKAGES" to "فحص وقراءة جميع التطبيقات المثبتة في الهاتف (Android 11+)",
+        "android.permission.VIBRATE" to "التحكم في محرك الاهتزاز وهزاز الهاتف",
         "android.permission.SCHEDULE_EXACT_ALARM" to "جدولة المنبهات الدقيقة في الوقت المحدد (Android 12+)",
-        "android.permission.USE_EXACT_ALARM" to "استخدام المنبهات الدقيقة دون إذن يدوي",
+        "android.permission.USE_EXACT_ALARM" to "استخدام المنبهات الدقيقة للمنبه والتقويم دون إذن يدوي",
         "android.permission.ACCESS_NOTIFICATION_POLICY" to "التحكم في وضع عدم الإزعاج وتنبيهات الإشعارات",
         "android.permission.KILL_BACKGROUND_PROCESSES" to "إيقاف وإنهاء العمليات والتطبيقات في الخلفية",
-        "android.permission.QUERY_ALL_PACKAGES" to "فحص وقراءة جميع التطبيقات المثبتة في الهاتف",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" to "طلب استثناء التطبيق من تحسينات توفير طاقة البطارية",
+        "android.permission.PACKAGE_USAGE_STATS" to "الوصول لإحصائيات وقت استخدام التطبيقات والشاشة",
+        "android.permission.BIND_ACCESSIBILITY_SERVICE" to "ربط خدمة إمكانية الوصول والتفاعل لذوي الاحتياجات",
+        "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" to "ربط خدمة قراءة والتقاط إشعارات النظام الواردة",
+        "android.permission.BIND_DEVICE_ADMIN" to "تفعيل صلاحية مدير الجهاز وقفل الشاشة",
+        "android.permission.INSTALL_SHORTCUT" to "تثبيت اختصارات التطبيق على الشاشة الرئيسية",
+        "android.permission.UNINSTALL_SHORTCUT" to "حذف الاختصارات من الشاشة الرئيسية",
+        "android.permission.SET_WALLPAPER" to "تعيين وضبط خلفية الشاشة",
+        "android.permission.SET_WALLPAPER_HINTS" to "تعيين تلميحات أبعاد خلفية الشاشة",
+        "android.permission.EXPAND_STATUS_BAR" to "توسيع وطي شريط الإشعارات والحالة برمجياً",
+        "android.permission.REORDER_TASKS" to "إعادة ترتيب مهام ونوافذ التطبيقات",
+        "android.permission.TRANSMIT_IR" to "إرسال إشارات الأشعة تحت الحمراء IR Remote",
+        "android.permission.FLASHLIGHT" to "التحكم في كشاف وفلاش الهاتف",
+        "android.permission.BATTERY_STATS" to "قراءة تفاصيل وإحصائيات استهلاك البطارية",
+        "android.permission.DUMP" to "استخراج بيانات تصحيح الأخطاء من خدمات النظام",
+        "android.permission.READ_SYNC_SETTINGS" to "قراءة إعدادات مزامنة الحسابات",
+        "android.permission.WRITE_SYNC_SETTINGS" to "تعديل إعدادات مزامنة الحسابات",
+        "android.permission.AUTHENTICATE_ACCOUNTS" to "العمل كموثق حسابات لحساب جديد في النظام",
+        "android.permission.MANAGE_ACCOUNTS" to "إدارة وتعديل قائمة الحسابات المسجلة",
+        "android.permission.USE_CREDENTIALS" to "طلب رموز المصادقة والاعتماد للحسابات المسجلة",
     )
 
     private val MANIFEST_XML_TAGS = listOf(

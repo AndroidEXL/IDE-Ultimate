@@ -429,6 +429,7 @@ fun IdeProjectScreen(
     var showPermissionManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showFilesManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showGitHubToolsScreen by rememberSaveable { mutableStateOf(false) }
+    var showGitHubActionsRunScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
     val context = LocalContext.current
 
@@ -503,6 +504,7 @@ fun IdeProjectScreen(
             showPermissionManagerScreen -> showPermissionManagerScreen = false
             showFilesManagerScreen -> showFilesManagerScreen = false
             showGitHubToolsScreen -> showGitHubToolsScreen = false
+            showGitHubActionsRunScreen -> showGitHubActionsRunScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
             showSideMenuDrawer -> showSideMenuDrawer = false
             showBuildMethodSheet -> showBuildMethodSheet = false
@@ -761,6 +763,15 @@ fun IdeProjectScreen(
         return
     }
 
+    if (showGitHubActionsRunScreen) {
+        IdeGitHubActionsRunScreen(
+            project = project,
+            onBack = { showGitHubActionsRunScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     if (showTempRunScreen) {
         TemporaryRunScreen(
             project = project,
@@ -913,7 +924,13 @@ fun IdeProjectScreen(
                     xmlPage = selectedXmlPage,
                     selectedBuildMethod = selectedBuildMethod,
                     onOpenPageSelector = { showXmlBottomSheet = true },
-                    onRunClick = { showTempRunScreen = true },
+                    onRunClick = {
+                        if (selectedBuildMethod == IdeBuildMethod.GITHUB_ACTIONS) {
+                            showGitHubActionsRunScreen = true
+                        } else {
+                            showTempRunScreen = true
+                        }
+                    },
                     onRunLongClick = { showBuildMethodSheet = true },
                     bottomBarPadding = bottomBarPadding,
                 )
@@ -10476,13 +10493,14 @@ private fun IdeLogicCodeEditor(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xE606091A))
-            .border(1.dp, VioletSoft.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
-    ) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xE606091A))
+                .border(1.dp, VioletSoft.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+        ) {
         // 1. Code Editor Mode Switcher: Java Android | Kotlin Android | xml Android
         Column(
             modifier = Modifier
@@ -10661,6 +10679,7 @@ private fun IdeLogicCodeEditor(
                     .padding(horizontal = 10.dp),
             )
         }
+    }
     }
 }
 
@@ -12818,6 +12837,17 @@ private fun TemporaryRunScreen(
                     }
 
                     Spacer(Modifier.height(14.dp))
+                    if (buildMethod == IdeBuildMethod.GITHUB_ACTIONS) {
+                        GradientButton(
+                            text = "عرض سجلات وشجرة البناء في GitHub Actions",
+                            onClick = {
+                                onChangeBuildMethod(IdeBuildMethod.GITHUB_ACTIONS)
+                                onClose()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
                     GradientButton(
                         text = stringResource(R.string.ide_temp_run_close),
                         onClick = onClose,

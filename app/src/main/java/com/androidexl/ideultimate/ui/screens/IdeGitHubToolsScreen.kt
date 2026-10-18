@@ -554,7 +554,60 @@ fun IdeGitHubToolsScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                // Rename
+                // 1. Download Entire Project
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF162552))
+                        .clickable {
+                            longPressedRepo = null
+                            Toast.makeText(context, "جاري تحميل مستودع ${repoToManage.name} بالكامل...", Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val rootEntry = GitHubContentEntry(
+                                    name = repoToManage.name,
+                                    path = "",
+                                    sha = "",
+                                    size = 0L,
+                                    type = "dir",
+                                    downloadUrl = "",
+                                )
+                                val dlRes = gitHubRepo.downloadFileOrFolderRecursive(repoToManage.ownerLogin, repoToManage.name, rootEntry)
+                                withContext(Dispatchers.Main) {
+                                    dlRes.onSuccess {
+                                        Toast.makeText(context, "تم تحميل المشروع كاملاً في: ${it.path}", Toast.LENGTH_LONG).show()
+                                    }
+                                    dlRes.onFailure {
+                                        Toast.makeText(context, it.message ?: "فشل التحميل", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = IdeIcons.Download,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column {
+                        Text(
+                            text = "تحميل المشروع كامل (Download Repo)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Ink,
+                        )
+                        Text(
+                            text = "تنزيل كافة ملفات ومجلدات المستودع إلى مجلد التنزيلات بالجهاز",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                        )
+                    }
+                }
+
+                // 2. Rename
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -588,7 +641,7 @@ fun IdeGitHubToolsScreen(
                     }
                 }
 
-                // Delete
+                // 3. Delete
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1193,6 +1246,9 @@ private fun GitHubRepoBrowserScreen(
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
 
     var longPressedFolder by remember { mutableStateOf<GitHubContentEntry?>(null) }
+    var longPressedFile by remember { mutableStateOf<GitHubContentEntry?>(null) }
+    var showRenameFileDialog by remember { mutableStateOf<GitHubContentEntry?>(null) }
+    var showDeleteFileConfirmDialog by remember { mutableStateOf<GitHubContentEntry?>(null) }
     var showSelectionActionsSheet by rememberSaveable { mutableStateOf(false) }
 
     // Launchers for importing from device
@@ -1428,6 +1484,8 @@ private fun GitHubRepoBrowserScreen(
                                             showSelectionActionsSheet = true
                                         } else if (item.isDirectory) {
                                             longPressedFolder = item
+                                        } else {
+                                            longPressedFile = item
                                         }
                                     },
                                 )
@@ -1946,47 +2004,397 @@ private fun GitHubRepoBrowserScreen(
         )
     }
 
-    // View file detail dialog
+    // View/Edit file detail editor page
     val fileDetail = openedFileDetail
     if (fileDetail != null) {
+        var editedContent by remember(fileDetail.path) { mutableStateOf(fileDetail.textContent) }
+        var isUpdatingFile by remember { mutableStateOf(false) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF070B1E)),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0C1330))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { openedFileDetail = null }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Ink,
+                        )
+                    }
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = fileDetail.name,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                            ),
+                            color = Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = fileDetail.path,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.sp,
+                            ),
+                            color = Cyan,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    // Save Button -> Pushes commit update to GitHub
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF22C55E).copy(alpha = 0.2f))
+                            .border(1.dp, Color(0xFF22C55E).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !isUpdatingFile) {
+                                isUpdatingFile = true
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    val res = gitHubRepo.uploadOrUpdateFile(
+                                        owner = repo.ownerLogin,
+                                        repo = repo.name,
+                                        path = fileDetail.path,
+                                        bytes = editedContent.toByteArray(Charsets.UTF_8),
+                                        commitMessage = "Update ${fileDetail.name} via IDE Ultimate",
+                                        existingSha = fileDetail.sha,
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        isUpdatingFile = false
+                                        res.onSuccess {
+                                            Toast.makeText(context, "تم رفع التحديث بنجاح إلى GitHub!", Toast.LENGTH_SHORT).show()
+                                            refreshContents()
+                                            openedFileDetail = null
+                                        }
+                                        res.onFailure {
+                                            Toast.makeText(context, it.message ?: "فشل رفع التحديث", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isUpdatingFile) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color(0xFF22C55E), strokeWidth = 2.dp)
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Save",
+                                    tint = Color(0xFF22C55E),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    text = "حفظ ورفع",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                    ),
+                                    color = Color(0xFF22C55E),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Editor Body (LTR monospace)
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(Color(0xFF070B1E))
+                            .padding(10.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = editedContent,
+                            onValueChange = { editedContent = it },
+                            modifier = Modifier.fillMaxSize(),
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp,
+                                color = Ink,
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Cyan,
+                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                focusedTextColor = Ink,
+                                unfocusedTextColor = Ink,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Long Press File Bottom Sheet: (حذف ملف / تغيير اسم الملف / تحميل الملف)
+    val fileToManage = longPressedFile
+    if (fileToManage != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { longPressedFile = null },
+            sheetState = sheetState,
+            containerColor = Color(0xFF0E1430),
+            contentColor = Ink,
+            scrimColor = Color(0xCC03060F),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = fileToManage.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Ink,
+                )
+                Text(
+                    text = fileToManage.path,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
+                    color = Cyan,
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                // 1. تحميل الملف
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF162552))
+                        .clickable {
+                            longPressedFile = null
+                            Toast.makeText(context, "جاري تحميل ${fileToManage.name} إلى التنزيلات...", Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val dlRes = gitHubRepo.downloadFileOrFolderRecursive(repo.ownerLogin, repo.name, fileToManage)
+                                withContext(Dispatchers.Main) {
+                                    dlRes.onSuccess {
+                                        Toast.makeText(context, "تم حفظ الملف في: ${it.path}", Toast.LENGTH_LONG).show()
+                                    }
+                                    dlRes.onFailure {
+                                        Toast.makeText(context, it.message ?: "فشل التحميل", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(imageVector = IdeIcons.Download, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Column {
+                        Text(text = "تحميل الملف (Download)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+                        Text(text = "حفظ الملف على هاتفك داخل مجلد Downloads", style = MaterialTheme.typography.labelSmall, color = Muted)
+                    }
+                }
+
+                // 2. تغيير اسم الملف
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF172044))
+                        .clickable {
+                            longPressedFile = null
+                            showRenameFileDialog = fileToManage
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Column {
+                        Text(text = "تغيير اسم الملف (Rename)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+                        Text(text = "تعديل اسم الملف في المستودع", style = MaterialTheme.typography.labelSmall, color = Muted)
+                    }
+                }
+
+                // 3. حذف ملف
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF38101E))
+                        .clickable {
+                            longPressedFile = null
+                            showDeleteFileConfirmDialog = fileToManage
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(imageVector = Icons.Filled.Delete, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
+                    Column {
+                        Text(text = "حذف الملف (Delete)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF87171))
+                        Text(text = "حذف الملف نهائياً من GitHub", style = MaterialTheme.typography.labelSmall, color = Muted)
+                    }
+                }
+            }
+        }
+    }
+
+    // Rename File Dialog
+    val fileToRename = showRenameFileDialog
+    if (fileToRename != null) {
+        var inputName by rememberSaveable { mutableStateOf(fileToRename.name) }
+        var isRenaming by remember { mutableStateOf(false) }
+        var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
+
         AlertDialog(
-            onDismissRequest = { openedFileDetail = null },
+            onDismissRequest = { if (!isRenaming) showRenameFileDialog = null },
             containerColor = Color(0xFF0F172A),
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
             title = {
-                Text(
-                    text = fileDetail.name,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = JetBrainsMono,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
+                Text(text = "تغيير اسم الملف", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             },
             text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Text(
-                        text = fileDetail.textContent.ifBlank { "(الملف فارغ أو ملف ثنائي)" },
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
-                        color = Ink,
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = inputName,
+                        onValueChange = {
+                            inputName = it
+                            errorMsg = null
+                        },
+                        label = { Text("الاسم الجديد") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan,
+                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                        ),
                     )
+                    if (errorMsg != null) {
+                        Text(text = errorMsg.orEmpty(), color = Color(0xFFF87171), style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
+                    enabled = !isRenaming && inputName.isNotBlank() && inputName != fileToRename.name,
                     onClick = {
-                        openedFileDetail = null
+                        isRenaming = true
+                        coroutineScope.launch(Dispatchers.IO) {
+                            // Read content -> create new path -> delete old
+                            val detailRes = gitHubRepo.readFileContent(repo.ownerLogin, repo.name, fileToRename.path)
+                            val detail = detailRes.getOrNull()
+                            if (detail == null) {
+                                withContext(Dispatchers.Main) {
+                                    isRenaming = false
+                                    errorMsg = "تعذر قراءة محتوى الملف القديم"
+                                }
+                                return@launch
+                            }
+                            val parent = fileToRename.path.substringBeforeLast('/', "")
+                            val newPath = if (parent.isEmpty()) inputName.trim() else "$parent/${inputName.trim()}"
+                            val upRes = gitHubRepo.uploadOrUpdateFile(
+                                owner = repo.ownerLogin,
+                                repo = repo.name,
+                                path = newPath,
+                                bytes = detail.rawBytes,
+                                commitMessage = "Rename ${fileToRename.name} to $inputName",
+                            )
+                            if (upRes.isSuccess) {
+                                gitHubRepo.deleteFileOrFolderRecursive(repo.ownerLogin, repo.name, fileToRename)
+                            }
+                            withContext(Dispatchers.Main) {
+                                isRenaming = false
+                                if (upRes.isSuccess) {
+                                    refreshContents()
+                                    showRenameFileDialog = null
+                                } else {
+                                    errorMsg = upRes.exceptionOrNull()?.message ?: "فشل تعديل الاسم"
+                                }
+                            }
+                        }
                     },
                 ) {
-                    Text("إغلاق", color = Cyan)
+                    Text(if (isRenaming) "جاري الحفظ..." else "حفظ", color = Cyan, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameFileDialog = null }, enabled = !isRenaming) {
+                    Text("إلغاء", color = Muted)
+                }
+            },
+        )
+    }
+
+    // Delete File Confirm Dialog
+    val fileToDelete = showDeleteFileConfirmDialog
+    if (fileToDelete != null) {
+        var isDeleting by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isDeleting) showDeleteFileConfirmDialog = null },
+            containerColor = Color(0xFF0F172A),
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Text(text = "حذف الملف", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF87171))
+            },
+            text = {
+                Text(text = "هل أنت متأكد من حذف ${fileToDelete.name} من المستودع نهائياً؟", style = MaterialTheme.typography.bodyMedium, color = Ink)
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isDeleting,
+                    onClick = {
+                        isDeleting = true
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val res = gitHubRepo.deleteFileOrFolderRecursive(repo.ownerLogin, repo.name, fileToDelete)
+                            withContext(Dispatchers.Main) {
+                                isDeleting = false
+                                res.onSuccess {
+                                    refreshContents()
+                                    showDeleteFileConfirmDialog = null
+                                }
+                                res.onFailure {
+                                    Toast.makeText(context, it.message ?: "فشل الحذف", Toast.LENGTH_LONG).show()
+                                    showDeleteFileConfirmDialog = null
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text(if (isDeleting) "جاري الحذف..." else "حذف", color = Color(0xFFF87171), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteFileConfirmDialog = null }, enabled = !isDeleting) {
+                    Text("إلغاء", color = Muted)
                 }
             },
         )
     }
 }
+
