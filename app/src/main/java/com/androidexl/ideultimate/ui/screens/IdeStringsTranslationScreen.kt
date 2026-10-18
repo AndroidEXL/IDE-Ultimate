@@ -253,14 +253,19 @@ fun IdeStringsTranslationScreen(
         isTranslatingAll = true
         coroutineScope.launch {
             val updated = stringItems.map { item ->
-                val base = if (item.originalValue.isNotBlank()) item.originalValue else item.key
-                val translated = translateSingleText(base, sourceLang, targetLang)
-                item.copy(translatedValue = translated)
+                // Do NOT translate app_name (preserve original application name)
+                if (item.key.equals("app_name", ignoreCase = true)) {
+                    item.copy(translatedValue = item.originalValue)
+                } else {
+                    val base = if (item.originalValue.isNotBlank()) item.originalValue else item.key
+                    val translated = translateSingleText(base, sourceLang, targetLang)
+                    item.copy(translatedValue = translated)
+                }
             }
             stringItems.clear()
             stringItems.addAll(updated)
             isTranslatingAll = false
-            Toast.makeText(context, "تمت ترجمة جميع النصوص إلى ${targetLang.uppercase()} ✓", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تمت ترجمة جميع النصوص إلى ${targetLang.uppercase()} (مع الحفاظ على اسم التطبيق app_name) ✓", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -368,21 +373,32 @@ fun IdeStringsTranslationScreen(
                     }
                 }
 
-                // Top Save Button
+                // Top Save Button (Larger, prominent button with 20dp icon & 13.5sp text)
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF10B981).copy(alpha = 0.2f))
-                        .border(1.dp, Color(0xFF10B981), RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF10B981).copy(alpha = 0.25f))
+                        .border(1.2.dp, Color(0xFF10B981), RoundedCornerShape(10.dp))
                         .clickable { showSaveSheet = true }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Save",
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(20.dp),
+                        )
                         Text(
                             text = "حفظ النصوص",
                             color = Color(0xFF10B981),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                            ),
                         )
                     }
                 }

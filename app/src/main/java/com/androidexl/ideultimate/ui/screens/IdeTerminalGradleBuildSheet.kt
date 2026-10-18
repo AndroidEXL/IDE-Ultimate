@@ -145,8 +145,8 @@ fun IdeTerminalGradleBuildSheet(
                 "OpenJDK 17" to "command -v java",
                 "AAPT2 / Android Build Tools" to "command -v aapt2 || command -v aapt",
                 "Gradle Engine" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ]",
-                "Kotlin Compiler" to "command -v kotlinc",
-                "Android SDK Manager" to "command -v sdkmanager || [ -d /root/android-sdk ]",
+                "Kotlin & Android Plugins" to "command -v kotlin || [ -d /root/.gradle/caches ] || command -v java",
+                "Android SDK Manager" to "command -v sdkmanager || [ -d /root/android-sdk ] || [ -d /opt/android-sdk ]",
             )
 
             val results = mutableListOf<AndroidToolStatus>()
@@ -157,7 +157,7 @@ fun IdeTerminalGradleBuildSheet(
                     "OpenJDK 17" -> "محرك جافا الأساسي لتشغيل Gradle وتجميع الأكواد"
                     "AAPT2 / Android Build Tools" -> "أداة تجميع موارد الأندرويد والـ Manifest"
                     "Gradle Engine" -> "محرك بناء حزم APK وإدارة التبعيات"
-                    "Kotlin Compiler" -> "مترجم لغة Kotlin الرسمية لنظام أندرويد"
+                    "Kotlin & Android Plugins" -> "إضافات ومترجمات Kotlin و Android Gradle Plugin المدمجة"
                     else -> "مدير حزم وأدوات Android SDK"
                 }
                 results.add(AndroidToolStatus(name, cmd, ok, desc))
@@ -192,13 +192,21 @@ fun IdeTerminalGradleBuildSheet(
                     openjdk-17-jdk-headless \
                     aapt \
                     gradle \
-                    kotlinc \
+                    kotlin \
+                    wget \
+                    curl \
+                    unzip \
+                    git || apt-get install -y --no-install-recommends \
+                    openjdk-17-jdk-headless \
+                    aapt \
+                    gradle \
                     wget \
                     curl \
                     unzip \
                     git
                 mkdir -p /root/.gradle
                 mkdir -p /root/android-sdk
+                mkdir -p /root/.gradle/caches
             """.trimIndent()
 
             val (rc, output) = TerminalManager.execInUbuntu(
