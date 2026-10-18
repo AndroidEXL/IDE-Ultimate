@@ -123,6 +123,7 @@ fun IdeGitHubActionsRunScreen(
     var isLoading by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf("TREE") } // "TREE" or "LOGS" or "ERROR"
     var selectedErrorDetail by remember { mutableStateOf<String?>(null) }
+    var selectedStepDetail by remember { mutableStateOf<WorkflowStepItem?>(null) }
 
     val expandedJobs = remember { mutableStateMapOf<Long, Boolean>() }
     var isDownloadingApk by remember { mutableStateOf(false) }
@@ -244,8 +245,10 @@ fun IdeGitHubActionsRunScreen(
     }
 
     LaunchedEffect(Unit) {
+        isLoading = (runDetail == null)
         while (true) {
             val res = withContext(Dispatchers.IO) { engine.fetchLatestWorkflowRun() }
+            isLoading = false
             res.onSuccess {
                 runDetail = it
                 it.jobs.forEach { job ->
@@ -257,11 +260,11 @@ fun IdeGitHubActionsRunScreen(
             }
             val status = runDetail?.status
             val conclusion = runDetail?.conclusion
-            // If in progress or queued, poll every 4 seconds for live logs & steps!
+            // If in progress or queued, poll every 3 seconds for live logs & steps!
             if (status == "in_progress" || status == "queued" || conclusion == null) {
-                kotlinx.coroutines.delay(4000)
+                kotlinx.coroutines.delay(3000)
             } else {
-                kotlinx.coroutines.delay(12000)
+                kotlinx.coroutines.delay(10000)
             }
         }
     }
@@ -269,6 +272,8 @@ fun IdeGitHubActionsRunScreen(
     BackHandler {
         if (selectedErrorDetail != null) {
             selectedErrorDetail = null
+        } else if (selectedStepDetail != null) {
+            selectedStepDetail = null
         } else {
             onBack()
         }
@@ -797,10 +802,9 @@ fun IdeGitHubActionsRunScreen(
                                                     .background(if (stepFailed) Color(0xFF2B0B17) else Color(0x14FFFFFF))
                                                     .border(1.dp, if (stepFailed) Color(0xFFF87171) else Color(0x18FFFFFF), RoundedCornerShape(8.dp))
                                                     .clickable {
-                                                        if (stepFailed) {
-                                                            selectedErrorDetail = detail.errorMessage ?: "فشل في خطوة: ${step.name}"
-                                                        } else {
-                                                            Toast.makeText(context, "${step.name}: ${step.conclusion ?: step.status}", Toast.LENGTH_SHORT).show()
+                                                        selectedStepDetail = step
+                                                        if (stepFailed && !detail.errorMessage.isNullOrBlank()) {
+                                                            selectedErrorDetail = detail.errorMessage
                                                         }
                                                     }
                                                     .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -892,6 +896,71 @@ fun IdeGitHubActionsRunScreen(
                     }
                 }
             }
+
+
+    if (selectedStepDetail != null) {
+        val s = selectedStepDetail!!
+        AlertDialog(
+            onDismissRequest = { selectedStepDetail = null },
+            title = {
+                Text(
+                    text = "تفاصيل المهمة (Step Details)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink,
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = "اسم الخطوة: ${s.name}",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Cyan,
+                    )
+                    Text(
+                        text = "رقم الخطوة: ${s.number}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    Text(
+                        text = "الحالة الحالية: ${s.status}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Ink,
+                    )
+                    Text(
+                        text = "النتيجة: ${s.conclusion ?: "قيد التنفيذ / جاري العمل..."}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = when (s.conclusion) {
+                            "success" -> Color(0xFF22C55E)
+                            "failure" -> Color(0xFFF87171)
+                            else -> Color(0xFFFBBF24)
+                        },
+                    )
+                    if (s.conclusion == "failure" && !detail.errorMessage.isNullOrBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "تفاصيل الخطأ:",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFFF87171),
+                        )
+                        Text(
+                            text = detail.errorMessage ?: "",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono, fontSize = 10.sp),
+                            color = Color(0xFFFDA4AF),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedStepDetail = null }) {
+                    Text("إغلاق", color = Cyan)
+                }
+            },
+            containerColor = Color(0xFF0C1330),
+        )
+    }
 
     if (showRepoSelectorDialog) {
         AlertDialog(

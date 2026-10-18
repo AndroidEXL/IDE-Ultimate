@@ -226,22 +226,39 @@ class GitHubActionsBuildEngine(
         conclusion: String?,
         errorMsg: String?,
     ): String = buildString {
-        appendLine("=== GitHub Actions Build Log ===")
+        appendLine("=== GitHub Actions Live Console & Build Stream ===")
+        appendLine("Time: " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
+        appendLine("Repository: $owner/$repo")
+        appendLine()
         jobs.forEach { job ->
-            appendLine("Job: ${job.name} [Status: ${job.status}, Conclusion: ${job.conclusion ?: "running"}]")
+            appendLine("--------------------------------------------------------------------------------")
+            appendLine("Job: ${job.name} [Status: ${job.status.uppercase()}, Conclusion: ${job.conclusion?.uppercase() ?: "RUNNING"}]")
+            appendLine("--------------------------------------------------------------------------------")
             job.steps.forEach { step ->
                 val icon = when (step.conclusion) {
                     "success" -> "✓"
-                    "failure" -> "✗"
-                    else -> "•"
+                    "failure" -> "✕"
+                    else -> if (step.status == "in_progress") "►" else "○"
                 }
-                appendLine("  $icon ${step.number}. ${step.name} (${step.status} / ${step.conclusion ?: "in_progress"})")
+                val stepStatus = when {
+                    step.conclusion == "success" -> "SUCCESS"
+                    step.conclusion == "failure" -> "FAILED"
+                    step.status == "in_progress" -> "IN_PROGRESS (جاري التنفيذ الآن)"
+                    else -> "QUEUED (في الانتظار)"
+                }
+                appendLine("  $icon Step ${step.number}: ${step.name}")
+                appendLine("     -> State: $stepStatus")
             }
+            appendLine()
         }
         if (!errorMsg.isNullOrBlank()) {
-            appendLine()
-            appendLine("=== BUILD FAILURE DETAILS ===")
+            appendLine("================================================================================")
+            appendLine("❌ BUILD FAILURE / COMPILATION DETAILS:")
+            appendLine("================================================================================")
             appendLine(errorMsg)
+        } else if (conclusion == null || conclusion == "in_progress") {
+            appendLine("⏳ عملية البناء قيد التنفيذ السحابي الآن على خوادم GitHub Actions...")
+            appendLine("يتم تحديث الخطوات والسجلات تلقائياً كل بضع ثوانٍ مباشرة على الشاشة.")
         }
     }
 
