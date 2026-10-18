@@ -6622,24 +6622,28 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onChildAddedH", "OnChild\nAdded", "onChildAddedH", "On child view added to Linear(H)"),
         IdeViewEventOption("onChildRemovedH", "OnChild\nRemoved", "onChildRemovedH", "On child view removed from Linear(H)"),
         IdeViewEventOption("onWeightSumChange", "OnWeight\nChange", "onWeightSumChange", "On horizontal weight distribution updated"),
+        IdeViewEventOption("onLinearHLongClick", "OnRow\nLongClick", "onLinearHLongClick", "On Horizontal LinearLayout row long clicked"),
     )
     IdeWidgetType.LINEAR_V -> listOf(
         IdeViewEventOption("onLinearVClick", "OnColumn\nClick", "onLinearVClick", "On Vertical LinearLayout column clicked"),
         IdeViewEventOption("onChildAddedV", "OnItem\nAdded", "onChildAddedV", "On child view added to Linear(V)"),
         IdeViewEventOption("onLayoutBoundsChange", "OnBounds\nChange", "onLayoutBoundsChange", "On Linear(V) layout bounds changed"),
         IdeViewEventOption("onDividerDraw", "OnDivider\nChanged", "onDividerDraw", "On vertical divider state updated"),
+        IdeViewEventOption("onLinearVLongClick", "OnColumn\nLongClick", "onLinearVLongClick", "On Vertical LinearLayout column long clicked"),
     )
     IdeWidgetType.SCROLL_H -> listOf(
         IdeViewEventOption("onScrollYChange", "OnScrollY\nChange", "onScrollYChange", "On vertical ScrollView scroll Y changed"),
         IdeViewEventOption("onReachBottom", "OnReach\nBottom", "onReachBottom", "On ScrollView scrolled to bottom"),
         IdeViewEventOption("onReachTop", "OnReach\nTop", "onReachTop", "On ScrollView scrolled to top"),
         IdeViewEventOption("onFlingVertical", "OnFling\nScroll", "onFlingVertical", "On ScrollView vertical fling gesture"),
+        IdeViewEventOption("onOverScrollVert", "OnEdge\nGlow", "onOverScrollVert", "On vertical overscroll edge glow"),
     )
     IdeWidgetType.SCROLL_V -> listOf(
         IdeViewEventOption("onScrollXChange", "OnScrollX\nChange", "onScrollXChange", "On HorizontalScrollView scroll X changed"),
         IdeViewEventOption("onReachRightEnd", "OnReach\nRight", "onReachRightEnd", "On HorizontalScrollView reached right end"),
         IdeViewEventOption("onReachLeftStart", "OnReach\nLeft", "onReachLeftStart", "On HorizontalScrollView reached left start"),
         IdeViewEventOption("onFlingHorizontal", "OnHoriz\nFling", "onFlingHorizontal", "On HorizontalScrollView fling gesture"),
+        IdeViewEventOption("onOverScrollHoriz", "OnSide\nBounce", "onOverScrollHoriz", "On horizontal overscroll bounce"),
     )
 
     // 3. Image Widgets — Every single Image widget has its own 100% distinct events (كل عنصر غير أحداث الآخر)!
@@ -6823,125 +6827,155 @@ private fun getEventsForWidgetType(type: IdeWidgetType): List<IdeViewEventOption
         IdeViewEventOption("onTitleReceived", "OnWeb\nTitle", "onTitleReceived", "On WebView document title received"),
     )
 
-    // 7. List Widgets — Every List widget has its own 100% distinct events!
+    // 7. List Widgets — Every single List widget has its own 100% distinct events (5 events per widget)!
     IdeWidgetType.GRID_VIEW -> listOf(
         IdeViewEventOption("onGridCellClick", "OnCell\nClick", "onGridCellClick", "On GridView cell clicked (position)"),
         IdeViewEventOption("onGridCellLongClick", "OnCell\nLongClick", "onGridCellLongClick", "On GridView cell long clicked (position)"),
         IdeViewEventOption("onGridScroll", "OnGrid\nScroll", "onGridScroll", "On GridView scrolled"),
         IdeViewEventOption("onColumnCountChange", "OnColumns\nChange", "onColumnCountChange", "On GridView numColumns updated"),
+        IdeViewEventOption("onBindGridCell", "OnBind\nCell", "onBindGridCell", "On GridView cell view bound (position)"),
     )
     IdeWidgetType.LIST_VIEW -> listOf(
         IdeViewEventOption("onListRowClick", "OnRow\nTap", "onListRowClick", "On ListView row clicked (position)"),
         IdeViewEventOption("onListRowLongClick", "OnRow\nLongTap", "onListRowLongClick", "On ListView row long clicked (position)"),
         IdeViewEventOption("onListScrollChange", "OnList\nScroll", "onListScrollChange", "On ListView scroll state changed"),
         IdeViewEventOption("onHeaderFooterTap", "OnHeader\nTap", "onHeaderFooterTap", "On ListView header/footer tapped"),
+        IdeViewEventOption("onBindListRow", "OnBind\nRow", "onBindListRow", "On ListView custom row bound (position)"),
     )
     IdeWidgetType.TREE_VIEW -> listOf(
         IdeViewEventOption("onNodeClick", "OnNode\nClick", "onNodeClick", "On TreeView node clicked"),
         IdeViewEventOption("onNodeExpand", "OnNode\nExpand", "onNodeExpand", "On TreeView branch expanded"),
         IdeViewEventOption("onNodeCollapse", "OnNode\nCollapse", "onNodeCollapse", "On TreeView branch collapsed"),
         IdeViewEventOption("onLeafDoubleTap", "OnLeaf\nDoubleTap", "onLeafDoubleTap", "On TreeView leaf node double tapped"),
+        IdeViewEventOption("onNodeLongClick", "OnNode\nHold", "onNodeLongClick", "On TreeView node long pressed"),
     )
     IdeWidgetType.RECYCLER_VIEW -> listOf(
         IdeViewEventOption("onBindCustomView", "OnBind\nHolder", "onBindCustomView", "On RecyclerView ViewHolder bound (position)"),
         IdeViewEventOption("onHolderRecycled", "OnView\nRecycled", "onHolderRecycled", "On RecyclerView ViewHolder recycled"),
         IdeViewEventOption("onScrollStateChanged", "OnRecycler\nScroll", "onScrollStateChanged", "On RecyclerView scroll state changed"),
         IdeViewEventOption("onItemRangeInserted", "OnRange\nInserted", "onItemRangeInserted", "On RecyclerView adapter range inserted"),
+        IdeViewEventOption("onRecyclerItemTap", "OnHolder\nClick", "onRecyclerItemTap", "On RecyclerView ViewHolder clicked"),
     )
     IdeWidgetType.VIEW_PAGER -> listOf(
         IdeViewEventOption("onPageSelected", "OnPage\nSelected", "onPageSelected", "On ViewPager page selected (position)"),
         IdeViewEventOption("onPageScrolled", "OnPage\nScrolled", "onPageScrolled", "On ViewPager page scrolling"),
         IdeViewEventOption("onPageScrollState", "OnPager\nState", "onPageScrollState", "On ViewPager scroll state changed"),
         IdeViewEventOption("onPageTransformer", "OnPage\nTransform", "onPageTransformer", "On ViewPager page transition applied"),
+        IdeViewEventOption("onOffscreenLimit", "OnPage\nPreload", "onOffscreenLimit", "On ViewPager offscreen page preloaded"),
     )
     IdeWidgetType.EXPANDABLE_LIST_VIEW -> listOf(
         IdeViewEventOption("onGroupClick", "OnGroup\nClick", "onGroupClick", "On ExpandableList group header clicked"),
         IdeViewEventOption("onChildClick", "OnChild\nClick", "onChildClick", "On ExpandableList child item clicked"),
         IdeViewEventOption("onGroupExpand", "OnGroup\nExpand", "onGroupExpand", "On ExpandableList group expanded"),
         IdeViewEventOption("onGroupCollapse", "OnGroup\nCollapse", "onGroupCollapse", "On ExpandableList group collapsed"),
+        IdeViewEventOption("onChildLongClick", "OnChild\nHold", "onChildLongClick", "On ExpandableList child item long clicked"),
     )
     IdeWidgetType.STAGGERED_GRID_VIEW -> listOf(
         IdeViewEventOption("onStaggeredItemClick", "OnTile\nClick", "onStaggeredItemClick", "On StaggeredGrid tile clicked"),
         IdeViewEventOption("onBindStaggeredView", "OnBind\nTile", "onBindStaggeredView", "On StaggeredGrid tile bound"),
         IdeViewEventOption("onSpanChanged", "OnSpan\nChange", "onSpanChanged", "On staggered span layout changed"),
         IdeViewEventOption("onGapStrategyUpdate", "OnGap\nRebalance", "onGapStrategyUpdate", "On StaggeredGrid gap rebalanced"),
+        IdeViewEventOption("onTileLongClick", "OnTile\nHold", "onTileLongClick", "On StaggeredGrid tile long clicked"),
     )
     IdeWidgetType.HORIZONTAL_LIST_VIEW -> listOf(
         IdeViewEventOption("onHorizItemClick", "OnHoriz\nItemTap", "onHorizItemClick", "On HorizontalList item clicked"),
         IdeViewEventOption("onHorizScrollEnd", "OnHoriz\nEnd", "onHorizScrollEnd", "On HorizontalList scrolled to end"),
         IdeViewEventOption("onHorizSnapItem", "OnHoriz\nSnap", "onHorizSnapItem", "On HorizontalList item snapped"),
+        IdeViewEventOption("onHorizItemHold", "OnHoriz\nHold", "onHorizItemHold", "On HorizontalList item long pressed"),
+        IdeViewEventOption("onBindHorizCard", "OnBind\nHoriz", "onBindHorizCard", "On HorizontalList card view bound"),
     )
     IdeWidgetType.CAROUSEL_VIEW -> listOf(
         IdeViewEventOption("onCarouselSnap", "OnCard\nSnap", "onCarouselSnap", "On CarouselView card snapped to center"),
         IdeViewEventOption("onCarouselClick", "OnCenter\nTap", "onCarouselClick", "On CarouselView active card clicked"),
         IdeViewEventOption("onAutoPlayStep", "OnAuto\nSlide", "onAutoPlayStep", "On CarouselView auto-slide step"),
+        IdeViewEventOption("onCarouselScale", "OnSide\nScale", "onCarouselScale", "On CarouselView side cards scaled"),
+        IdeViewEventOption("onCarouselLoop", "OnLoop\nCycle", "onCarouselLoop", "On CarouselView loop restarted"),
     )
     IdeWidgetType.SWIPE_LIST_VIEW -> listOf(
         IdeViewEventOption("onSwipeDismissLeft", "OnSwipe\nLeft", "onSwipeDismissLeft", "On row swiped left"),
         IdeViewEventOption("onSwipeDismissRight", "OnSwipe\nRight", "onSwipeDismissRight", "On row swiped right"),
         IdeViewEventOption("onUndoSwipe", "OnSwipe\nUndo", "onUndoSwipe", "On swipe dismissal undone"),
         IdeViewEventOption("onDragReorder", "OnDrag\nReorder", "onDragReorder", "On row dragged to new position"),
+        IdeViewEventOption("onSwipeActionReveal", "OnAction\nReveal", "onSwipeActionReveal", "On hidden swipe action buttons revealed"),
     )
 
-    // 8. Date & Time Widgets — Every Date/Time widget has its own 100% distinct events!
+    // 8. Date & Time Widgets — Every single Date/Time widget has its own 100% distinct events (5 events per widget)!
     IdeWidgetType.ANALOG_CLOCK -> listOf(
         IdeViewEventOption("onMinuteHandTick", "OnMinute\nTick", "onMinuteHandTick", "On AnalogClock minute hand tick"),
         IdeViewEventOption("onHourChime", "OnHour\nChime", "onHourChime", "On AnalogClock full hour reached"),
         IdeViewEventOption("onDialFaceTap", "OnDial\nTap", "onDialFaceTap", "On AnalogClock dial face tapped"),
         IdeViewEventOption("onHandSweepUpdate", "OnSecond\nSweep", "onHandSweepUpdate", "On AnalogClock second hand sweep"),
+        IdeViewEventOption("onTwelveOClock", "OnNoon\nMidnight", "onTwelveOClock", "On AnalogClock reaching 12:00"),
     )
     IdeWidgetType.DIGITAL_CLOCK -> listOf(
         IdeViewEventOption("onSecondTick", "OnSecond\nTick", "onSecondTick", "On DigitalClock second updated"),
         IdeViewEventOption("onFormatChange", "OnFormat\n24h/12h", "onFormatChange", "On 12h/24h format switched"),
         IdeViewEventOption("onColonBlink", "OnColon\nBlink", "onColonBlink", "On DigitalClock colon pulse"),
+        IdeViewEventOption("onDigitsTap", "OnDigits\nTap", "onDigitsTap", "On DigitalClock digits tapped"),
+        IdeViewEventOption("onMidnightRoll", "OnDay\nRollover", "onMidnightRoll", "On DigitalClock 00:00 day rollover"),
     )
     IdeWidgetType.TIME_PICKER -> listOf(
         IdeViewEventOption("onTimeChanged", "OnTime\nChanged", "onTimeChanged", "On TimePicker time changed (hourOfDay, minute)"),
         IdeViewEventOption("onAmPmChanged", "OnAmPm\nChanged", "onAmPmChanged", "On AM/PM period toggled"),
         IdeViewEventOption("onHourWheelSpin", "OnHour\nChange", "onHourWheelSpin", "On TimePicker hour selected"),
         IdeViewEventOption("onMinuteWheelSpin", "OnMinute\nChange", "onMinuteWheelSpin", "On TimePicker minute selected"),
+        IdeViewEventOption("onTimeConfirm", "OnTime\nConfirm", "onTimeConfirm", "On TimePicker selection confirmed"),
     )
     IdeWidgetType.DATE_PICKER -> listOf(
         IdeViewEventOption("onDateChanged", "OnDate\nChanged", "onDateChanged", "On DatePicker date changed (year, month, day)"),
         IdeViewEventOption("onYearSelected", "OnYear\nSelected", "onYearSelected", "On DatePicker year selected"),
         IdeViewEventOption("onCalendarModeFlip", "OnMode\nSwitch", "onCalendarModeFlip", "On DatePicker spinner/calendar mode switched"),
+        IdeViewEventOption("onMonthSpin", "OnMonth\nSpin", "onMonthSpin", "On DatePicker month wheel changed"),
+        IdeViewEventOption("onDaySpin", "OnDay\nSpin", "onDaySpin", "On DatePicker day wheel changed"),
     )
     IdeWidgetType.CALENDAR_VIEW -> listOf(
         IdeViewEventOption("onSelectedDayChange", "OnDay\nSelected", "onSelectedDayChange", "On CalendarView day selected (year, month, dayOfMonth)"),
         IdeViewEventOption("onMonthChanged", "OnMonth\nChanged", "onMonthChanged", "On CalendarView month swiped"),
         IdeViewEventOption("onWeekNumberTap", "OnWeek\nTap", "onWeekNumberTap", "On CalendarView week row tapped"),
+        IdeViewEventOption("onTodayHighlight", "OnToday\nJump", "onTodayHighlight", "On CalendarView jumped to today"),
+        IdeViewEventOption("onDateOutOfBounds", "OnLimit\nReached", "onDateOutOfBounds", "On minDate/maxDate boundary reached"),
     )
     IdeWidgetType.TEXT_CLOCK -> listOf(
         IdeViewEventOption("onClockPatternTick", "OnClock\nTick", "onClockPatternTick", "On TextClock formatted time updated"),
         IdeViewEventOption("onTimeZoneChanged", "OnZone\nChange", "onTimeZoneChanged", "On TextClock timeZone changed"),
         IdeViewEventOption("onPatternChanged", "OnPattern\nUpdate", "onPatternChanged", "On TextClock format pattern updated"),
+        IdeViewEventOption("onLocaleTimeChange", "OnLocale\nFormat", "onLocaleTimeChange", "On TextClock locale changed"),
+        IdeViewEventOption("onTextClockTap", "OnClock\nTap", "onTextClockTap", "On TextClock tapped"),
     )
     IdeWidgetType.CHRONOMETER -> listOf(
         IdeViewEventOption("onChronometerTick", "OnTimer\nTick", "onChronometerTick", "On Chronometer tick every second"),
         IdeViewEventOption("onChronometerStart", "OnStart", "onChronometerStart", "On Chronometer started"),
         IdeViewEventOption("onChronometerStop", "OnStop", "onChronometerStop", "On Chronometer stopped"),
         IdeViewEventOption("onBaseTimeReset", "OnBase\nReset", "onBaseTimeReset", "On Chronometer base time reset"),
+        IdeViewEventOption("onElapsedHour", "OnElapsed\nHour", "onElapsedHour", "On Chronometer elapsed 60 minutes"),
     )
     IdeWidgetType.COUNTDOWN_VIEW -> listOf(
         IdeViewEventOption("onCountDownTick", "OnCount\nTick", "onCountDownTick", "On CountDown millisUntilFinished tick"),
         IdeViewEventOption("onCountDownFinish", "OnCount\nFinish", "onCountDownFinish", "When CountDown reaches 00:00"),
         IdeViewEventOption("onCountDownPause", "OnCount\nPause", "onCountDownPause", "On CountDown paused"),
+        IdeViewEventOption("onCountDownResume", "OnCount\nResume", "onCountDownResume", "On CountDown resumed"),
+        IdeViewEventOption("onFinalTenSeconds", "OnFinal\n10Sec", "onFinalTenSeconds", "On CountDown entering final 10 seconds"),
     )
     IdeWidgetType.STOPWATCH_VIEW -> listOf(
         IdeViewEventOption("onLapRecorded", "OnLap\nRecord", "onLapRecorded", "On Stopwatch lap time recorded"),
         IdeViewEventOption("onStopwatchReset", "OnReset", "onStopwatchReset", "On Stopwatch reset to 00:00"),
         IdeViewEventOption("onSplitMillis", "OnSplit\nTime", "onSplitMillis", "On Stopwatch split time captured"),
+        IdeViewEventOption("onBestLapAchieved", "OnBest\nLap", "onBestLapAchieved", "On fastest lap recorded"),
+        IdeViewEventOption("onStopwatchResume", "OnWatch\nRun", "onStopwatchResume", "On Stopwatch running state toggled"),
     )
     IdeWidgetType.DATE_RANGE_PICKER -> listOf(
         IdeViewEventOption("onRangeSelected", "OnRange\nSelected", "onRangeSelected", "On start & end date range selected"),
         IdeViewEventOption("onRangeCleared", "OnRange\nCleared", "onRangeCleared", "On date range selection cleared"),
         IdeViewEventOption("onStartDatePick", "OnStart\nDate", "onStartDatePick", "On range start date picked"),
         IdeViewEventOption("onEndDatePick", "OnEnd\nDate", "onEndDatePick", "On range end date picked"),
+        IdeViewEventOption("onDurationDaysCalc", "OnSpan\nDays", "onDurationDaysCalc", "On selected range duration in days calculated"),
     )
     IdeWidgetType.WORLD_CLOCK_VIEW -> listOf(
         IdeViewEventOption("onCityChanged", "OnCity\nChange", "onCityChanged", "On WorldClock city/timezone changed"),
         IdeViewEventOption("onDayNightSwitch", "OnDay\nNight", "onDayNightSwitch", "On WorldClock day/night transition"),
         IdeViewEventOption("onUtcOffsetUpdate", "OnUtc\nOffset", "onUtcOffsetUpdate", "On WorldClock UTC offset updated"),
+        IdeViewEventOption("onDstTransition", "OnSummer\nTime", "onDstTransition", "On Daylight Saving Time status changed"),
+        IdeViewEventOption("onWorldCardTap", "OnZone\nCardTap", "onWorldCardTap", "On WorldClock timezone card tapped"),
     )
 }
 
