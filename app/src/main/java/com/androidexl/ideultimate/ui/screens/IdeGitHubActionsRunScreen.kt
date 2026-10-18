@@ -145,7 +145,26 @@ fun IdeGitHubActionsRunScreen(
     }
 
     LaunchedEffect(Unit) {
-        refreshRun()
+        while (true) {
+            val res = withContext(Dispatchers.IO) { engine.fetchLatestWorkflowRun() }
+            res.onSuccess {
+                runDetail = it
+                it.jobs.forEach { job ->
+                    expandedJobs[job.id] = true
+                }
+                if (it.conclusion == "failure") {
+                    selectedErrorDetail = it.errorMessage ?: "حدث خطأ أثناء تنفيذ عملية البناء السحابي."
+                }
+            }
+            val status = runDetail?.status
+            val conclusion = runDetail?.conclusion
+            // If in progress or queued, poll every 4 seconds for live logs & steps!
+            if (status == "in_progress" || status == "queued" || conclusion == null) {
+                kotlinx.coroutines.delay(4000)
+            } else {
+                kotlinx.coroutines.delay(12000)
+            }
+        }
     }
 
     BackHandler {

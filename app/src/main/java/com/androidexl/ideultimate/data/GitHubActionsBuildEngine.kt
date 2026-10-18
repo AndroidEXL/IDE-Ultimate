@@ -163,9 +163,20 @@ class GitHubActionsBuildEngine(
             if (extractedErrorMsg != null) break
         }
 
-        // Download run logs zip if possible
-        val logsText = downloadRunLogsText(runId).ifBlank {
-            buildFallbackLogs(jobs, conclusion, extractedErrorMsg)
+        // Download run logs zip or live job logs
+        var logsText = downloadRunLogsText(runId)
+        if (logsText.isBlank()) {
+            // Fetch live job logs while in-progress
+            for (job in jobs) {
+                val liveJobLog = downloadJobLogText(job.id)
+                if (liveJobLog.isNotBlank()) {
+                    logsText = (if (logsText.isBlank()) "" else logsText + "\n\n") +
+                        "=== Job: ${job.name} (Live Log) ===\n" + liveJobLog
+                }
+            }
+        }
+        if (logsText.isBlank()) {
+            logsText = buildFallbackLogs(jobs, conclusion, extractedErrorMsg)
         }
 
         return WorkflowRunDetail(
@@ -204,6 +215,35 @@ class GitHubActionsBuildEngine(
             appendLine(errorMsg)
         }
     }
+
+        fun downloadJobLogText(jobId: Long): String = runCatching {
+        val url = "https://api.github.com/repos/$owner/$repo/actions/jobs/$jobId/logs"
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            instanceFollowRedirects = true
+            setRequestProperty("Accept", "application/vnd.github+json")
+            if (token.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+            setRequestProperty("User-Agent", "IDE-Ultimate-Android")
+        }
+        var stream: InputStream? = null
+        if (conn.responseCode in 300..399) {
+            val redirect = conn.getHeaderField("Location")
+            if (!redirect.isNullOrBlank()) {
+                val redirConn = (URL(redirect).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15_000
+                    readTimeout = 20_000
+                }
+                stream = redirConn.inputStream
+            }
+        } else if (conn.responseCode in 200..299) {
+            stream = conn.inputStream
+        }
+        stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+    }.getOrDefault("")
 
     private fun downloadRunLogsText(runId: Long): String = runCatching {
         val url = "https://api.github.com/repos/$owner/$repo/actions/runs/$runId/logs"

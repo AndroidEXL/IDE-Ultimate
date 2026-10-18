@@ -421,6 +421,7 @@ fun IdeProjectScreen(
     var showBuildMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showSideMenuDrawer by rememberSaveable { mutableStateOf(false) }
     var showImageManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showLibraryManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showSoundManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showFontManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showResourcesManagerScreen by rememberSaveable { mutableStateOf(false) }
@@ -495,6 +496,7 @@ fun IdeProjectScreen(
             activeEventEditorItem != null -> activeEventEditorItem = null
             imagePickerWidgetUid != null -> imagePickerWidgetUid = null
             editingPropertyRequest != null -> editingPropertyRequest = null
+            showLibraryManagerScreen -> showLibraryManagerScreen = false
             showImageManagerScreen -> showImageManagerScreen = false
             showSoundManagerScreen -> showSoundManagerScreen = false
             showFontManagerScreen -> showFontManagerScreen = false
@@ -583,6 +585,15 @@ fun IdeProjectScreen(
                 defaultBody
             },
             onBack = { activeEventEditorItem = null },
+            modifier = modifier,
+        )
+        return
+    }
+
+        if (showLibraryManagerScreen) {
+        IdeLibraryManagerScreen(
+            project = project,
+            onBack = { showLibraryManagerScreen = false },
             modifier = modifier,
         )
         return
@@ -1044,6 +1055,9 @@ fun IdeProjectScreen(
                         IdeSideMenuItem.IMAGE_MANAGER -> {
                             refreshProjectImages()
                             showImageManagerScreen = true
+                        }
+                        IdeSideMenuItem.LIBRARY_MANAGER -> {
+                            showLibraryManagerScreen = true
                         }
                         IdeSideMenuItem.SOUND_MANAGER -> {
                             refreshProjectSounds()
