@@ -233,27 +233,27 @@ fun IdeTerminalGradleBuildSheet(
 
         coroutineScope.launch(Dispatchers.IO) {
             val projectRoot = repository.ensureProjectFullRoot(project)
-            val buildScript = """
-                set -e
-                export HOME=/root
-                export GRADLE_USER_HOME=/root/.gradle
-                export ANDROID_HOME=/root/android-sdk
-                export ANDROID_SDK_ROOT=/root/android-sdk
-
-                cd /root/project_build
-                echo "المسار الحالي: ${'$'}(pwd)"
-                echo "استخدام ذاكرة التخزين المؤقت (Build Cache): /root/.gradle"
-
-                if [ -f "./gradlew" ]; then
-                    chmod +x ./gradlew
-                    ./gradlew assembleDebug --build-cache --stacktrace -g /root/.gradle
-                elif command -v gradle >/dev/null 2>&1; then
-                    gradle assembleDebug --build-cache --stacktrace -g /root/.gradle
-                else
-                    echo "تعذر العثور على محرك Gradle! يرجى تثبيت الأدوات أولاً."
-                    exit 1
-                fi
-            """.trimIndent()
+            val buildScript = listOf(
+                "export HOME=/root",
+                "export GRADLE_USER_HOME=/root/.gradle",
+                "export ANDROID_HOME=/root/android-sdk",
+                "export ANDROID_SDK_ROOT=/root/android-sdk",
+                "cd /root/project_build",
+                "echo ===> مسار مجلد المشروع: \$(pwd)",
+                "echo ===> ذاكرة التخزين المؤقت الدائمة (Build Cache): /root/.gradle",
+                "echo ===> فحص ملفات وأدوات Gradle...",
+                "if [ -f ./gradlew ]; then",
+                "    chmod +x ./gradlew",
+                "    echo ===> تشغيل أمر بناء الحزمة الكامل: ./gradlew assembleDebug --info --build-cache --stacktrace",
+                "    ./gradlew assembleDebug --info --build-cache --stacktrace -g /root/.gradle 2>&1",
+                "elif command -v gradle >/dev/null 2>&1; then",
+                "    echo ===> تشغيل محرك gradle المدمج: gradle assembleDebug --info --build-cache --stacktrace",
+                "    gradle assembleDebug --info --build-cache --stacktrace -g /root/.gradle 2>&1",
+                "else",
+                "    echo ❌ تعذر العثور على محرك Gradle أو ملف gradlew! يرجى تثبيت أدوات Android SDK و Gradle أولاً.",
+                "    exit 1",
+                "fi"
+            ).joinToString("\n")
 
             val (rc, output) = TerminalManager.execInUbuntu(
                 context,
