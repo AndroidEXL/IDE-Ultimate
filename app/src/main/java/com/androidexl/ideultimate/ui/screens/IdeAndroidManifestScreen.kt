@@ -29,8 +29,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
@@ -210,7 +208,7 @@ fun IdeAndroidManifestScreen(
                 modifier = Modifier.size(34.dp),
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    imageVector = IdeIcons.Undo,
                     contentDescription = "Undo",
                     tint = if (undoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
                     modifier = Modifier.size(18.dp),
@@ -224,7 +222,7 @@ fun IdeAndroidManifestScreen(
                 modifier = Modifier.size(34.dp),
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Redo,
+                    imageVector = IdeIcons.Redo,
                     contentDescription = "Redo",
                     tint = if (redoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
                     modifier = Modifier.size(18.dp),

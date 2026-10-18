@@ -118,4 +118,72 @@ object IdeIcons {
             }
         }.build()
     }
+
+    val Undo: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "IdeIcons.Undo",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.White),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(12.5f, 8f)
+                curveTo(8.85f, 8f, 5.56f, 9.47f, 3.17f, 11.86f)
+                lineTo(1f, 9.69f)
+                verticalLineTo(16f)
+                horizontalLineTo(7.31f)
+                lineTo(4.68f, 13.37f)
+                curveTo(6.65f, 11.4f, 9.42f, 10.19f, 12.5f, 10.19f)
+                curveTo(18.23f, 10.19f, 22.88f, 14.84f, 22.88f, 20.57f)
+                horizontalLineTo(25.07f)
+                curveTo(25.07f, 13.63f, 19.44f, 8f, 12.5f, 8f)
+                close()
+            }
+        }.build()
+    }
+
+    val Redo: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "IdeIcons.Redo",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.White),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(18.4f, 10.6f)
+                curveTo(16.5f, 9f, 14f, 8f, 11.5f, 8f)
+                curveTo(5.8f, 8f, 1.2f, 12.6f, 1.2f, 18.3f)
+                horizontalLineTo(3.4f)
+                curveTo(3.4f, 13.8f, 7f, 10.2f, 11.5f, 10.2f)
+                curveTo(13.6f, 10.2f, 15.6f, 11f, 17.1f, 12.4f)
+                lineTo(14.5f, 15f)
+                horizontalLineTo(21f)
+                verticalLineTo(8.5f)
+                lineTo(18.4f, 10.6f)
+                close()
+            }
+        }.build()
+    }
 }
