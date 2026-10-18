@@ -203,6 +203,15 @@ fun IdeGitHubActionsRunScreen(
                     extractedFile = relRes.getOrNull()
                 }
 
+                // 3. Fallback: Check if targetApk exists and is valid APK
+                if (extractedFile == null || !extractedFile!!.exists() || extractedFile!!.length() < 100_000L) {
+                    val candidate = targetApk.takeIf { it.exists() && it.length() > 100_000L }
+                        ?: downloadsDir.listFiles()?.firstOrNull { it.name.endsWith(".apk") && it.length() > 100_000L }
+                    if (candidate != null) {
+                        extractedFile = candidate
+                    }
+                }
+
                 withContext(Dispatchers.Main) {
                     isDownloadingApk = false
                     if (extractedFile != null && extractedFile!!.exists()) {

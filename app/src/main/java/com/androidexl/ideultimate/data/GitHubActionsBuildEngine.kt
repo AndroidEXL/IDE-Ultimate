@@ -374,19 +374,22 @@ class GitHubActionsBuildEngine(
             setRequestProperty("User-Agent", "IDE-Ultimate-Android")
         }
         var stream: InputStream? = null
-        if (conn.responseCode in 300..399) {
-            val redirect = conn.getHeaderField("Location")
-            if (!redirect.isNullOrBlank()) {
-                val redirConn = (URL(redirect).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 20_000
-                    readTimeout = 60_000
-                }
-                stream = redirConn.inputStream
+        var currentConn = conn
+        var redirects = 0
+        while (currentConn.responseCode in 300..399 && redirects < 5) {
+            val redirect = currentConn.getHeaderField("Location")
+                ?: throw IllegalStateException("إعادة توجيه بدون رابط جديد")
+            currentConn = (URL(redirect).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 25_000
+                readTimeout = 90_000
+                setRequestProperty("User-Agent", "IDE-Ultimate-Android")
             }
-        } else if (conn.responseCode in 200..299) {
-            stream = conn.inputStream
+            redirects++
+        }
+        if (currentConn.responseCode in 200..299) {
+            stream = currentConn.inputStream
         } else {
-            throw IllegalStateException("فشل الاتصال لتحميل الملف (${conn.responseCode})")
+            throw IllegalStateException("فشل تحميل الحزمة من خوادم التخزين (${currentConn.responseCode})")
         }
 
         val totalLen = conn.contentLength.takeIf { it > 0 } ?: 15_000_000
@@ -437,11 +440,22 @@ class GitHubActionsBuildEngine(
         val totalLen = conn.contentLength.takeIf { it > 0 } ?: 20_000_000
         var downloaded = 0L
         targetFile.parentFile?.mkdirs()
-        val inStream = if (conn.responseCode in 300..399) {
-            val redir = conn.getHeaderField("Location")
-            (URL(redir).openConnection() as HttpURLConnection).inputStream
+        var currentConn = conn
+        var redirects = 0
+        while (currentConn.responseCode in 300..399 && redirects < 5) {
+            val redir = currentConn.getHeaderField("Location")
+                ?: throw IllegalStateException("إعادة توجيه بدون رابط جديد")
+            currentConn = (URL(redir).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 25_000
+                readTimeout = 90_000
+                setRequestProperty("User-Agent", "IDE-Ultimate-Android")
+            }
+            redirects++
+        }
+        val inStream = if (currentConn.responseCode in 200..299) {
+            currentConn.inputStream
         } else {
-            conn.inputStream
+            throw IllegalStateException("تعذر تنزيل ملف الـ Release (\${currentConn.responseCode})")
         }
         inStream.use { input ->
             java.io.FileOutputStream(targetFile).use { output ->
