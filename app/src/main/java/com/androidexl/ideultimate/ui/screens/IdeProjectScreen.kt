@@ -6987,7 +6987,7 @@ private fun defaultCodeForWidgetEvent(
     eventOpt: IdeViewEventOption,
 ): String {
     val id = node.viewId
-    val cls = node.type.xmlTag.substringAfterLast('.')
+    val cls = node.type.displayName.replace(Regex("[^A-Za-z0-9]"), "")
     return when (eventOpt.eventKey) {
         // 1. Text Events (26 events)
         "onTextClick" -> "findViewById<TextView>(R.id.$id).setOnClickListener {\n    val text = (it as TextView).text.toString()\n}"
