@@ -1,6 +1,10 @@
 package com.androidexl.ideultimate.ui.screens
 
 import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
+import java.util.zip.ZipInputStream
+import java.io.FileOutputStream
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -121,6 +125,101 @@ fun IdeGitHubActionsRunScreen(
     var selectedErrorDetail by remember { mutableStateOf<String?>(null) }
 
     val expandedJobs = remember { mutableStateMapOf<Long, Boolean>() }
+    var isDownloadingApk by remember { mutableStateOf(false) }
+    var apkDownloadProgress by remember { mutableStateOf(0f) }
+    var downloadedApkFile by remember { mutableStateOf<File?>(null) }
+    var downloadStatusText by remember { mutableStateOf("") }
+
+    fun installApk(file: File) {
+        try {
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, file)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "فشل فتح مثبت الحزم: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun downloadAndInstallBuiltApk() {
+        if (isDownloadingApk) return
+        isDownloadingApk = true
+        apkDownloadProgress = 0.05f
+        downloadStatusText = "جاري الاتصال والتحميل من GitHub Actions..."
+
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val downloadsDir = File(context.getExternalFilesDir(null), "build_apks").apply { mkdirs() }
+                val targetApk = File(downloadsDir, "${project.name}-latest.apk")
+
+                // 1. Try finding artifact from current run
+                val runArtifacts = runDetail?.artifacts.orEmpty()
+                val apkArtifact = runArtifacts.firstOrNull { it.name.contains("apk", ignoreCase = true) }
+                    ?: runArtifacts.firstOrNull()
+
+                var extractedFile: File? = null
+
+                if (apkArtifact != null && apkArtifact.archiveDownloadUrl.isNotBlank()) {
+                    downloadStatusText = "جاري تحميل حزمة الـ Artifact (${apkArtifact.name})..."
+                    val zipFile = File(downloadsDir, "artifact_${apkArtifact.id}.zip")
+                    val res = engine.downloadArtifactZip(apkArtifact.archiveDownloadUrl, zipFile) { prg ->
+                        apkDownloadProgress = prg
+                    }
+                    res.getOrThrow()
+
+                    // Extract APK from zip
+                    ZipInputStream(zipFile.inputStream()).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
+                                targetApk.parentFile?.mkdirs()
+                                FileOutputStream(targetApk).use { fos ->
+                                    val b = ByteArray(8192)
+                                    var r: Int
+                                    while (zis.read(b).also { r = it } != -1) {
+                                        fos.write(b, 0, r)
+                                    }
+                                }
+                                extractedFile = targetApk
+                                break
+                            }
+                            entry = zis.nextEntry
+                        }
+                    }
+                }
+
+                // 2. If not found in artifacts, check latest release
+                if (extractedFile == null || !extractedFile!!.exists()) {
+                    downloadStatusText = "جاري تحميل APK من الـ Release الأخير للمستودع..."
+                    val relRes = engine.downloadLatestReleaseApk(targetApk) { prg ->
+                        apkDownloadProgress = prg
+                    }
+                    extractedFile = relRes.getOrNull()
+                }
+
+                withContext(Dispatchers.Main) {
+                    isDownloadingApk = false
+                    if (extractedFile != null && extractedFile!!.exists()) {
+                        downloadedApkFile = extractedFile
+                        downloadStatusText = "اكتمل التحميل بنجاح ✓"
+                        Toast.makeText(context, "تم تحميل التطبيق بنجاح! جاري التثبيت...", Toast.LENGTH_SHORT).show()
+                        installApk(extractedFile!!)
+                    } else {
+                        Toast.makeText(context, "لم يتم العثور على ملف APK جاهز في مخرجات البناء أو الـ Release", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isDownloadingApk = false
+                    Toast.makeText(context, "خطأ أثناء تحميل APK: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
 
     fun refreshRun() {
         isLoading = true
@@ -506,12 +605,100 @@ fun IdeGitHubActionsRunScreen(
                     }
                 }
 
+                // Success Banner with APK Download & Install
+                val isSuccess = detail.conclusion == "success" || detail.status == "success"
+                if (isSuccess || detail.artifacts.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF063321))
+                            .border(1.dp, Color(0xFF10B981), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = "اكتمل البناء بنجاح! تم تجهيز تطبيق APK 🎉",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF34D399),
+                                )
+                                Text(
+                                    text = if (downloadedApkFile != null) "الملف جاهز للتثبيت على هاتفك الآن" else "اضغط لتحميل ملف APK المجمع وتثبيته مباشرة",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                    color = Color(0xFFA7F3D0),
+                                )
+                            }
+
+                            if (isDownloadingApk) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(
+                                        progress = { apkDownloadProgress },
+                                        modifier = Modifier.size(34.dp),
+                                        color = Color(0xFF34D399),
+                                        strokeWidth = 3.dp,
+                                    )
+                                    Text(
+                                        text = "${(apkDownloadProgress * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Color(0xFF34D399),
+                                    )
+                                }
+                            } else if (downloadedApkFile != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF10B981))
+                                        .clickable { installApk(downloadedApkFile!!) }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "تثبيت البرنامج",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = Color(0xFF042215),
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF10B981))
+                                        .clickable { downloadAndInstallBuiltApk() }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "تحميل وتثبيت APK",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = Color(0xFF042215),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Main Tab Content
                 if (activeTab == "TREE") {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
+                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

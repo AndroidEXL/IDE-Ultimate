@@ -24,6 +24,13 @@ data class WorkflowJobItem(
     val htmlUrl: String,
 )
 
+data class WorkflowArtifactItem(
+    val id: Long,
+    val name: String,
+    val sizeInBytes: Long,
+    val archiveDownloadUrl: String,
+)
+
 data class WorkflowRunDetail(
     val id: Long,
     val runNumber: Int,
@@ -34,6 +41,7 @@ data class WorkflowRunDetail(
     val fullLogs: String,
     val errorMessage: String?,
     val errorTaskName: String?,
+    val artifacts: List<WorkflowArtifactItem> = emptyList(),
 )
 
 class GitHubActionsBuildEngine(
@@ -179,6 +187,26 @@ class GitHubActionsBuildEngine(
             logsText = buildFallbackLogs(jobs, conclusion, extractedErrorMsg)
         }
 
+        // Fetch artifacts for this run (e.g. built APKs)
+        val artifactsList = mutableListOf<WorkflowArtifactItem>()
+        runCatching {
+            val (aCode, aBody) = executeGet("https://api.github.com/repos/$owner/$repo/actions/runs/$runId/artifacts")
+            if (aCode in 200..299) {
+                val aRoot = JSONObject(aBody)
+                val aArr = aRoot.optJSONArray("artifacts") ?: JSONArray()
+                for (i in 0 until aArr.length()) {
+                    val aObj = aArr.getJSONObject(i)
+                    artifactsList.add(
+                        WorkflowArtifactItem(
+                            id = aObj.optLong("id"),
+                            name = aObj.optString("name"),
+                            sizeInBytes = aObj.optLong("size_in_bytes", 0L),
+                            archiveDownloadUrl = aObj.optString("archive_download_url", ""),
+                        )
+                    )
+                }
+            }
+        }
         return WorkflowRunDetail(
             id = runId,
             runNumber = runNumber,
@@ -189,6 +217,7 @@ class GitHubActionsBuildEngine(
             fullLogs = logsText,
             errorMessage = extractedErrorMsg ?: if (conclusion == "failure") "فشل البناء في مهمة: ${extractedErrorTask ?: "Gradle Build"}" else null,
             errorTaskName = extractedErrorTask,
+            artifacts = artifactsList,
         )
     }
 
@@ -313,6 +342,103 @@ class GitHubActionsBuildEngine(
         } finally {
             conn.disconnect()
         }
+    }
+
+    fun downloadArtifactZip(archiveUrl: String, targetFile: java.io.File, onProgress: (Float) -> Unit = {}): Result<Unit> = runCatching {
+        val conn = (URL(archiveUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 20_000
+            readTimeout = 60_000
+            instanceFollowRedirects = true
+            setRequestProperty("Accept", "application/vnd.github+json")
+            if (token.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+            setRequestProperty("User-Agent", "IDE-Ultimate-Android")
+        }
+        var stream: InputStream? = null
+        if (conn.responseCode in 300..399) {
+            val redirect = conn.getHeaderField("Location")
+            if (!redirect.isNullOrBlank()) {
+                val redirConn = (URL(redirect).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20_000
+                    readTimeout = 60_000
+                }
+                stream = redirConn.inputStream
+            }
+        } else if (conn.responseCode in 200..299) {
+            stream = conn.inputStream
+        } else {
+            throw IllegalStateException("فشل الاتصال لتحميل الملف (${conn.responseCode})")
+        }
+
+        val totalLen = conn.contentLength.takeIf { it > 0 } ?: 15_000_000
+        var downloaded = 0L
+        targetFile.parentFile?.mkdirs()
+        stream?.use { input ->
+            java.io.FileOutputStream(targetFile).use { output ->
+                val buf = ByteArray(16384)
+                var read: Int
+                while (input.read(buf).also { read = it } != -1) {
+                    output.write(buf, 0, read)
+                    downloaded += read
+                    onProgress((downloaded.toFloat() / totalLen.toFloat()).coerceIn(0.01f, 0.99f))
+                }
+            }
+        } ?: throw IllegalStateException("لم يتم استلام أي بيانات")
+        onProgress(1.0f)
+    }
+
+    fun downloadLatestReleaseApk(targetFile: java.io.File, onProgress: (Float) -> Unit = {}): Result<java.io.File> = runCatching {
+        val (code, body) = executeGet("https://api.github.com/repos/$owner/$repo/releases/latest")
+        if (code !in 200..299) {
+            throw IllegalStateException("لم يتم العثور على Release متاح ($code)")
+        }
+        val root = JSONObject(body)
+        val assets = root.optJSONArray("assets") ?: JSONArray()
+        var apkUrl = ""
+        for (i in 0 until assets.length()) {
+            val ast = assets.getJSONObject(i)
+            val name = ast.optString("name", "")
+            if (name.endsWith(".apk", ignoreCase = true)) {
+                apkUrl = ast.optString("browser_download_url", "")
+                if (name.contains("release", ignoreCase = true) || name.contains("debug", ignoreCase = true)) {
+                    break
+                }
+            }
+        }
+        if (apkUrl.isBlank()) {
+            throw IllegalStateException("لا يوجد ملف APK مرفوع في الـ Release الأخير")
+        }
+
+        val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 20_000
+            readTimeout = 60_000
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "IDE-Ultimate-Android")
+        }
+        val totalLen = conn.contentLength.takeIf { it > 0 } ?: 20_000_000
+        var downloaded = 0L
+        targetFile.parentFile?.mkdirs()
+        val inStream = if (conn.responseCode in 300..399) {
+            val redir = conn.getHeaderField("Location")
+            (URL(redir).openConnection() as HttpURLConnection).inputStream
+        } else {
+            conn.inputStream
+        }
+        inStream.use { input ->
+            java.io.FileOutputStream(targetFile).use { output ->
+                val buf = ByteArray(16384)
+                var read: Int
+                while (input.read(buf).also { read = it } != -1) {
+                    output.write(buf, 0, read)
+                    downloaded += read
+                    onProgress((downloaded.toFloat() / totalLen.toFloat()).coerceIn(0.01f, 0.99f))
+                }
+            }
+        }
+        onProgress(1.0f)
+        targetFile
     }
 
     fun triggerWorkflowDispatch(
