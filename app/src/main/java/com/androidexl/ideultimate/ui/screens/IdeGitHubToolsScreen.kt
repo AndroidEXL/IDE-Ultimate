@@ -38,12 +38,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -344,7 +342,7 @@ fun IdeGitHubToolsScreen(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Folder,
+                                        imageVector = IdeIcons.Folder,
                                         contentDescription = null,
                                         tint = Cyan,
                                         modifier = Modifier.size(20.dp),
@@ -465,7 +463,7 @@ fun IdeGitHubToolsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Upload,
+                        imageVector = IdeIcons.Upload,
                         contentDescription = null,
                         tint = Cyan,
                         modifier = Modifier.size(22.dp),
@@ -1446,7 +1444,7 @@ private fun GitHubRepoBrowserScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    imageVector = if (item.isDirectory) Icons.Filled.Folder else Icons.Filled.Edit,
+                                    imageVector = if (item.isDirectory) IdeIcons.Folder else Icons.Filled.Edit,
                                     contentDescription = null,
                                     tint = if (item.isDirectory) Cyan else Muted,
                                     modifier = Modifier.size(18.dp),
@@ -1545,7 +1543,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.Upload, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = IdeIcons.Upload, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
                     Text(text = "استيراد ملف من الهاتف", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
@@ -1563,7 +1561,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.Folder, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(20.dp))
+                    Icon(imageVector = IdeIcons.Folder, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(20.dp))
                     Text(text = "استيراد فولدر من الجهاز", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
@@ -1659,7 +1657,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = IdeIcons.Download, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
                     Text(text = "تحميل الفولدر (Download)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
@@ -1766,7 +1764,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = IdeIcons.Download, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
                     Text(text = "تحميل الملفات المحددة", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
