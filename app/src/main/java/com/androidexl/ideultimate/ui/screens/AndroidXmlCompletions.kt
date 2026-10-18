@@ -137,7 +137,7 @@ object AndroidXmlCompletions {
         Pair("android:onClick=\"\"", "دالة الضغط المباشرة"),
     )
 
-    fun computeXmlCompletions(
+    internal fun computeXmlCompletions(
         textBeforeCursor: String,
         isManifest: Boolean = false,
     ): List<IdeCodeCompletionSuggestion> {

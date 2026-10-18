@@ -723,6 +723,7 @@ private fun IdeProjectSingleFileEditor(
     val dummyLogicItem = remember(entry.name) {
         IdeLogicItem(
             name = entry.name.substringBeforeLast('.'),
+            subtitle = entry.name,
             section = IdeLogicSection.ACTIVITY,
         )
     }
