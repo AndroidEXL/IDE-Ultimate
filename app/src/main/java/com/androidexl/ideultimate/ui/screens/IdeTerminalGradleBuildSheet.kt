@@ -284,12 +284,13 @@ fun IdeTerminalGradleBuildSheet(
                 if (rc == 0) {
                     buildSuccess = true
                     currentTaskName = "اكتمل البناء بنجاح ✓"
-                    val apkFile = File(projectRoot, "app/build/outputs/apk/debug/app-debug.apk")
-                    if (apkFile.exists()) {
-                        apkOutputPath = apkFile.absolutePath
-                        appendLog("\n🎉 تم إنشاء ملف APK بنجاح في المسار:\n${apkFile.absolutePath}")
+                    val foundApk = File(projectRoot, "app/build/outputs/apk/debug/app-debug.apk").takeIf { it.exists() }
+                        ?: projectRoot.walkTopDown().filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }.firstOrNull()
+                    if (foundApk != null && foundApk.exists()) {
+                        apkOutputPath = foundApk.absolutePath
+                        appendLog("\n🎉 تم العثور على ملف APK بنجاح:\n${foundApk.absolutePath}")
                     } else {
-                        appendLog("\n✓ نجح أمر البناء، يرجى فحص مجلد app/build/outputs/apk للمشروع.")
+                        appendLog("\n✓ اكتمل أمر البناء (كود 0)، لكن لم يتم العثور على ملف apk مجمع داخل المشروع. تحقق من المسارات أو الأخطاء في السجل أعلاه.")
                     }
                 } else {
                     buildSuccess = false

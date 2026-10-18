@@ -543,6 +543,16 @@ fun IdeGitHubActionsRunScreen(
                                             "        run: chmod +x gradlew || true",
                                             "      - name: Build APKs",
                                             "        run: ./gradlew assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log",
+                                            "      - name: Upload APK artifacts",
+                                            "        uses: actions/upload-artifact@v4",
+                                            "        with:",
+                                            "          name: IDE-Ultimate-APK",
+                                            "          path: |",
+                                            "            app/build/outputs/apk/debug/*.apk",
+                                            "            app/build/outputs/apk/release/*.apk",
+                                            "            build/outputs/apk/**/*.apk",
+                                            "          if-no-files-found: warn",
+                                            "          retention-days: 90",
                                         ).joinToString("\n")
                                         engine.ensureWorkflowFileExists("build-apk.yml", workflowYaml)
                                         val trigRes = engine.triggerWorkflowDispatch("build-apk.yml", "main")
