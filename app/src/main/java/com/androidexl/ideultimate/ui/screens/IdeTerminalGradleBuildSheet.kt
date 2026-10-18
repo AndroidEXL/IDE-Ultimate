@@ -559,12 +559,12 @@ fun IdeTerminalGradleBuildSheet(
                         .weight(1f)
                         .height(44.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(
+                        .then(
                             if (isBuilding || isInstallingTools) {
-                                Color(0xFF1E293B)
+                                Modifier.background(Color(0xFF1E293B))
                             } else {
-                                Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981)))
-                            },
+                                Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
+                            }
                         )
                         .clickable(enabled = !isBuilding && !isInstallingTools) {
                             startGradleBuild()

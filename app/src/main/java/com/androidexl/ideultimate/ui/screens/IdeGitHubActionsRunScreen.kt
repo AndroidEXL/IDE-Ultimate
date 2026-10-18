@@ -389,41 +389,36 @@ fun IdeGitHubActionsRunScreen(
                                     isTriggeringWorkflow = true
                                     coroutineScope.launch(Dispatchers.IO) {
                                         // 1. Ensure workflow file
-                                        val workflowYaml = """name: Build APK
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-concurrency:
-  group: apk-\${{ github.ref }}
-  cancel-in-progress: true
-permissions:
-  contents: write
-jobs:
-  build:
-    name: Assemble debug & release APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Set up Java 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Ensure Android SDK platform 35
-        run: |
-          SDK="\${ANDROID_HOME:-\$ANDROID_SDK_ROOT}"
-          if [ ! -d "\$SDK/platforms/android-35" ] || [ ! -d "\$SDK/build-tools/35.0.0" ]; then
-            yes | "\$SDK/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0"
-          fi
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Make Gradle wrapper executable
-        run: chmod +x gradlew || true
-      - name: Build APKs
-        run: ./gradlew assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log
-"""
+                                        val workflowYaml = listOf(
+                                            "name: Build APK",
+                                            "on:",
+                                            "  push:",
+                                            "    branches: [ main, master ]",
+                                            "  workflow_dispatch:",
+                                            "concurrency:",
+                                            "  group: apk-" + "${"$"}{{ github.ref }}",
+                                            "  cancel-in-progress: true",
+                                            "permissions:",
+                                            "  contents: write",
+                                            "jobs:",
+                                            "  build:",
+                                            "    name: Assemble debug & release APK",
+                                            "    runs-on: ubuntu-latest",
+                                            "    steps:",
+                                            "      - name: Checkout",
+                                            "        uses: actions/checkout@v5",
+                                            "      - name: Set up Java 17",
+                                            "        uses: actions/setup-java@v5",
+                                            "        with:",
+                                            "          distribution: temurin",
+                                            "          java-version: 17",
+                                            "      - name: Set up Gradle",
+                                            "        uses: gradle/actions/setup-gradle@v4",
+                                            "      - name: Make Gradle wrapper executable",
+                                            "        run: chmod +x gradlew || true",
+                                            "      - name: Build APKs",
+                                            "        run: ./gradlew assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log",
+                                        ).joinToString("\n")
                                         engine.ensureWorkflowFileExists("build-apk.yml", workflowYaml)
                                         val trigRes = engine.triggerWorkflowDispatch("build-apk.yml", "main")
                                         withContext(Dispatchers.Main) {
