@@ -3454,9 +3454,26 @@ dependencies {
             )
         }
 
-        val settingsGradle = File(root, "settings.gradle.kts")
+        // Root build.gradle
+        val rootBuildGradleFile = File(root, "build.gradle.kts").takeIf { it.exists() }
+            ?: File(root, "build.gradle")
+        if (!rootBuildGradleFile.exists()) {
+            val defaultRootGradle = File(root, "build.gradle.kts")
+            defaultRootGradle.writeText(
+                """plugins {
+    id("com.android.application") version "8.9.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.1.20" apply false
+}
+""",
+                Charsets.UTF_8,
+            )
+        }
+
+        val settingsGradle = File(root, "settings.gradle.kts").takeIf { it.exists() }
+            ?: File(root, "settings.gradle")
         if (!settingsGradle.exists()) {
-            settingsGradle.writeText(
+            val defaultSettings = File(root, "settings.gradle.kts")
+            defaultSettings.writeText(
                 """rootProject.name = "${project.name}"
 include(":app")
 """,
