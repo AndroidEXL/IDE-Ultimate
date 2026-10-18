@@ -226,12 +226,12 @@ fun IdeTerminalGradleBuildSheet(
                 "fi",
                 "export ANDROID_HOME=/root/android-sdk",
                 "export ANDROID_SDK_ROOT=/root/android-sdk",
-                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:$PATH",
+                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:\$PATH",
                 "echo '===> تثبيت منصات الأندرويد و Build Tools المطلوبة...'",
                 "yes | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --install \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\" 2>&1 || true",
                 "echo 'export ANDROID_HOME=/root/android-sdk' >> /root/.bashrc",
                 "echo 'export ANDROID_SDK_ROOT=/root/android-sdk' >> /root/.bashrc",
-                "echo 'export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:$PATH' >> /root/.bashrc",
+                "echo 'export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:\$PATH' >> /root/.bashrc",
                 "echo '✓ تم تجهيز بيئة وأدوات Android SDK الرسمية بنجاح!'",
             ).joinToString("\n")
 
@@ -276,7 +276,7 @@ fun IdeTerminalGradleBuildSheet(
                 "export GRADLE_USER_HOME=/root/.gradle",
                 "export ANDROID_HOME=/root/android-sdk",
                 "export ANDROID_SDK_ROOT=/root/android-sdk",
-                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:$PATH",
+                "export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/android-sdk/build-tools/34.0.0:\$PATH",
                 "cd /root/project_build",
                 "echo \"===> مسار مجلد المشروع: \$(pwd)\"",
                 "echo \"===> ذاكرة التخزين المؤقت الدائمة: /root/.gradle\"",
