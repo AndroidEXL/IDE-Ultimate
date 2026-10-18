@@ -107,9 +107,11 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -366,6 +368,7 @@ fun IdeProjectScreen(
     fun updateLogicItems(newItems: List<IdeLogicItem>) {
         logicItems = newItems
         repository.saveLogicItemsForXmlPage(project, selectedXmlPage, newItems)
+        codeText = repository.readCodeForFlavor(project, selectedXmlPage, activeFlavor)
     }
 
     fun updateWidgetNodes(newNodes: List<IdeWidgetNode>, recordHistory: Boolean = true) {
@@ -428,6 +431,7 @@ fun IdeProjectScreen(
 
     var editingPropertyRequest by remember { mutableStateOf<Pair<String, IdeWidgetProperty>?>(null) }
     var imagePickerWidgetUid by remember { mutableStateOf<String?>(null) }
+    var activeEventEditorItem by remember { mutableStateOf<IdeLogicItem?>(null) }
     val recentProperties = remember { mutableStateListOf<IdeWidgetProperty>() }
 
     val selectedNode = remember(widgetNodes, selectedWidgetUid) {
@@ -447,6 +451,7 @@ fun IdeProjectScreen(
 
     BackHandler {
         when {
+            activeEventEditorItem != null -> activeEventEditorItem = null
             imagePickerWidgetUid != null -> imagePickerWidgetUid = null
             editingPropertyRequest != null -> editingPropertyRequest = null
             showImageManagerScreen -> showImageManagerScreen = false
@@ -457,6 +462,78 @@ fun IdeProjectScreen(
             selectedWidgetUid != null -> selectedWidgetUid = null
             else -> onBack()
         }
+    }
+
+    val currentEventEditorItem = activeEventEditorItem
+    if (currentEventEditorItem != null) {
+        val latestItem = logicItems.firstOrNull { it.id == currentEventEditorItem.id } ?: currentEventEditorItem
+        val isEventEnabled = logicItems.any { it.id == latestItem.id }
+        IdeEventCodeEditorPage(
+            project = project,
+            xmlPage = selectedXmlPage,
+            item = latestItem,
+            isEnabled = isEventEnabled,
+            allWidgets = remember(widgetNodes) { flattenAllNodes(widgetNodes) },
+            userFunctions = remember(logicItems) { logicItems.filter { it.section == IdeLogicSection.FUNCTIONS } },
+            allLogicItems = logicItems,
+            activityKotlinCode = remember(codeText, logicItems, selectedXmlPage) {
+                repository.readCodeForFlavor(project, selectedXmlPage, CodeEditorFlavor.KOTLIN_ANDROID)
+            },
+            activityJavaCode = remember(codeText, logicItems, selectedXmlPage) {
+                repository.readCodeForFlavor(project, selectedXmlPage, CodeEditorFlavor.JAVA_ANDROID)
+            },
+            onToggleEnabled = { enabled, currentBody ->
+                val updatedItem = latestItem.copy(bodyCode = currentBody)
+                activeEventEditorItem = updatedItem
+                if (enabled) {
+                    val exists = logicItems.any { it.id == updatedItem.id }
+                    val nextList = if (exists) {
+                        logicItems.map { if (it.id == updatedItem.id) updatedItem else it }
+                    } else {
+                        logicItems + updatedItem
+                    }
+                    updateLogicItems(nextList)
+                } else {
+                    updateLogicItems(logicItems.filterNot { it.id == updatedItem.id })
+                }
+            },
+            onSaveBodyCode = { updatedBody ->
+                val updatedItem = latestItem.copy(bodyCode = updatedBody)
+                activeEventEditorItem = updatedItem
+                if (logicItems.any { it.id == updatedItem.id }) {
+                    updateLogicItems(
+                        logicItems.map { if (it.id == updatedItem.id) updatedItem else it },
+                    )
+                }
+            },
+            onResetBodyCode = {
+                val defaultBody = if (latestItem.section == IdeLogicSection.VIEW) {
+                    val targetWidget = flattenAllNodes(widgetNodes).firstOrNull { it.viewId == latestItem.targetViewId }
+                    val key = latestItem.name.substringAfter(": ", "").trim()
+                    val eventOpt = targetWidget?.let { w ->
+                        getEventsForWidgetType(w.type).firstOrNull { it.eventKey == key }
+                    }
+                    if (targetWidget != null && eventOpt != null) {
+                        defaultCodeForWidgetEvent(targetWidget, eventOpt)
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                }
+                val resetItem = latestItem.copy(bodyCode = defaultBody)
+                activeEventEditorItem = resetItem
+                if (logicItems.any { it.id == resetItem.id }) {
+                    updateLogicItems(
+                        logicItems.map { if (it.id == resetItem.id) resetItem else it },
+                    )
+                }
+                defaultBody
+            },
+            onBack = { activeEventEditorItem = null },
+            modifier = modifier,
+        )
+        return
     }
 
     if (showImageManagerScreen) {
@@ -603,6 +680,9 @@ fun IdeProjectScreen(
                                 widgetNodes = widgetNodes,
                                 logicItems = logicItems,
                                 onUpdateLogicItems = { updateLogicItems(it) },
+                                onOpenEventEditor = { itemToEdit ->
+                                    activeEventEditorItem = itemToEdit
+                                },
                                 activeFlavor = activeFlavor,
                                 onSelectFlavor = { flavor ->
                                     activeFlavorName = flavor.name
@@ -702,6 +782,27 @@ fun IdeProjectScreen(
                                     bodyCode = defaultCodeForWidgetEvent(selectedNode, eventOpt),
                                 )
                                 updateLogicItems(logicItems + newItem)
+                            }
+                        },
+                        onOpenWidgetEventEditor = { eventOpt ->
+                            val eventName = "${selectedNode.viewId}: ${eventOpt.eventKey}"
+                            val existing = logicItems.firstOrNull {
+                                it.section == IdeLogicSection.VIEW &&
+                                    it.targetViewId == selectedNode.viewId &&
+                                    it.name == eventName
+                            }
+                            if (existing != null) {
+                                activeEventEditorItem = existing
+                            } else {
+                                val newItem = IdeLogicItem(
+                                    section = IdeLogicSection.VIEW,
+                                    name = eventName,
+                                    subtitle = "${selectedNode.type.displayName} (@+id/${selectedNode.viewId}) • ${eventOpt.subtitle}",
+                                    targetViewId = selectedNode.viewId,
+                                    bodyCode = defaultCodeForWidgetEvent(selectedNode, eventOpt),
+                                )
+                                updateLogicItems(logicItems + newItem)
+                                activeEventEditorItem = newItem
                             }
                         },
                         bottomBarPadding = bottomBarPadding,
@@ -5237,6 +5338,7 @@ private fun IdeWidgetPropertyBottomPanel(
     onSave: () -> Unit,
     onClickProperty: (IdeWidgetProperty) -> Unit,
     onToggleWidgetEvent: (IdeViewEventOption) -> Unit = {},
+    onOpenWidgetEventEditor: (IdeViewEventOption) -> Unit = {},
     bottomBarPadding: Dp = 0.dp,
 ) {
     var activePropTab by remember { mutableStateOf(WidgetPropTab.BASIC) }
@@ -5513,7 +5615,8 @@ private fun IdeWidgetPropertyBottomPanel(
                     SketchEventSquareCard(
                         label = eventOpt.cardLabel,
                         isEnabled = isEnabled,
-                        onClick = { onToggleWidgetEvent(eventOpt) },
+                        onClick = { onOpenWidgetEventEditor(eventOpt) },
+                        onToggleDot = { onToggleWidgetEvent(eventOpt) },
                     )
                 }
             } else {
@@ -6259,6 +6362,7 @@ private fun SketchEventSquareCard(
     label: String,
     isEnabled: Boolean,
     onClick: () -> Unit,
+    onToggleDot: () -> Unit = onClick,
 ) {
     val shape = RoundedCornerShape(14.dp)
     val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
@@ -6280,9 +6384,10 @@ private fun SketchEventSquareCard(
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(12.dp)
+                .size(16.dp)
                 .clip(CircleShape)
-                .background(dotColor.copy(alpha = 0.25f)),
+                .background(dotColor.copy(alpha = 0.25f))
+                .clickable(onClick = onToggleDot),
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -7291,6 +7396,7 @@ private fun IdeLogicEventWorkspace(
     widgetNodes: List<IdeWidgetNode>,
     logicItems: List<IdeLogicItem>,
     onUpdateLogicItems: (List<IdeLogicItem>) -> Unit,
+    onOpenEventEditor: (IdeLogicItem) -> Unit = {},
     activeFlavor: CodeEditorFlavor,
     onSelectFlavor: (CodeEditorFlavor) -> Unit,
     code: String,
@@ -7406,7 +7512,7 @@ private fun IdeLogicEventWorkspace(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (activeSection == IdeLogicSection.ACTIVITY) {
-                    // Standalone "Import Code" button in Activity (kept as a clean button without opening an explanatory bottom sheet)
+                    // Standalone "Import Code" button in Activity opens the Import Code Event Editor Page
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -7417,7 +7523,25 @@ private fun IdeLogicEventWorkspace(
                                 width = 1.dp,
                                 color = Color(0x38FFFFFF),
                                 shape = RoundedCornerShape(percent = 50),
-                            ),
+                            )
+                            .clickable {
+                                val existingImport = logicItems.firstOrNull {
+                                    it.section == IdeLogicSection.ACTIVITY &&
+                                        it.name.equals("Import", ignoreCase = true)
+                                }
+                                if (existingImport != null) {
+                                    onOpenEventEditor(existingImport)
+                                } else {
+                                    val importItem = IdeLogicItem(
+                                        section = IdeLogicSection.ACTIVITY,
+                                        name = "Import",
+                                        subtitle = "Import packages & classes from android.jar",
+                                        bodyCode = "import android.os.Bundle\nimport android.view.View\nimport android.widget.Toast\nimport android.content.Intent",
+                                    )
+                                    onUpdateLogicItems(logicItems + importItem)
+                                    onOpenEventEditor(importItem)
+                                }
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -7431,11 +7555,11 @@ private fun IdeLogicEventWorkspace(
                     }
                 }
 
-                // Event / Function Cards List (clicking an item does NOT open any bottom sheet!)
+                // Event / Function Cards List (clicking an item opens the dedicated Event Code Editor page!)
                 filteredItems.forEach { item ->
                     IdeLogicEventCard(
                         item = item,
-                        onClick = {},
+                        onClick = { onOpenEventEditor(item) },
                         onLongClick = { longPressedItem = item },
                     )
                 }
@@ -8790,6 +8914,1047 @@ private fun IdeLogicItemLongPressBottomSheet(
             }
 
             Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+private enum class IdeAutoCompleteCategory(
+    val badge: String,
+    val color: Color,
+) {
+    USER_FUNCTION("USER FUNC • دالة المستخدم", Color(0xFF22C55E)),
+    USER_VARIABLE("USER VAR • متغير", Color(0xFF34D399)),
+    VIEW_WIDGET("VIEW • عنصر واجهة", Color(0xFFFBBF24)),
+    ANDROID_JAR_CLASS("android.jar • Class", Color(0xFF38BDF8)),
+    ANDROID_JAR_METHOD("android.jar • Method", Color(0xFFA78BFA)),
+    ANDROID_JAR_FIELD("android.jar • Constant", Color(0xFFF472B6)),
+}
+
+private data class IdeCodeCompletionSuggestion(
+    val label: String,
+    val insertText: String,
+    val cursorBackOffset: Int = 0,
+    val detail: String,
+    val category: IdeAutoCompleteCategory,
+)
+
+private data class AndroidJarClassEntry(
+    val simpleName: String,
+    val fqcn: String,
+    val summary: String,
+    val defaultInsert: String = simpleName,
+    val cursorBackOffset: Int = 0,
+)
+
+private val ANDROID_JAR_CLASS_INDEX: List<AndroidJarClassEntry> = listOf(
+    // android.widget.*
+    AndroidJarClassEntry("Toast", "android.widget.Toast", "android.widget.Toast (android.jar)", "Toast.makeText(this, \"\", Toast.LENGTH_SHORT).show()", 29),
+    AndroidJarClassEntry("TextView", "android.widget.TextView", "android.widget.TextView (android.jar)"),
+    AndroidJarClassEntry("EditText", "android.widget.EditText", "android.widget.EditText (android.jar)"),
+    AndroidJarClassEntry("AutoCompleteTextView", "android.widget.AutoCompleteTextView", "android.widget.AutoCompleteTextView (android.jar)"),
+    AndroidJarClassEntry("MultiAutoCompleteTextView", "android.widget.MultiAutoCompleteTextView", "android.widget.MultiAutoCompleteTextView (android.jar)"),
+    AndroidJarClassEntry("CheckedTextView", "android.widget.CheckedTextView", "android.widget.CheckedTextView (android.jar)"),
+    AndroidJarClassEntry("Button", "android.widget.Button", "android.widget.Button (android.jar)"),
+    AndroidJarClassEntry("ImageButton", "android.widget.ImageButton", "android.widget.ImageButton (android.jar)"),
+    AndroidJarClassEntry("ToggleButton", "android.widget.ToggleButton", "android.widget.ToggleButton (android.jar)"),
+    AndroidJarClassEntry("ImageView", "android.widget.ImageView", "android.widget.ImageView (android.jar)"),
+    AndroidJarClassEntry("CheckBox", "android.widget.CheckBox", "android.widget.CheckBox (android.jar)"),
+    AndroidJarClassEntry("RadioButton", "android.widget.RadioButton", "android.widget.RadioButton (android.jar)"),
+    AndroidJarClassEntry("RadioGroup", "android.widget.RadioGroup", "android.widget.RadioGroup (android.jar)"),
+    AndroidJarClassEntry("Switch", "android.widget.Switch", "android.widget.Switch (android.jar)"),
+    AndroidJarClassEntry("Spinner", "android.widget.Spinner", "android.widget.Spinner (android.jar)"),
+    AndroidJarClassEntry("ArrayAdapter", "android.widget.ArrayAdapter", "android.widget.ArrayAdapter<T> (android.jar)", "ArrayAdapter(this, android.R.layout.simple_list_item_1, listOf())", 2),
+    AndroidJarClassEntry("LinearLayout", "android.widget.LinearLayout", "android.widget.LinearLayout (android.jar)"),
+    AndroidJarClassEntry("RelativeLayout", "android.widget.RelativeLayout", "android.widget.RelativeLayout (android.jar)"),
+    AndroidJarClassEntry("FrameLayout", "android.widget.FrameLayout", "android.widget.FrameLayout (android.jar)"),
+    AndroidJarClassEntry("ScrollView", "android.widget.ScrollView", "android.widget.ScrollView (android.jar)"),
+    AndroidJarClassEntry("HorizontalScrollView", "android.widget.HorizontalScrollView", "android.widget.HorizontalScrollView (android.jar)"),
+    AndroidJarClassEntry("ListView", "android.widget.ListView", "android.widget.ListView (android.jar)"),
+    AndroidJarClassEntry("GridView", "android.widget.GridView", "android.widget.GridView (android.jar)"),
+    AndroidJarClassEntry("ExpandableListView", "android.widget.ExpandableListView", "android.widget.ExpandableListView (android.jar)"),
+    AndroidJarClassEntry("TimePicker", "android.widget.TimePicker", "android.widget.TimePicker (android.jar)"),
+    AndroidJarClassEntry("DatePicker", "android.widget.DatePicker", "android.widget.DatePicker (android.jar)"),
+    AndroidJarClassEntry("CalendarView", "android.widget.CalendarView", "android.widget.CalendarView (android.jar)"),
+    AndroidJarClassEntry("TextClock", "android.widget.TextClock", "android.widget.TextClock (android.jar)"),
+    AndroidJarClassEntry("Chronometer", "android.widget.Chronometer", "android.widget.Chronometer (android.jar)"),
+    AndroidJarClassEntry("ProgressBar", "android.widget.ProgressBar", "android.widget.ProgressBar (android.jar)"),
+    AndroidJarClassEntry("SeekBar", "android.widget.SeekBar", "android.widget.SeekBar (android.jar)"),
+    AndroidJarClassEntry("SearchView", "android.widget.SearchView", "android.widget.SearchView (android.jar)"),
+    AndroidJarClassEntry("PopupMenu", "android.widget.PopupMenu", "android.widget.PopupMenu (android.jar)"),
+    // android.view.*
+    AndroidJarClassEntry("View", "android.view.View", "android.view.View (android.jar)"),
+    AndroidJarClassEntry("ViewGroup", "android.view.ViewGroup", "android.view.ViewGroup (android.jar)"),
+    AndroidJarClassEntry("MotionEvent", "android.view.MotionEvent", "android.view.MotionEvent (android.jar)"),
+    AndroidJarClassEntry("KeyEvent", "android.view.KeyEvent", "android.view.KeyEvent (android.jar)"),
+    AndroidJarClassEntry("LayoutInflater", "android.view.LayoutInflater", "android.view.LayoutInflater (android.jar)", "LayoutInflater.from(this)", 0),
+    AndroidJarClassEntry("Gravity", "android.view.Gravity", "android.view.Gravity (android.jar)"),
+    AndroidJarClassEntry("WindowManager", "android.view.WindowManager", "android.view.WindowManager (android.jar)"),
+    AndroidJarClassEntry("HapticFeedbackConstants", "android.view.HapticFeedbackConstants", "android.view.HapticFeedbackConstants (android.jar)"),
+    // android.app.* & android.content.*
+    AndroidJarClassEntry("Activity", "android.app.Activity", "android.app.Activity (android.jar)"),
+    AndroidJarClassEntry("AlertDialog", "android.app.AlertDialog", "android.app.AlertDialog (android.jar)", "AlertDialog.Builder(this).setTitle(\"\").setMessage(\"\").setPositiveButton(\"OK\", null).show()", 54),
+    AndroidJarClassEntry("Dialog", "android.app.Dialog", "android.app.Dialog (android.jar)"),
+    AndroidJarClassEntry("NotificationManager", "android.app.NotificationManager", "android.app.NotificationManager (android.jar)"),
+    AndroidJarClassEntry("NotificationChannel", "android.app.NotificationChannel", "android.app.NotificationChannel (android.jar)"),
+    AndroidJarClassEntry("PendingIntent", "android.app.PendingIntent", "android.app.PendingIntent (android.jar)"),
+    AndroidJarClassEntry("Intent", "android.content.Intent", "android.content.Intent (android.jar)", "Intent(this, MainActivity::class.java)", 0),
+    AndroidJarClassEntry("Context", "android.content.Context", "android.content.Context (android.jar)"),
+    AndroidJarClassEntry("SharedPreferences", "android.content.SharedPreferences", "android.content.SharedPreferences (android.jar)", "getSharedPreferences(\"app_prefs\", Context.MODE_PRIVATE)", 0),
+    AndroidJarClassEntry("ClipboardManager", "android.content.ClipboardManager", "android.content.ClipboardManager (android.jar)"),
+    AndroidJarClassEntry("ClipData", "android.content.ClipData", "android.content.ClipData (android.jar)", "ClipData.newPlainText(\"label\", \"\")", 2),
+    // android.os.*
+    AndroidJarClassEntry("Bundle", "android.os.Bundle", "android.os.Bundle (android.jar)"),
+    AndroidJarClassEntry("Handler", "android.os.Handler", "android.os.Handler (android.jar)", "Handler(Looper.getMainLooper()).postDelayed({\n    \n}, 1000L)", 10),
+    AndroidJarClassEntry("Looper", "android.os.Looper", "android.os.Looper (android.jar)", "Looper.getMainLooper()", 0),
+    AndroidJarClassEntry("Build", "android.os.Build", "android.os.Build (android.jar)"),
+    AndroidJarClassEntry("Environment", "android.os.Environment", "android.os.Environment (android.jar)"),
+    AndroidJarClassEntry("SystemClock", "android.os.SystemClock", "android.os.SystemClock (android.jar)"),
+    AndroidJarClassEntry("CountDownTimer", "android.os.CountDownTimer", "android.os.CountDownTimer (android.jar)"),
+    AndroidJarClassEntry("Vibrator", "android.os.Vibrator", "android.os.Vibrator (android.jar)"),
+    AndroidJarClassEntry("VibrationEffect", "android.os.VibrationEffect", "android.os.VibrationEffect (android.jar)"),
+    // android.graphics.*
+    AndroidJarClassEntry("Color", "android.graphics.Color", "android.graphics.Color (android.jar)", "Color.parseColor(\"#38BDF8\")", 2),
+    AndroidJarClassEntry("Bitmap", "android.graphics.Bitmap", "android.graphics.Bitmap (android.jar)"),
+    AndroidJarClassEntry("BitmapFactory", "android.graphics.BitmapFactory", "android.graphics.BitmapFactory (android.jar)"),
+    AndroidJarClassEntry("Canvas", "android.graphics.Canvas", "android.graphics.Canvas (android.jar)"),
+    AndroidJarClassEntry("Paint", "android.graphics.Paint", "android.graphics.Paint (android.jar)"),
+    AndroidJarClassEntry("Typeface", "android.graphics.Typeface", "android.graphics.Typeface (android.jar)"),
+    AndroidJarClassEntry("GradientDrawable", "android.graphics.drawable.GradientDrawable", "android.graphics.drawable.GradientDrawable (android.jar)"),
+    // android.webkit.*
+    AndroidJarClassEntry("WebView", "android.webkit.WebView", "android.webkit.WebView (android.jar)"),
+    AndroidJarClassEntry("WebViewClient", "android.webkit.WebViewClient", "android.webkit.WebViewClient (android.jar)"),
+    AndroidJarClassEntry("WebChromeClient", "android.webkit.WebChromeClient", "android.webkit.WebChromeClient (android.jar)"),
+    AndroidJarClassEntry("WebSettings", "android.webkit.WebSettings", "android.webkit.WebSettings (android.jar)"),
+    AndroidJarClassEntry("CookieManager", "android.webkit.CookieManager", "android.webkit.CookieManager (android.jar)"),
+    // android.net.*, android.util.*, android.media.*, android.animation.*, android.text.*
+    AndroidJarClassEntry("Uri", "android.net.Uri", "android.net.Uri (android.jar)", "Uri.parse(\"https://\")", 2),
+    AndroidJarClassEntry("Log", "android.util.Log", "android.util.Log (android.jar)", "Log.d(\"IDEUltimate\", \"\")", 2),
+    AndroidJarClassEntry("TypedValue", "android.util.TypedValue", "android.util.TypedValue (android.jar)"),
+    AndroidJarClassEntry("MediaPlayer", "android.media.MediaPlayer", "android.media.MediaPlayer (android.jar)"),
+    AndroidJarClassEntry("RingtoneManager", "android.media.RingtoneManager", "android.media.RingtoneManager (android.jar)"),
+    AndroidJarClassEntry("ObjectAnimator", "android.animation.ObjectAnimator", "android.animation.ObjectAnimator (android.jar)", "ObjectAnimator.ofFloat(view, \"alpha\", 0f, 1f).setDuration(300L).start()", 0),
+    AndroidJarClassEntry("ValueAnimator", "android.animation.ValueAnimator", "android.animation.ValueAnimator (android.jar)"),
+    AndroidJarClassEntry("TextWatcher", "android.text.TextWatcher", "android.text.TextWatcher (android.jar)"),
+    AndroidJarClassEntry("Editable", "android.text.Editable", "android.text.Editable (android.jar)"),
+    AndroidJarClassEntry("InputFilter", "android.text.InputFilter", "android.text.InputFilter (android.jar)"),
+    AndroidJarClassEntry("LinkMovementMethod", "android.text.method.LinkMovementMethod", "android.text.method.LinkMovementMethod (android.jar)"),
+    // java.util.*, java.text.*, java.io.*, java.lang.* (in android.jar)
+    AndroidJarClassEntry("Calendar", "java.util.Calendar", "java.util.Calendar (android.jar)", "Calendar.getInstance()", 0),
+    AndroidJarClassEntry("TimeZone", "java.util.TimeZone", "java.util.TimeZone (android.jar)", "TimeZone.getDefault()", 0),
+    AndroidJarClassEntry("Locale", "java.util.Locale", "java.util.Locale (android.jar)", "Locale.getDefault()", 0),
+    AndroidJarClassEntry("SimpleDateFormat", "java.text.SimpleDateFormat", "java.text.SimpleDateFormat (android.jar)", "SimpleDateFormat(\"yyyy-MM-dd HH:mm\", Locale.getDefault())", 0),
+    AndroidJarClassEntry("ArrayList", "java.util.ArrayList", "java.util.ArrayList<T> (android.jar)", "ArrayList<String>()", 0),
+    AndroidJarClassEntry("HashMap", "java.util.HashMap", "java.util.HashMap<K, V> (android.jar)", "HashMap<String, Any>()", 0),
+    AndroidJarClassEntry("UUID", "java.util.UUID", "java.util.UUID (android.jar)", "UUID.randomUUID().toString()", 0),
+    AndroidJarClassEntry("File", "java.io.File", "java.io.File (android.jar)", "File(filesDir, \"\")", 2),
+    AndroidJarClassEntry("Math", "java.lang.Math", "java.lang.Math (android.jar)"),
+    AndroidJarClassEntry("System", "java.lang.System", "java.lang.System (android.jar)", "System.currentTimeMillis()", 0),
+)
+
+private fun resolveWidgetAndroidJarFqcn(type: IdeWidgetType): String {
+    return when (type) {
+        IdeWidgetType.LINEAR_H, IdeWidgetType.LINEAR_V -> "android.widget.LinearLayout"
+        IdeWidgetType.SCROLL_H -> "android.widget.HorizontalScrollView"
+        IdeWidgetType.SCROLL_V -> "android.widget.ScrollView"
+        IdeWidgetType.CARD_CONTAINER, IdeWidgetType.BOTTOM_SHEET_LAYOUT, IdeWidgetType.SWIPE_REFRESH -> "android.widget.FrameLayout"
+        IdeWidgetType.RELATIVE_CONTAINER -> "android.widget.RelativeLayout"
+        IdeWidgetType.TEXT_VIEW, IdeWidgetType.RICH_TEXT, IdeWidgetType.CODE_TEXT,
+        IdeWidgetType.MARQUEE_TEXT, IdeWidgetType.BADGE_TEXT, IdeWidgetType.DIGITAL_CLOCK,
+        IdeWidgetType.COUNTDOWN_VIEW, IdeWidgetType.STOPWATCH_VIEW, IdeWidgetType.DATE_RANGE_PICKER,
+        IdeWidgetType.WORLD_CLOCK_VIEW, IdeWidgetType.CHIP_CHOICE, IdeWidgetType.SEGMENTED_CONTROL,
+        IdeWidgetType.STEP_COUNTER -> "android.widget.TextView"
+        IdeWidgetType.EDIT_TEXT, IdeWidgetType.PASS_TEXT, IdeWidgetType.NUMBER_INPUT,
+        IdeWidgetType.SEARCH_BOX -> "android.widget.EditText"
+        IdeWidgetType.AUTO_COMPLETE_TEXT -> "android.widget.AutoCompleteTextView"
+        IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "android.widget.MultiAutoCompleteTextView"
+        IdeWidgetType.CHECKED_TEXT_VIEW -> "android.widget.CheckedTextView"
+        IdeWidgetType.BUTTON, IdeWidgetType.OUTLINE_BUTTON, IdeWidgetType.GRADIENT_BUTTON,
+        IdeWidgetType.CHIP_BUTTON -> "android.widget.Button"
+        IdeWidgetType.IMAGE_BUTTON, IdeWidgetType.FAB_BUTTON, IdeWidgetType.ICON_TOGGLE_BUTTON -> "android.widget.ImageButton"
+        IdeWidgetType.TOGGLE_BUTTON -> "android.widget.ToggleButton"
+        IdeWidgetType.IMAGE_VIEW, IdeWidgetType.CIRCLE_IMAGE, IdeWidgetType.ROUNDED_IMAGE,
+        IdeWidgetType.AVATAR_VIEW, IdeWidgetType.BANNER_IMAGE, IdeWidgetType.ICON_VIEW,
+        IdeWidgetType.ZOOM_IMAGE, IdeWidgetType.LOTTIE_PLACEHOLDER, IdeWidgetType.ANALOG_CLOCK -> "android.widget.ImageView"
+        IdeWidgetType.CHECK_BOX -> "android.widget.CheckBox"
+        IdeWidgetType.RADIO_BUTTON -> "android.widget.RadioButton"
+        IdeWidgetType.SWITCH_CONTROL -> "android.widget.Switch"
+        IdeWidgetType.SPINNER -> "android.widget.Spinner"
+        IdeWidgetType.WEB_VIEW, IdeWidgetType.MINI_BROWSER, IdeWidgetType.HTML_VIEWER,
+        IdeWidgetType.MARKDOWN_WEB, IdeWidgetType.URL_BAR_WEB, IdeWidgetType.API_TESTER_WEB,
+        IdeWidgetType.VIDEO_EMBED_WEB, IdeWidgetType.MAP_EMBED_WEB -> "android.webkit.WebView"
+        IdeWidgetType.LIST_VIEW, IdeWidgetType.RECYCLER_LIST, IdeWidgetType.CHAT_LIST_VIEW,
+        IdeWidgetType.TIMELINE_LIST, IdeWidgetType.SETTINGS_LIST, IdeWidgetType.HORIZONTAL_CAROUSEL -> "android.widget.ListView"
+        IdeWidgetType.GRID_VIEW -> "android.widget.GridView"
+        IdeWidgetType.EXPANDABLE_LIST_VIEW -> "android.widget.ExpandableListView"
+        IdeWidgetType.TIME_PICKER -> "android.widget.TimePicker"
+        IdeWidgetType.DATE_PICKER -> "android.widget.DatePicker"
+        IdeWidgetType.CALENDAR_VIEW -> "android.widget.CalendarView"
+        IdeWidgetType.TEXT_CLOCK -> "android.widget.TextClock"
+        IdeWidgetType.CHRONOMETER -> "android.widget.Chronometer"
+    }
+}
+
+private fun reflectAndroidJarMembers(
+    fqcn: String,
+    memberPrefix: String,
+    maxItems: Int = 28,
+): List<IdeCodeCompletionSuggestion> {
+    return runCatching {
+        val clazz = Class.forName(fqcn)
+        val pfx = memberPrefix.lowercase()
+        val results = mutableListOf<IdeCodeCompletionSuggestion>()
+        val seen = mutableSetOf<String>()
+
+        // 1. Public fields / constants from android.jar
+        clazz.fields
+            .filter { f ->
+                java.lang.reflect.Modifier.isPublic(f.modifiers) &&
+                    (pfx.isEmpty() || f.name.lowercase().startsWith(pfx) || f.name.lowercase().contains(pfx))
+            }
+            .sortedBy { it.name }
+            .forEach { field ->
+                if (seen.add("F:${field.name}")) {
+                    results.add(
+                        IdeCodeCompletionSuggestion(
+                            label = "${field.name} : ${field.type.simpleName}",
+                            insertText = field.name,
+                            detail = "${clazz.simpleName}.${field.name} (${clazz.name} • android.jar)",
+                            category = IdeAutoCompleteCategory.ANDROID_JAR_FIELD,
+                        ),
+                    )
+                }
+            }
+
+        // 2. Public methods from android.jar
+        clazz.methods
+            .filter { m ->
+                java.lang.reflect.Modifier.isPublic(m.modifiers) &&
+                    !m.isSynthetic &&
+                    m.declaringClass != Any::class.java &&
+                    (pfx.isEmpty() || m.name.lowercase().startsWith(pfx) || m.name.lowercase().contains(pfx))
+            }
+            .sortedWith(
+                compareBy<java.lang.reflect.Method>(
+                    { !it.name.lowercase().startsWith(pfx) },
+                    { it.name },
+                    { it.parameterTypes.size },
+                ),
+            )
+            .forEach { method ->
+                val paramsSig = method.parameterTypes.joinToString(", ") { it.simpleName }
+                val key = "M:${method.name}($paramsSig)"
+                if (seen.add(key)) {
+                    val hasParams = method.parameterTypes.isNotEmpty()
+                    results.add(
+                        IdeCodeCompletionSuggestion(
+                            label = "${method.name}($paramsSig): ${method.returnType.simpleName}",
+                            insertText = "${method.name}()",
+                            cursorBackOffset = if (hasParams) 1 else 0,
+                            detail = "${clazz.name} • android.jar",
+                            category = IdeAutoCompleteCategory.ANDROID_JAR_METHOD,
+                        ),
+                    )
+                }
+            }
+
+        results.take(maxItems)
+    }.getOrDefault(emptyList())
+}
+
+private fun computeAndroidCodeCompletions(
+    textBeforeCursor: String,
+    allWidgets: List<IdeWidgetNode>,
+    userFunctions: List<IdeLogicItem>,
+    currentItem: IdeLogicItem,
+): List<IdeCodeCompletionSuggestion> {
+    val tail = textBeforeCursor.takeLast(120)
+
+    // Case 1: Dot completion (e.g. "Toast.", "Intent.", "button1.", "findViewById<TextView>(R.id.tv1).", "R.id.")
+    val dotMatch = Regex("([A-Za-z0-9_<>().\"\\s]+)\\.([A-Za-z0-9_]*)$").find(tail)
+    if (dotMatch != null) {
+        val rawReceiver = dotMatch.groupValues[1].trim()
+        val memberPrefix = dotMatch.groupValues[2].trim()
+
+        // R.id.<viewId> completion
+        if (rawReceiver.endsWith("R.id")) {
+            return allWidgets
+                .filter { memberPrefix.isEmpty() || it.viewId.lowercase().contains(memberPrefix.lowercase()) }
+                .map { w ->
+                    IdeCodeCompletionSuggestion(
+                        label = "R.id.${w.viewId}",
+                        insertText = w.viewId,
+                        detail = "${w.type.displayName} (@+id/${w.viewId})",
+                        category = IdeAutoCompleteCategory.VIEW_WIDGET,
+                    )
+                }
+        }
+
+        // Package completion from android.jar (e.g. "android.widget.", "android.view.", "android.content.", "android.os.")
+        val pkgClasses = ANDROID_JAR_CLASS_INDEX.filter { entry ->
+            entry.fqcn.startsWith("$rawReceiver.") &&
+                (memberPrefix.isEmpty() || entry.simpleName.lowercase().startsWith(memberPrefix.lowercase()))
+        }
+        if (pkgClasses.isNotEmpty()) {
+            return pkgClasses.map { entry ->
+                IdeCodeCompletionSuggestion(
+                    label = entry.simpleName,
+                    insertText = entry.simpleName,
+                    detail = entry.summary,
+                    category = IdeAutoCompleteCategory.ANDROID_JAR_CLASS,
+                )
+            }
+        }
+
+        // Resolve receiver to an android.jar class FQCN
+        val lastToken = rawReceiver.takeLastWhile { it.isLetterOrDigit() || it == '_' }
+        val findViewMatch = Regex("findViewById<([A-Za-z0-9_.]+)>\\([^)]*\\)$").find(rawReceiver)
+        val matchedWidget = allWidgets.firstOrNull { it.viewId == lastToken }
+
+        val targetFqcn: String? = when {
+            findViewMatch != null -> {
+                val typeName = findViewMatch.groupValues[1].substringAfterLast('.')
+                ANDROID_JAR_CLASS_INDEX.firstOrNull { it.simpleName.equals(typeName, ignoreCase = true) }?.fqcn
+                    ?: "android.view.View"
+            }
+            matchedWidget != null -> resolveWidgetAndroidJarFqcn(matchedWidget.type)
+            lastToken == "this" || lastToken == "activity" -> "android.app.Activity"
+            else -> ANDROID_JAR_CLASS_INDEX.firstOrNull {
+                it.simpleName.equals(lastToken, ignoreCase = true) ||
+                    it.fqcn.equals(rawReceiver, ignoreCase = true)
+            }?.fqcn
+        }
+
+        if (targetFqcn != null) {
+            return reflectAndroidJarMembers(targetFqcn, memberPrefix)
+        }
+    }
+
+    // Case 2: Identifier / Token completion at cursor
+    val tokenPrefix = tail.takeLastWhile { it.isLetterOrDigit() || it == '_' }
+    if (tokenPrefix.isEmpty()) return emptyList()
+    val pfx = tokenPrefix.lowercase()
+
+    val suggestions = mutableListOf<IdeCodeCompletionSuggestion>()
+
+    // 2A. User-Defined Functions from Logic -> Functions ("الدوال من المستخدم اللي اختارها")
+    userFunctions.forEach { fn ->
+        if (fn.name.lowercase().startsWith(pfx) || fn.name.lowercase().contains(pfx)) {
+            val paramsSig = fn.parameters.joinToString(", ") { "${it.name}: ${it.type}" }
+            val callArgs = fn.parameters.joinToString(", ") { it.name }
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = "${fn.name}($paramsSig): ${fn.returnType}",
+                    insertText = "${fn.name}($callArgs)",
+                    cursorBackOffset = if (fn.parameters.isNotEmpty()) 1 else 0,
+                    detail = "دالة المستخدم • User Function (${fn.returnType})",
+                    category = IdeAutoCompleteCategory.USER_FUNCTION,
+                ),
+            )
+        }
+        if (fn.privateVarName.isNotBlank() && fn.privateVarName.lowercase().contains(pfx)) {
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = "${fn.privateVarName} : ${fn.privateVarType}",
+                    insertText = fn.privateVarName,
+                    detail = "متغير خاص للدالة ${fn.name}",
+                    category = IdeAutoCompleteCategory.USER_VARIABLE,
+                ),
+            )
+        }
+    }
+
+    // Current Function's own parameters if editing a Function
+    currentItem.parameters.forEach { param ->
+        if (param.name.lowercase().contains(pfx)) {
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = "${param.name} : ${param.type}",
+                    insertText = param.name,
+                    detail = "معامل الدالة • Function Parameter",
+                    category = IdeAutoCompleteCategory.USER_VARIABLE,
+                ),
+            )
+        }
+    }
+
+    // 2B. Project View Widgets (from View designer)
+    allWidgets.forEach { w ->
+        if (w.viewId.lowercase().startsWith(pfx) || w.viewId.lowercase().contains(pfx)) {
+            val cls = resolveWidgetAndroidJarFqcn(w.type).substringAfterLast('.')
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = "${w.viewId} (findViewById<$cls>)",
+                    insertText = "findViewById<$cls>(R.id.${w.viewId})",
+                    detail = "${w.type.displayName} • ${resolveWidgetAndroidJarFqcn(w.type)}",
+                    category = IdeAutoCompleteCategory.VIEW_WIDGET,
+                ),
+            )
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = "R.id.${w.viewId}",
+                    insertText = "R.id.${w.viewId}",
+                    detail = "معرف العنصر • @+id/${w.viewId}",
+                    category = IdeAutoCompleteCategory.VIEW_WIDGET,
+                ),
+            )
+        }
+    }
+
+    // 2C. Classes & Static Templates from android.jar
+    ANDROID_JAR_CLASS_INDEX
+        .filter { entry ->
+            entry.simpleName.lowercase().startsWith(pfx) ||
+                entry.simpleName.lowercase().contains(pfx) ||
+                entry.fqcn.lowercase().contains(pfx)
+        }
+        .sortedBy { !it.simpleName.lowercase().startsWith(pfx) }
+        .forEach { entry ->
+            suggestions.add(
+                IdeCodeCompletionSuggestion(
+                    label = entry.simpleName,
+                    insertText = entry.simpleName,
+                    detail = entry.summary,
+                    category = IdeAutoCompleteCategory.ANDROID_JAR_CLASS,
+                ),
+            )
+            if (entry.defaultInsert != entry.simpleName) {
+                suggestions.add(
+                    IdeCodeCompletionSuggestion(
+                        label = entry.defaultInsert,
+                        insertText = entry.defaultInsert,
+                        cursorBackOffset = entry.cursorBackOffset,
+                        detail = "قالب جاهز من ${entry.fqcn}",
+                        category = IdeAutoCompleteCategory.ANDROID_JAR_METHOD,
+                    ),
+                )
+            }
+        }
+
+    // 2D. Common Activity methods from android.app.Activity (android.jar)
+    if ("findviewbyid".startsWith(pfx) || "startactivity".startsWith(pfx) || "finish".startsWith(pfx) || "runonuithread".startsWith(pfx)) {
+        reflectAndroidJarMembers("android.app.Activity", tokenPrefix, maxItems = 10).forEach {
+            suggestions.add(it)
+        }
+    }
+
+    return suggestions.take(24)
+}
+
+@Composable
+private fun IdeEventCodeEditorPage(
+    project: WorkspaceItem,
+    xmlPage: ProjectXmlPage,
+    item: IdeLogicItem,
+    isEnabled: Boolean,
+    allWidgets: List<IdeWidgetNode>,
+    userFunctions: List<IdeLogicItem>,
+    allLogicItems: List<IdeLogicItem>,
+    activityKotlinCode: String,
+    activityJavaCode: String,
+    onToggleEnabled: (Boolean, String) -> Unit,
+    onSaveBodyCode: (String) -> Unit,
+    onResetBodyCode: () -> String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var bodyField by remember(item.id) {
+        mutableStateOf(
+            TextFieldValue(
+                text = item.bodyCode,
+                selection = TextRange(item.bodyCode.length),
+            ),
+        )
+    }
+    // 0 = Event Editor (محرر الحدث), 1 = Activity Kotlin, 2 = Activity Java
+    var activeEditorViewMode by remember { mutableStateOf(0) }
+
+    val textBeforeCursor = remember(bodyField.text, bodyField.selection.start) {
+        val cursor = bodyField.selection.start.coerceIn(0, bodyField.text.length)
+        bodyField.text.substring(0, cursor)
+    }
+
+    val completions = remember(textBeforeCursor, allWidgets, userFunctions, item) {
+        if (activeEditorViewMode == 0) {
+            computeAndroidCodeCompletions(
+                textBeforeCursor = textBeforeCursor,
+                allWidgets = allWidgets,
+                userFunctions = userFunctions,
+                currentItem = item,
+            )
+        } else {
+            emptyList()
+        }
+    }
+
+    fun applyCompletion(suggestion: IdeCodeCompletionSuggestion) {
+        val text = bodyField.text
+        val cursor = bodyField.selection.start.coerceIn(0, text.length)
+        val before = text.substring(0, cursor)
+        val after = text.substring(cursor)
+
+        // Replace only the member prefix after '.' if dot-completing, otherwise replace the current identifier prefix
+        val replaceStart = if (before.contains('.') &&
+            before.substringAfterLast('.').all { it.isLetterOrDigit() || it == '_' }
+        ) {
+            before.lastIndexOf('.') + 1
+        } else {
+            cursor - before.takeLastWhile { it.isLetterOrDigit() || it == '_' }.length
+        }.coerceAtLeast(0)
+
+        val newText = text.substring(0, replaceStart) + suggestion.insertText + after
+        val newCursor = (replaceStart + suggestion.insertText.length - suggestion.cursorBackOffset)
+            .coerceIn(0, newText.length)
+        bodyField = TextFieldValue(text = newText, selection = TextRange(newCursor))
+        onSaveBodyCode(newText)
+    }
+
+    fun insertSnippetAtCursor(snippet: String, backOffset: Int = 0) {
+        val text = bodyField.text
+        val cursor = bodyField.selection.start.coerceIn(0, text.length)
+        val newText = text.substring(0, cursor) + snippet + text.substring(cursor)
+        val newCursor = (cursor + snippet.length - backOffset).coerceIn(0, newText.length)
+        bodyField = TextFieldValue(text = newText, selection = TextRange(newCursor))
+        onSaveBodyCode(newText)
+    }
+
+    val syntaxTransformation = remember {
+        AndroidCodeSyntaxTransformation(CodeEditorFlavor.KOTLIN_ANDROID)
+    }
+    val verticalScroll = rememberScrollState()
+    val horizontalScroll = rememberScrollState()
+
+    val displayedCode = when (activeEditorViewMode) {
+        1 -> activityKotlinCode
+        2 -> activityJavaCode
+        else -> bodyField.text
+    }
+    val lineCount = remember(displayedCode) { displayedCode.lines().size.coerceAtLeast(1) }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DeepNavy)
+                .safeDrawingPadding(),
+        ) {
+            // 1. Top Header Bar: Back + Event Name + Enable/Disable Toggle (مفعل / غير مفعل) + Reset + Save
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0A1028))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    IconButton(
+                        onClick = {
+                            onSaveBodyCode(bodyField.text)
+                            onBack()
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x1FFFFFFF)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Ink,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = item.subtitle,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                            color = Cyan,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    // Enable / Disable Toggle Chip (مفعل ● يكتب في Activity / غير مفعل ●)
+                    val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (isEnabled) Color(0xFF132E28) else Color(0xFF331420),
+                            )
+                            .border(
+                                1.dp,
+                                dotColor.copy(alpha = 0.75f),
+                                RoundedCornerShape(50),
+                            )
+                            .clickable {
+                                onToggleEnabled(!isEnabled, bodyField.text)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(dotColor),
+                        )
+                        Text(
+                            text = if (isEnabled) "مفعل" else "غير مفعل",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = if (isEnabled) Color(0xFF4ADE80) else Color(0xFFFDA4AF),
+                        )
+                    }
+
+                    // Reset Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF3B0D1E))
+                            .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(50))
+                            .clickable {
+                                val resetCode = onResetBodyCode()
+                                bodyField = TextFieldValue(
+                                    text = resetCode,
+                                    selection = TextRange(resetCode.length),
+                                )
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "Reset",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color(0xFFFDA4AF),
+                        )
+                    }
+
+                    // Save Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Cyan)
+                            .clickable {
+                                onSaveBodyCode(bodyField.text)
+                                onBack()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "Save",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color(0xFF050816),
+                        )
+                    }
+                }
+            }
+
+            // 2. Status Banner + Mode Switcher (كود الـ Event | MainActivity.kt | MainActivity.java)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0D1430))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (isEnabled) {
+                            "● مفعل: يتم كتابة الكود تلقائياً داخل ${xmlPage.activityName} (${xmlPage.xmlFileName})"
+                        } else {
+                            "● غير مفعل: اضغط على (غير مفعل) بالأعلى لتفعيله وكتابة الكود في ${xmlPage.activityName}"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                        color = if (isEnabled) Color(0xFF4ADE80) else Color(0xFFFDA4AF),
+                    )
+                    Text(
+                        text = "android.jar + Functions",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Cyan,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val modes = listOf(
+                        0 to "كود الحدث • Event Editor",
+                        1 to "${xmlPage.activityName}.kt",
+                        2 to "${xmlPage.activityName}.java",
+                    )
+                    modes.forEach { (idx, label) ->
+                        val selected = activeEditorViewMode == idx
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (selected) Cyan.copy(alpha = 0.20f) else Color(0x14FFFFFF),
+                                )
+                                .border(
+                                    1.dp,
+                                    if (selected) Cyan.copy(alpha = 0.75f) else Color(0x22FFFFFF),
+                                    RoundedCornerShape(8.dp),
+                                )
+                                .clickable { activeEditorViewMode = idx }
+                                .padding(vertical = 5.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                ),
+                                color = if (selected) Cyan else Muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Quick Insert Bar: User Functions (الدوال المختارة من المستخدم) + View Widgets + android.jar Classes
+            if (activeEditorViewMode == 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF080D22))
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // User Functions Chips
+                    userFunctions.forEach { fn ->
+                        val callArgs = fn.parameters.joinToString(", ") { it.name }
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF123026))
+                                .border(1.dp, Color(0xFF22C55E).copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                                .clickable {
+                                    insertSnippetAtCursor(
+                                        snippet = "${fn.name}($callArgs)",
+                                        backOffset = if (fn.parameters.isNotEmpty()) 1 else 0,
+                                    )
+                                }
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "fn",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Color(0xFF4ADE80),
+                            )
+                            Text(
+                                text = "${fn.name}(${fn.parameters.joinToString(",") { it.name }})",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = Ink,
+                            )
+                        }
+                    }
+
+                    // Project View Widgets Chips
+                    allWidgets.forEach { w ->
+                        val cls = resolveWidgetAndroidJarFqcn(w.type).substringAfterLast('.')
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF2B2312))
+                                .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                                .clickable {
+                                    insertSnippetAtCursor("findViewById<$cls>(R.id.${w.viewId}).")
+                                }
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "@id/${w.viewId}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = Color(0xFFFBBF24),
+                            )
+                        }
+                    }
+
+                    // Core android.jar Classes Chips
+                    listOf("Toast.", "Intent", "AlertDialog", "View.", "Color.", "Log.", "Handler", "Uri.", "SystemClock.", "Calendar.").forEach { clsToken ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF132246))
+                                .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                .clickable { insertSnippetAtCursor(clsToken) }
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = clsToken,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Cyan,
+                            )
+                        }
+                    }
+                }
+
+                // Quick Symbol Bar
+                val symbols = remember {
+                    listOf("    ", "{", "}", "(", ")", ".", "=", "\"\"", ";", "val ", "var ", "R.id.", "this")
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF06091A))
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    symbols.forEach { sym ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0x1FFFFFFF))
+                                .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(6.dp))
+                                .clickable {
+                                    if (sym == "\"\"") {
+                                        insertSnippetAtCursor("\"\"", backOffset = 1)
+                                    } else {
+                                        insertSnippetAtCursor(sym)
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = if (sym == "    ") "Tab" else sym,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Cyan,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x22FFFFFF)),
+            )
+
+            // 4. Live Android (android.jar) & User Functions Autocomplete Dropdown Panel
+            if (completions.isNotEmpty() && activeEditorViewMode == 0) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 185.dp)
+                        .background(Color(0xFF0D1536))
+                        .border(1.dp, Cyan.copy(alpha = 0.45f))
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                ) {
+                    completions.forEach { suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { applyCompletion(suggestion) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = suggestion.label,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = suggestion.detail,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 9.5.sp,
+                                    ),
+                                    color = Muted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(suggestion.category.color.copy(alpha = 0.16f))
+                                    .border(
+                                        1.dp,
+                                        suggestion.category.color.copy(alpha = 0.55f),
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = suggestion.category.badge,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = suggestion.category.color,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Main Code Editor Area with Line Numbers & Syntax Highlighting
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color(0xFF06091A))
+                    .verticalScroll(verticalScroll)
+                    .padding(vertical = 12.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 10.dp, end = 8.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    for (lineIdx in 1..lineCount) {
+                        Text(
+                            text = lineIdx.toString(),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 12.sp,
+                                lineHeight = 20.sp,
+                            ),
+                            color = Muted.copy(alpha = 0.50f),
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(Color(0x1FFFFFFF)),
+                )
+
+                if (activeEditorViewMode == 0) {
+                    BasicTextField(
+                        value = bodyField,
+                        onValueChange = { updatedField ->
+                            bodyField = updatedField
+                            onSaveBodyCode(updatedField.text)
+                        },
+                        visualTransformation = syntaxTransformation,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.5.sp,
+                            lineHeight = 20.sp,
+                            color = Ink,
+                        ),
+                        cursorBrush = SolidColor(Cyan),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .horizontalScroll(horizontalScroll)
+                            .padding(horizontal = 12.dp),
+                    )
+                } else {
+                    val activityHighlighting = remember(activeEditorViewMode) {
+                        AndroidCodeSyntaxTransformation(
+                            if (activeEditorViewMode == 2) CodeEditorFlavor.JAVA_ANDROID else CodeEditorFlavor.KOTLIN_ANDROID,
+                        )
+                    }
+                    BasicTextField(
+                        value = displayedCode,
+                        onValueChange = {},
+                        readOnly = true,
+                        visualTransformation = activityHighlighting,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            lineHeight = 20.sp,
+                            color = Ink,
+                        ),
+                        cursorBrush = SolidColor(Cyan),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .horizontalScroll(horizontalScroll)
+                            .padding(horizontal = 12.dp),
+                    )
+                }
+            }
         }
     }
 }
