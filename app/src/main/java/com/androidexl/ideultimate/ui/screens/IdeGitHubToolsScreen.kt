@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,9 +37,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -1658,7 +1659,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.Download, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
                     Text(text = "تحميل الفولدر (Download)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
@@ -1765,7 +1766,7 @@ private fun GitHubRepoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.Download, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Cyan, modifier = Modifier.size(20.dp))
                     Text(text = "تحميل الملفات المحددة", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
                 }
 
