@@ -1,5 +1,8 @@
 package com.androidexl.ideultimate.ui.screens
 
+import android.content.Intent
+import androidx.core.content.FileProvider
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -113,6 +116,21 @@ fun IdeTerminalGradleBuildSheet(
 
     fun appendLog(line: String) {
         logOutput = if (logOutput.isBlank()) line else "$logOutput\n$line"
+    }
+
+        fun installApk(filePath: String) {
+        try {
+            val file = File(filePath)
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, file)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "فشل فتح مثبت الحزم: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     fun copyLogToClipboard() {
@@ -289,6 +307,7 @@ fun IdeTerminalGradleBuildSheet(
                     if (foundApk != null && foundApk.exists()) {
                         apkOutputPath = foundApk.absolutePath
                         appendLog("\n🎉 تم العثور على ملف APK بنجاح:\n${foundApk.absolutePath}")
+                        installApk(foundApk.absolutePath)
                     } else {
                         appendLog("\n✓ اكتمل أمر البناء (كود 0)، لكن لم يتم العثور على ملف apk مجمع داخل المشروع. تحقق من المسارات أو الأخطاء في السجل أعلاه.")
                     }
@@ -559,6 +578,39 @@ fun IdeTerminalGradleBuildSheet(
                                 lineHeight = 16.sp,
                             ),
                             color = Color(0xFFE2E8F0),
+                        )
+                    }
+                }
+            }
+
+            if (apkOutputPath != null) {
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
+                        .clickable { installApk(apkOutputPath!!) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = "تثبيت تطبيق APK الآن على الهاتف",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                            ),
+                            color = Color.White,
                         )
                     }
                 }
