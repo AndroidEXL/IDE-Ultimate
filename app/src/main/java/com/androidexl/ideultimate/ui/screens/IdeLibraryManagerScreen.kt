@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -967,7 +966,7 @@ private fun LibraryItemCard(
                     modifier = Modifier.size(32.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Download,
+                        imageVector = IdeIcons.Download,
                         contentDescription = "Download Library",
                         tint = Cyan,
                         modifier = Modifier.size(20.dp),
@@ -1253,7 +1252,7 @@ private fun AddLibraryBottomSheet(
                                     .border(1.dp, Cyan.copy(alpha = 0.4f), CircleShape),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(Icons.Filled.Download, contentDescription = "Download", tint = Cyan, modifier = Modifier.size(18.dp))
+                                Icon(IdeIcons.Download, contentDescription = "Download", tint = Cyan, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
