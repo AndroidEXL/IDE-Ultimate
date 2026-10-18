@@ -182,7 +182,7 @@ fun IdeTerminalGradleBuildSheet(
                 "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
                 "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
                 "Commandline Tools & sdkmanager" to "command -v sdkmanager || [ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ] || [ -f /root/Android/Sdk/cmdline-tools/latest/bin/sdkmanager ]",
-                "Gradle Wrapper & Environment" to "[ -d /root/.gradle ] || [ -f /root/project_build/gradlew ]",
+                "Gradle Engine & Wrapper" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ] || [ -f /root/project_build/gradlew ]",
             )
 
             val results = mutableListOf<AndroidToolStatus>()

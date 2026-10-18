@@ -3492,6 +3492,31 @@ kotlin.code.style=official
             )
         }
 
+        // Vendor standard Gradle Wrapper files if missing
+        runCatching {
+            val gradlewTarget = File(root, "gradlew")
+            if (!gradlewTarget.exists()) {
+                appContext.assets.open("gradle-wrapper/gradlew").use { input ->
+                    gradlewTarget.outputStream().use { output -> input.copyTo(output) }
+                }
+                gradlewTarget.setExecutable(true, false)
+            }
+            val wrapperJarTarget = File(root, "gradle/wrapper/gradle-wrapper.jar")
+            if (!wrapperJarTarget.exists()) {
+                wrapperJarTarget.parentFile?.mkdirs()
+                appContext.assets.open("gradle-wrapper/gradle/wrapper/gradle-wrapper.jar").use { input ->
+                    wrapperJarTarget.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            val wrapperPropsTarget = File(root, "gradle/wrapper/gradle-wrapper.properties")
+            if (!wrapperPropsTarget.exists()) {
+                wrapperPropsTarget.parentFile?.mkdirs()
+                appContext.assets.open("gradle-wrapper/gradle/wrapper/gradle-wrapper.properties").use { input ->
+                    wrapperPropsTarget.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
+
         // Sync any existing external files from /storage/emulated/0/.IDE Ultimate/<project>
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
