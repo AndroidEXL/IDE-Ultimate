@@ -169,25 +169,27 @@ fun IdeGitHubActionsRunScreen(
                     val res = engine.downloadArtifactZip(apkArtifact.archiveDownloadUrl, zipFile) { prg ->
                         apkDownloadProgress = prg
                     }
-                    res.getOrThrow()
-
-                    // Extract APK from zip
-                    ZipInputStream(zipFile.inputStream()).use { zis ->
-                        var entry = zis.nextEntry
-                        while (entry != null) {
-                            if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
-                                targetApk.parentFile?.mkdirs()
-                                FileOutputStream(targetApk).use { fos ->
-                                    val b = ByteArray(8192)
-                                    var r: Int
-                                    while (zis.read(b).also { r = it } != -1) {
-                                        fos.write(b, 0, r)
+                    if (res.isSuccess) {
+                        // Extract APK from zip
+                        runCatching {
+                            ZipInputStream(zipFile.inputStream()).use { zis ->
+                                var entry = zis.nextEntry
+                                while (entry != null) {
+                                    if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
+                                        targetApk.parentFile?.mkdirs()
+                                        FileOutputStream(targetApk).use { fos ->
+                                            val b = ByteArray(8192)
+                                            var r: Int
+                                            while (zis.read(b).also { r = it } != -1) {
+                                                fos.write(b, 0, r)
+                                            }
+                                        }
+                                        extractedFile = targetApk
+                                        break
                                     }
+                                    entry = zis.nextEntry
                                 }
-                                extractedFile = targetApk
-                                break
                             }
-                            entry = zis.nextEntry
                         }
                     }
                 }
@@ -610,9 +612,10 @@ fun IdeGitHubActionsRunScreen(
                     }
                 }
 
-                // Success Banner with APK Download & Install
+                // Prominent APK Download & Install Banner
                 val isSuccess = detail.conclusion == "success" || detail.status == "success"
-                if (isSuccess || detail.artifacts.isNotEmpty()) {
+                val hasApkArtifact = detail.artifacts.any { it.name.contains("apk", ignoreCase = true) }
+                if (isSuccess || hasApkArtifact || detail.artifacts.isNotEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -681,18 +684,29 @@ fun IdeGitHubActionsRunScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color(0xFF10B981))
                                         .clickable { downloadAndInstallBuiltApk() }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        .padding(horizontal = 14.dp, vertical = 8.dp),
                                 ) {
                                     Text(
                                         text = "تحميل وتثبيت APK",
-                                        style = MaterialTheme.typography.labelSmall.copy(
+                                        style = MaterialTheme.typography.labelMedium.copy(
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
+                                            fontSize = 12.sp,
                                         ),
                                         color = Color(0xFF042215),
                                     )
                                 }
                             }
+                        }
+                        if (downloadStatusText.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = downloadStatusText,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                ),
+                                color = Color(0xFFA7F3D0),
+                            )
                         }
                     }
                 }
@@ -703,7 +717,6 @@ fun IdeGitHubActionsRunScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

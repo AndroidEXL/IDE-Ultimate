@@ -213,11 +213,15 @@ fun IdeTerminalGradleBuildSheet(
                 context,
                 installScript,
                 timeoutSec = 1200,
+                onOutputLine = { line ->
+                    coroutineScope.launch(Dispatchers.Main) {
+                        appendLog(line)
+                    }
+                },
             )
 
             withContext(Dispatchers.Main) {
                 isInstallingTools = false
-                appendLog(output)
                 if (rc == 0) {
                     appendLog("\n✓ تم تثبيت بيئة وأدوات البناء بنجاح!")
                     checkToolsEnvironment()
@@ -268,11 +272,15 @@ fun IdeTerminalGradleBuildSheet(
                 buildScript,
                 timeoutSec = 1800,
                 extraBind = projectRoot.absolutePath to "/root/project_build",
+                onOutputLine = { line ->
+                    coroutineScope.launch(Dispatchers.Main) {
+                        appendLog(line)
+                    }
+                },
             )
 
             withContext(Dispatchers.Main) {
                 isBuilding = false
-                appendLog(output)
                 if (rc == 0) {
                     buildSuccess = true
                     currentTaskName = "اكتمل البناء بنجاح ✓"

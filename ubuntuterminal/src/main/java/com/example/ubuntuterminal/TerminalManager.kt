@@ -555,7 +555,8 @@ object TerminalManager {
      */
     fun execInUbuntu(
         app: Context, command: String, timeoutSec: Long = 600L,
-        extraBind: Pair<String, String>? = null
+        extraBind: Pair<String, String>? = null,
+        onOutputLine: ((String) -> Unit)? = null
     ): Pair<Int, String> {
         return try {
             val rootfs = Installer.rootfsDir(app)
@@ -609,7 +610,10 @@ object TerminalManager {
             val sb = StringBuilder()
             val reader = Thread {
                 runCatching {
-                    proc.inputStream.bufferedReader().forEachLine { sb.append(it).append('\n') }
+                    proc.inputStream.bufferedReader().forEachLine { line ->
+                        sb.append(line).append('\n')
+                        onOutputLine?.invoke(line)
+                    }
                 }
             }.apply { isDaemon = true; name = "ut-exec-reader"; start() }
             val done = proc.waitFor(timeoutSec, java.util.concurrent.TimeUnit.SECONDS)
