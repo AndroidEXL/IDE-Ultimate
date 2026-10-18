@@ -45,7 +45,6 @@ jobs:
             yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
               --install "platforms;android-35" "build-tools;35.0.0"
           fi
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -56,7 +55,6 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log
-
       - name: Upload unit test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -88,7 +86,6 @@ jobs:
             jq -Rs '{body: ("### ❌ Gradle build log\n```\n" + (.[-12000:]) + "\n```")}' build.log > /tmp/payload.json
             gh api --method POST "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" --input /tmp/payload.json || true
           fi
-
       - name: Collect APKs
         run: |
           mkdir -p dist
@@ -99,7 +96,6 @@ jobs:
           cd dist
           sha256sum *.apk | tee checksums.txt
           ls -lh
-
       - name: Verify packaged version
         run: |
           SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -107,7 +103,6 @@ jobs:
           EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
           EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
           echo "Gradle: versionName=$EXPECTED_NAME versionCode=$EXPECTED_CODE"
-
           for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
             BADGING="$("$AAPT2" dump badging "$apk" 2>/dev/null | head -1)"
             NAME=$(printf '%s' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
@@ -119,7 +114,6 @@ jobs:
               exit 1
             fi
           done
-
       - name: Verify APK signatures
         run: |
           SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -130,25 +124,20 @@ jobs:
             exit 1
           fi
           echo "apksigner: $APKSIGNER"
-
           DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
           RELEASE_APK=app/build/outputs/apk/release/app-release.apk
-
           DEBUG_OUT="$("$APKSIGNER" verify --print-certs "$DEBUG_APK" 2>&1 || true)"
           RELEASE_OUT="$("$APKSIGNER" verify --print-certs "$RELEASE_APK" 2>&1 || true)"
-
           echo "--- debug ---"
           echo "$DEBUG_OUT"
           echo "--- release ---"
           echo "$RELEASE_OUT"
-
           # apksigner prints "Signer #1 certificate SHA-256 digest: …" for v1
           # and "V2 Signer: certificate SHA-256 digest: …" for v2+, so match both.
           DEBUG_SHA="$(printf '%s\n' "$DEBUG_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
           RELEASE_SHA="$(printf '%s\n' "$RELEASE_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
           echo "debug=$DEBUG_SHA"
           echo "release=$RELEASE_SHA"
-
           if [ -z "$DEBUG_SHA" ] || [ -z "$RELEASE_SHA" ]; then
             echo "::error title=Signing::Could not read the certificate digest from one of the APKs"
             printf '%s\n' "$DEBUG_OUT" | head -12 | while IFS= read -r line; do
@@ -163,19 +152,16 @@ jobs:
             echo "::error title=Signing::Debug ($DEBUG_SHA) and release ($RELEASE_SHA) use different keys"
             exit 1
           fi
-
           {
             echo ""
             echo "Signing certificate SHA-256: \`$DEBUG_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Verify APK contents
         run: |
           python3 - <<'PY'
           import glob
           import sys
           import zipfile
-
           ok = True
           for apk in sorted(glob.glob("app/build/outputs/apk/*/*.apk")):
               with zipfile.ZipFile(apk) as bundle:
@@ -192,7 +178,6 @@ jobs:
                   ok = False
           sys.exit(0 if ok else 1)
           PY
-
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -216,7 +201,6 @@ jobs:
             echo ""
             echo "Download the APK from the **Artifacts** section of this run."
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Publish GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
