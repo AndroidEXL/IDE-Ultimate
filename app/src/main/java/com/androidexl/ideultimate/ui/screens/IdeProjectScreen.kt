@@ -6505,6 +6505,7 @@ private fun SketchPropertySquareCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SketchEventSquareCard(
     label: String,
@@ -6525,17 +6526,20 @@ private fun SketchEventSquareCard(
             .clip(shape)
             .background(bgColor)
             .border(1.dp, borderColor, shape)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onToggleDot,
+            )
             .padding(horizontal = 6.dp, vertical = 7.dp),
     ) {
         // Status Dot at Top-End: Green when enabled (مفعل), Red when disabled (غير مفعل)
+        // Tapping anywhere on the card (including the dot) opens the Event Code Editor; long-press toggles enabled state
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(16.dp)
                 .clip(CircleShape)
-                .background(dotColor.copy(alpha = 0.25f))
-                .clickable(onClick = onToggleDot),
+                .background(dotColor.copy(alpha = 0.25f)),
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -7711,47 +7715,158 @@ private fun IdeLogicEventWorkspace(
                         onLongClick = { longPressedItem = item },
                     )
                 }
+
+                // In Logic -> View, also display all View widgets and their events so clicking any widget's event opens the Event Code Editor directly!
+                if (activeSection == IdeLogicSection.VIEW) {
+                    if (allViewWidgets.isEmpty() && filteredItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF141E42))
+                                .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                .padding(18.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "أضف عناصر في صفحة View أولاً لتظهر أحداثها هنا أو من تبويب Event أسفل العنصر.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    } else if (allViewWidgets.isNotEmpty()) {
+                        Text(
+                            text = "عناصر صفحة View (${allViewWidgets.size}) — اضغط على أي حدث لفتح محرر الكود:",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Cyan,
+                        )
+                        allViewWidgets.forEach { wNode ->
+                            val widgetEvents = remember(wNode.type) {
+                                getEventsForWidgetType(wNode.type)
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF121B3A))
+                                    .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(16.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    SketchWidgetIcon(type = wNode.type, tint = Cyan)
+                                    Text(
+                                        text = "${wNode.viewId} (${wNode.type.displayName})",
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        color = Cyan,
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    widgetEvents.forEach { evOpt ->
+                                        val eventName = "${wNode.viewId}: ${evOpt.eventKey}"
+                                        val existing = logicItems.firstOrNull {
+                                            it.section == IdeLogicSection.VIEW &&
+                                                it.targetViewId == wNode.viewId &&
+                                                it.name == eventName
+                                        }
+                                        val isEnabled = existing != null
+                                        SketchEventSquareCard(
+                                            label = evOpt.cardLabel,
+                                            isEnabled = isEnabled,
+                                            onClick = {
+                                                if (existing != null) {
+                                                    onOpenEventEditor(existing)
+                                                } else {
+                                                    val newItem = IdeLogicItem(
+                                                        section = IdeLogicSection.VIEW,
+                                                        name = eventName,
+                                                        subtitle = "${wNode.type.displayName} (@+id/${wNode.viewId}) • ${evOpt.subtitle}",
+                                                        targetViewId = wNode.viewId,
+                                                        bodyCode = defaultCodeForWidgetEvent(wNode, evOpt),
+                                                    )
+                                                    onUpdateLogicItems(logicItems + newItem)
+                                                    onOpenEventEditor(newItem)
+                                                }
+                                            },
+                                            onToggleDot = {
+                                                if (existing != null) {
+                                                    onUpdateLogicItems(logicItems.filterNot { it.id == existing.id })
+                                                } else {
+                                                    val newItem = IdeLogicItem(
+                                                        section = IdeLogicSection.VIEW,
+                                                        name = eventName,
+                                                        subtitle = "${wNode.type.displayName} (@+id/${wNode.viewId}) • ${evOpt.subtitle}",
+                                                        targetViewId = wNode.viewId,
+                                                        bodyCode = defaultCodeForWidgetEvent(wNode, evOpt),
+                                                    )
+                                                    onUpdateLogicItems(logicItems + newItem)
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // 3. Rounded-Square Floating Action Button (+) at Bottom-End
-        // Hidden in VIEW section because View events are toggled directly from each widget's Event tab in View!
-        if (activeSection != IdeLogicSection.VIEW) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 18.dp, bottom = 18.dp)
-                    .size(58.dp)
-                    .shadow(10.dp, RoundedCornerShape(18.dp))
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFF283A75), Color(0xFF364F9C)),
-                        ),
-                    )
-                    .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-                    .clickable {
-                        when (activeSection) {
-                            IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
-                            IdeLogicSection.FUNCTIONS -> {
-                                editingFunctionItem = null
-                                showFunctionSheet = true
-                            }
-                            IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
-                                showAddComponentOrDrawerSheet = true
-                            }
-                            IdeLogicSection.VIEW -> {}
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = "Add Event or Function",
-                    tint = Color.White,
-                    modifier = Modifier.size(26.dp),
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = 18.dp)
+                .size(58.dp)
+                .shadow(10.dp, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF283A75), Color(0xFF364F9C)),
+                    ),
                 )
-            }
+                .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                .clickable {
+                    when (activeSection) {
+                        IdeLogicSection.ACTIVITY -> showAddActivitySheet = true
+                        IdeLogicSection.FUNCTIONS -> {
+                            editingFunctionItem = null
+                            showFunctionSheet = true
+                        }
+                        IdeLogicSection.COMPONENT, IdeLogicSection.DRAWER -> {
+                            showAddComponentOrDrawerSheet = true
+                        }
+                        IdeLogicSection.VIEW -> {
+                            preselectedViewNodeForSheet = null
+                            showAddViewSheet = true
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Add Event or Function",
+                tint = Color.White,
+                modifier = Modifier.size(26.dp),
+            )
         }
     }
 
@@ -7815,8 +7930,10 @@ private fun IdeLogicEventWorkspace(
                         it.targetViewId == widgetNode.viewId &&
                         it.name == eventName
                 }
+                showAddViewSheet = false
+                preselectedViewNodeForSheet = null
                 if (existing != null) {
-                    onUpdateLogicItems(logicItems.filterNot { it.id == existing.id })
+                    onOpenEventEditor(existing)
                 } else {
                     val newItem = IdeLogicItem(
                         section = IdeLogicSection.VIEW,
@@ -7826,6 +7943,7 @@ private fun IdeLogicEventWorkspace(
                         bodyCode = defaultCodeForWidgetEvent(widgetNode, eventOpt),
                     )
                     onUpdateLogicItems(logicItems + newItem)
+                    onOpenEventEditor(newItem)
                 }
             },
             onDismiss = {
@@ -9510,14 +9628,16 @@ private fun IdeEventCodeEditorPage(
     }
     // 0 = Event Editor (محرر الحدث), 1 = Activity Kotlin, 2 = Activity Java
     var activeEditorViewMode by remember { mutableStateOf(0) }
+    // Autocomplete popup stays hidden on initial page load and only appears when the user types or inserts a dot token
+    var showAutocomplete by remember(item.id) { mutableStateOf(false) }
 
     val textBeforeCursor = remember(bodyField.text, bodyField.selection.start) {
         val cursor = bodyField.selection.start.coerceIn(0, bodyField.text.length)
         bodyField.text.substring(0, cursor)
     }
 
-    val completions = remember(textBeforeCursor, allWidgets, userFunctions, item) {
-        if (activeEditorViewMode == 0) {
+    val completions = remember(textBeforeCursor, allWidgets, userFunctions, item, showAutocomplete, activeEditorViewMode) {
+        if (activeEditorViewMode == 0 && showAutocomplete) {
             computeAndroidCodeCompletions(
                 textBeforeCursor = textBeforeCursor,
                 allWidgets = allWidgets,
@@ -9547,6 +9667,7 @@ private fun IdeEventCodeEditorPage(
         val newText = text.substring(0, replaceStart) + suggestion.insertText + after
         val newCursor = (replaceStart + suggestion.insertText.length - suggestion.cursorBackOffset)
             .coerceIn(0, newText.length)
+        showAutocomplete = suggestion.insertText.endsWith(".")
         bodyField = TextFieldValue(text = newText, selection = TextRange(newCursor))
         onSaveBodyCode(newText)
     }
@@ -9556,6 +9677,7 @@ private fun IdeEventCodeEditorPage(
         val cursor = bodyField.selection.start.coerceIn(0, text.length)
         val newText = text.substring(0, cursor) + snippet + text.substring(cursor)
         val newCursor = (cursor + snippet.length - backOffset).coerceIn(0, newText.length)
+        showAutocomplete = snippet.endsWith(".")
         bodyField = TextFieldValue(text = newText, selection = TextRange(newCursor))
         onSaveBodyCode(newText)
     }
@@ -9564,7 +9686,6 @@ private fun IdeEventCodeEditorPage(
         AndroidCodeSyntaxTransformation(CodeEditorFlavor.KOTLIN_ANDROID)
     }
     val verticalScroll = rememberScrollState()
-    val horizontalScroll = rememberScrollState()
 
     val displayedCode = when (activeEditorViewMode) {
         1 -> activityKotlinCode
@@ -9572,6 +9693,7 @@ private fun IdeEventCodeEditorPage(
         else -> bodyField.text
     }
     val lineCount = remember(displayedCode) { displayedCode.lines().size.coerceAtLeast(1) }
+    val displayLineRows = remember(lineCount) { maxOf(lineCount, 24) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Column(
@@ -9580,363 +9702,175 @@ private fun IdeEventCodeEditorPage(
                 .background(DeepNavy)
                 .safeDrawingPadding(),
         ) {
-            // 1. Top Header Bar: Back + Event Name + Enable/Disable Toggle (مفعل / غير مفعل) + Reset + Save
+            // 1. Compact Harmonious Top Bar: Back + Title/Activity + Enable/Disable Toggle + Reset + Save
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF0A1028))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
+                IconButton(
+                    onClick = {
+                        onSaveBodyCode(bodyField.text)
+                        onBack()
+                    },
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1FFFFFFF)),
                 ) {
-                    IconButton(
-                        onClick = {
-                            onSaveBodyCode(bodyField.text)
-                            onBack()
-                        },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x1FFFFFFF)),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Ink,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.name,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = item.subtitle,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                            color = Cyan,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Ink,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
 
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "${xmlPage.activityName} • ${item.subtitle}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = Cyan,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                // Enable / Disable Toggle Chip (مفعل ● / غير مفعل ●)
+                val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
                 Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (isEnabled) Color(0xFF132E28) else Color(0xFF331420))
+                        .border(1.dp, dotColor.copy(alpha = 0.75f), RoundedCornerShape(50))
+                        .clickable { onToggleEnabled(!isEnabled, bodyField.text) }
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    // Enable / Disable Toggle Chip (مفعل ● يكتب في Activity / غير مفعل ●)
-                    val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (isEnabled) Color(0xFF132E28) else Color(0xFF331420),
-                            )
-                            .border(
-                                1.dp,
-                                dotColor.copy(alpha = 0.75f),
-                                RoundedCornerShape(50),
-                            )
-                            .clickable {
-                                onToggleEnabled(!isEnabled, bodyField.text)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(dotColor),
-                        )
-                        Text(
-                            text = if (isEnabled) "مفعل" else "غير مفعل",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = if (isEnabled) Color(0xFF4ADE80) else Color(0xFFFDA4AF),
-                        )
-                    }
-
-                    // Reset Button
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xFF3B0D1E))
-                            .border(1.dp, Color(0xFFF43F5E), RoundedCornerShape(50))
-                            .clickable {
-                                val resetCode = onResetBodyCode()
-                                bodyField = TextFieldValue(
-                                    text = resetCode,
-                                    selection = TextRange(resetCode.length),
-                                )
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = "Reset",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Color(0xFFFDA4AF),
-                        )
-                    }
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(dotColor),
+                    )
+                    Text(
+                        text = if (isEnabled) "مفعل" else "غير مفعل",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = if (isEnabled) Color(0xFF4ADE80) else Color(0xFFFDA4AF),
+                        maxLines = 1,
+                    )
+                }
 
-                    // Save Button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Cyan)
-                            .clickable {
-                                onSaveBodyCode(bodyField.text)
-                                onBack()
-                            }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = "Save",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Color(0xFF050816),
+                // Compact Reset Icon Button
+                IconButton(
+                    onClick = {
+                        val resetCode = onResetBodyCode()
+                        showAutocomplete = false
+                        bodyField = TextFieldValue(
+                            text = resetCode,
+                            selection = TextRange(resetCode.length),
                         )
-                    }
+                    },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF3B0D1E))
+                        .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.75f), CircleShape),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Reset",
+                        tint = Color(0xFFFDA4AF),
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+
+                // Save Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Cyan)
+                        .clickable {
+                            onSaveBodyCode(bodyField.text)
+                            onBack()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = "Save",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Color(0xFF050816),
+                        maxLines = 1,
+                    )
                 }
             }
 
-            // 2. Status Banner + Mode Switcher (كود الـ Event | MainActivity.kt | MainActivity.java)
-            Column(
+            // 2. Clean 3-Tab Mode Selector Bar (Event Code | MainActivity.kt | MainActivity.java)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF0D1430))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = if (isEnabled) {
-                            "● مفعل: يتم كتابة الكود تلقائياً داخل ${xmlPage.activityName} (${xmlPage.xmlFileName})"
-                        } else {
-                            "● غير مفعل: اضغط على (غير مفعل) بالأعلى لتفعيله وكتابة الكود في ${xmlPage.activityName}"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                        color = if (isEnabled) Color(0xFF4ADE80) else Color(0xFFFDA4AF),
-                    )
-                    Text(
-                        text = "android.jar + Functions",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = Cyan,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val modes = listOf(
-                        0 to "كود الحدث • Event Editor",
-                        1 to "${xmlPage.activityName}.kt",
-                        2 to "${xmlPage.activityName}.java",
-                    )
-                    modes.forEach { (idx, label) ->
-                        val selected = activeEditorViewMode == idx
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (selected) Cyan.copy(alpha = 0.20f) else Color(0x14FFFFFF),
-                                )
-                                .border(
-                                    1.dp,
-                                    if (selected) Cyan.copy(alpha = 0.75f) else Color(0x22FFFFFF),
-                                    RoundedCornerShape(8.dp),
-                                )
-                                .clickable { activeEditorViewMode = idx }
-                                .padding(vertical = 5.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                ),
-                                color = if (selected) Cyan else Muted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                val modes = listOf(
+                    0 to "كود الحدث • Event",
+                    1 to "${xmlPage.activityName}.kt",
+                    2 to "${xmlPage.activityName}.java",
+                )
+                modes.forEach { (idx, label) ->
+                    val selected = activeEditorViewMode == idx
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) Cyan.copy(alpha = 0.20f) else Color(0x14FFFFFF))
+                            .border(
+                                1.dp,
+                                if (selected) Cyan.copy(alpha = 0.75f) else Color(0x22FFFFFF),
+                                RoundedCornerShape(8.dp),
                             )
-                        }
-                    }
-                }
-            }
-
-            // 3. Quick Insert Bar: User Functions (الدوال المختارة من المستخدم) + View Widgets + android.jar Classes
-            if (activeEditorViewMode == 0) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF080D22))
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // User Functions Chips
-                    userFunctions.forEach { fn ->
-                        val callArgs = fn.parameters.joinToString(", ") { it.name }
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF123026))
-                                .border(1.dp, Color(0xFF22C55E).copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-                                .clickable {
-                                    insertSnippetAtCursor(
-                                        snippet = "${fn.name}($callArgs)",
-                                        backOffset = if (fn.parameters.isNotEmpty()) 1 else 0,
-                                    )
-                                }
-                                .padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = "fn",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                                color = Color(0xFF4ADE80),
-                            )
-                            Text(
-                                text = "${fn.name}(${fn.parameters.joinToString(",") { it.name }})",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                                color = Ink,
-                            )
-                        }
-                    }
-
-                    // Project View Widgets Chips
-                    allWidgets.forEach { w ->
-                        val cls = resolveWidgetAndroidJarFqcn(w.type).substringAfterLast('.')
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF2B2312))
-                                .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.55f), RoundedCornerShape(8.dp))
-                                .clickable {
-                                    insertSnippetAtCursor("findViewById<$cls>(R.id.${w.viewId}).")
-                                }
-                                .padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = "@id/${w.viewId}",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                                color = Color(0xFFFBBF24),
-                            )
-                        }
-                    }
-
-                    // Core android.jar Classes Chips
-                    listOf("Toast.", "Intent", "AlertDialog", "View.", "Color.", "Log.", "Handler", "Uri.", "SystemClock.", "Calendar.").forEach { clsToken ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF132246))
-                                .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
-                                .clickable { insertSnippetAtCursor(clsToken) }
-                                .padding(horizontal = 9.dp, vertical = 4.dp),
-                        ) {
-                            Text(
-                                text = clsToken,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                                color = Cyan,
-                            )
-                        }
-                    }
-                }
-
-                // Quick Symbol Bar
-                val symbols = remember {
-                    listOf("    ", "{", "}", "(", ")", ".", "=", "\"\"", ";", "val ", "var ", "R.id.", "this")
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF06091A))
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    symbols.forEach { sym ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0x1FFFFFFF))
-                                .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(6.dp))
-                                .clickable {
-                                    if (sym == "\"\"") {
-                                        insertSnippetAtCursor("\"\"", backOffset = 1)
-                                    } else {
-                                        insertSnippetAtCursor(sym)
-                                    }
-                                }
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            Text(
-                                text = if (sym == "    ") "Tab" else sym,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                                color = Cyan,
-                            )
-                        }
+                            .clickable {
+                                activeEditorViewMode = idx
+                                showAutocomplete = false
+                            }
+                            .padding(vertical = 5.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            ),
+                            color = if (selected) Cyan else Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -9948,154 +9882,357 @@ private fun IdeEventCodeEditorPage(
                     .background(Color(0x22FFFFFF)),
             )
 
-            // 4. Live Android (android.jar) & User Functions Autocomplete Dropdown Panel
-            if (completions.isNotEmpty() && activeEditorViewMode == 0) {
-                Column(
+            // 3. Full-Screen Code Editor Area (takes all central height; Autocomplete floats inside without shrinking editor!)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color(0xFF06091A)),
+            ) {
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 185.dp)
-                        .background(Color(0xFF0D1536))
-                        .border(1.dp, Cyan.copy(alpha = 0.45f))
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 4.dp),
+                        .fillMaxSize()
+                        .verticalScroll(verticalScroll)
+                        .padding(vertical = 10.dp),
                 ) {
-                    completions.forEach { suggestion ->
+                    // Line Numbers Gutter
+                    Column(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .padding(end = 8.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) {
+                        for (lineIdx in 1..displayLineRows) {
+                            Text(
+                                text = lineIdx.toString(),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 12.sp,
+                                    lineHeight = 20.sp,
+                                ),
+                                color = if (lineIdx <= lineCount) Muted.copy(alpha = 0.65f) else Muted.copy(alpha = 0.22f),
+                            )
+                        }
+                    }
+
+                    // Gutter Divider Line (bounded height matching line rows so it never distorts verticalScroll)
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height((displayLineRows * 20).dp)
+                            .background(Color(0x22FFFFFF)),
+                    )
+
+                    // Full-Width Code Text Field
+                    if (activeEditorViewMode == 0) {
+                        BasicTextField(
+                            value = bodyField,
+                            onValueChange = { updatedField ->
+                                val textChanged = updatedField.text != bodyField.text
+                                bodyField = updatedField
+                                if (textChanged) {
+                                    showAutocomplete = true
+                                    onSaveBodyCode(updatedField.text)
+                                }
+                            },
+                            visualTransformation = syntaxTransformation,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp,
+                                color = Ink,
+                            ),
+                            cursorBrush = SolidColor(Cyan),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = (displayLineRows * 20).dp)
+                                .padding(horizontal = 12.dp),
+                        )
+                    } else {
+                        val activityHighlighting = remember(activeEditorViewMode) {
+                            AndroidCodeSyntaxTransformation(
+                                if (activeEditorViewMode == 2) CodeEditorFlavor.JAVA_ANDROID else CodeEditorFlavor.KOTLIN_ANDROID,
+                            )
+                        }
+                        BasicTextField(
+                            value = displayedCode,
+                            onValueChange = {},
+                            readOnly = true,
+                            visualTransformation = activityHighlighting,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 12.5.sp,
+                                lineHeight = 20.sp,
+                                color = Ink,
+                            ),
+                            cursorBrush = SolidColor(Cyan),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = (displayLineRows * 20).dp)
+                                .padding(horizontal = 12.dp),
+                        )
+                    }
+                }
+
+                // Floating Compact Autocomplete Popup (only while actively typing, max 128dp, with dismiss button)
+                if (completions.isNotEmpty() && activeEditorViewMode == 0 && showAutocomplete) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 128.dp)
+                            .shadow(10.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0E173B))
+                            .border(1.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(12.dp)),
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { applyCompletion(suggestion) }
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                .background(Color(0xFF09102A))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = suggestion.label,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                    color = Ink,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = suggestion.detail,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 9.5.sp,
-                                    ),
-                                    color = Muted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Box(
+                            Text(
+                                text = "android.jar + Functions (${completions.size})",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Cyan,
+                            )
+                            Text(
+                                text = "إغلاق ✕",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Muted,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(suggestion.category.color.copy(alpha = 0.16f))
-                                    .border(
-                                        1.dp,
-                                        suggestion.category.color.copy(alpha = 0.55f),
-                                        RoundedCornerShape(6.dp),
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            ) {
-                                Text(
-                                    text = suggestion.category.badge,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                    color = suggestion.category.color,
-                                )
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { showAutocomplete = false }
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                        ) {
+                            completions.forEach { suggestion ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { applyCompletion(suggestion) }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = suggestion.label,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = suggestion.detail,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 9.sp,
+                                            ),
+                                            color = Muted,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(suggestion.category.color.copy(alpha = 0.16f))
+                                            .border(
+                                                1.dp,
+                                                suggestion.category.color.copy(alpha = 0.55f),
+                                                RoundedCornerShape(6.dp),
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            text = suggestion.category.badge,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = suggestion.category.color,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 5. Main Code Editor Area with Line Numbers & Syntax Highlighting
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color(0xFF06091A))
-                    .verticalScroll(verticalScroll)
-                    .padding(vertical = 12.dp),
-            ) {
+            // 4. Compact Bottom Quick-Insert & Symbol Bar (pinned cleanly at the bottom above keyboard)
+            if (activeEditorViewMode == 0) {
                 Column(
-                    modifier = Modifier.padding(start = 10.dp, end = 8.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    for (lineIdx in 1..lineCount) {
-                        Text(
-                            text = lineIdx.toString(),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 12.sp,
-                                lineHeight = 20.sp,
-                            ),
-                            color = Muted.copy(alpha = 0.50f),
-                        )
-                    }
-                }
-
-                Box(
                     modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(Color(0x1FFFFFFF)),
-                )
+                        .fillMaxWidth()
+                        .background(Color(0xFF080D22))
+                        .imePadding(),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(Color(0x22FFFFFF)),
+                    )
+                    // Row A: User Functions + View Widgets + android.jar Quick Chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        userFunctions.forEach { fn ->
+                            val callArgs = fn.parameters.joinToString(", ") { it.name }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(Color(0xFF123026))
+                                    .border(1.dp, Color(0xFF22C55E).copy(alpha = 0.65f), RoundedCornerShape(7.dp))
+                                    .clickable {
+                                        insertSnippetAtCursor(
+                                            snippet = "${fn.name}($callArgs)",
+                                            backOffset = if (fn.parameters.isNotEmpty()) 1 else 0,
+                                        )
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = "fn",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Color(0xFF4ADE80),
+                                )
+                                Text(
+                                    text = "${fn.name}(${fn.parameters.joinToString(",") { it.name }})",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                    color = Ink,
+                                )
+                            }
+                        }
 
-                if (activeEditorViewMode == 0) {
-                    BasicTextField(
-                        value = bodyField,
-                        onValueChange = { updatedField ->
-                            bodyField = updatedField
-                            onSaveBodyCode(updatedField.text)
-                        },
-                        visualTransformation = syntaxTransformation,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 12.5.sp,
-                            lineHeight = 20.sp,
-                            color = Ink,
-                        ),
-                        cursorBrush = SolidColor(Cyan),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .horizontalScroll(horizontalScroll)
-                            .padding(horizontal = 12.dp),
-                    )
-                } else {
-                    val activityHighlighting = remember(activeEditorViewMode) {
-                        AndroidCodeSyntaxTransformation(
-                            if (activeEditorViewMode == 2) CodeEditorFlavor.JAVA_ANDROID else CodeEditorFlavor.KOTLIN_ANDROID,
-                        )
+                        allWidgets.forEach { w ->
+                            val cls = resolveWidgetAndroidJarFqcn(w.type).substringAfterLast('.')
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(Color(0xFF2B2312))
+                                    .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.55f), RoundedCornerShape(7.dp))
+                                    .clickable {
+                                        insertSnippetAtCursor("findViewById<$cls>(R.id.${w.viewId}).")
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "@id/${w.viewId}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                    color = Color(0xFFFBBF24),
+                                )
+                            }
+                        }
+
+                        listOf("Toast.", "Intent", "AlertDialog", "View.", "Color.", "Log.", "Handler", "Uri.", "SystemClock.", "Calendar.").forEach { clsToken ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(Color(0xFF132246))
+                                    .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(7.dp))
+                                    .clickable { insertSnippetAtCursor(clsToken) }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            ) {
+                                Text(
+                                    text = clsToken,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+                        }
                     }
-                    BasicTextField(
-                        value = displayedCode,
-                        onValueChange = {},
-                        readOnly = true,
-                        visualTransformation = activityHighlighting,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 12.sp,
-                            lineHeight = 20.sp,
-                            color = Ink,
-                        ),
-                        cursorBrush = SolidColor(Cyan),
+
+                    // Row B: Quick Symbol Bar
+                    val symbols = remember {
+                        listOf("    ", "{", "}", "(", ")", ".", "=", "\"\"", ";", "val ", "var ", "R.id.", "this")
+                    }
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .horizontalScroll(horizontalScroll)
-                            .padding(horizontal = 12.dp),
-                    )
+                            .fillMaxWidth()
+                            .background(Color(0xFF06091A))
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        symbols.forEach { sym ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0x1FFFFFFF))
+                                    .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        if (sym == "\"\"") {
+                                            insertSnippetAtCursor("\"\"", backOffset = 1)
+                                        } else {
+                                            insertSnippetAtCursor(sym)
+                                        }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            ) {
+                                Text(
+                                    text = if (sym == "    ") "Tab" else sym,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                    color = Cyan,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
