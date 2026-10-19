@@ -41,10 +41,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -102,11 +102,6 @@ fun IdeTerminalGradleBuildSheet(
     val repository = remember { WorkspaceRepository(context) }
     var isBuilding by remember { mutableStateOf(false) }
     var isInstallingTools by remember { mutableStateOf(false) }
-
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true,
-        confirmValueChange = { false },
-    )
 
     BackHandler(enabled = true) {
         if (!isBuilding && !isInstallingTools) {
@@ -428,21 +423,29 @@ fun IdeTerminalGradleBuildSheet(
         logScrollState.animateScrollTo(logScrollState.maxValue)
     }
 
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = {},
-        sheetState = sheetState,
-        dragHandle = null,
-        containerColor = Color(0xFF070B1E),
-        contentColor = Ink,
-        scrimColor = Color(0xD903060F),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .fillMaxSize()
+                .background(Color(0xD903060F)),
+            contentAlignment = Alignment.BottomCenter,
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.92f)
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(Color(0xFF070B1E))
+                    .border(1.dp, Color(0x2B00E5FF), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
             // Header Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -771,4 +774,5 @@ fun IdeTerminalGradleBuildSheet(
             Spacer(Modifier.height(4.dp))
         }
     }
+}
 }
