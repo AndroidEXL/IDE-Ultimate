@@ -1,5 +1,6 @@
 package com.androidexl.ideultimate.ui.screens
 
+import com.androidexl.ideultimate.emulator.IdeBlackBoxEmulatorTab
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -792,6 +793,10 @@ fun IdeProjectScreen(
         IdeGitHubActionsRunScreen(
             project = project,
             onBack = { showGitHubActionsRunScreen = false },
+            onOpenEmulatorTab = {
+                showGitHubActionsRunScreen = false
+                activeTabName = IdeProjectTab.EMULATOR.name
+            },
             modifier = modifier,
         )
         return
@@ -801,6 +806,10 @@ fun IdeProjectScreen(
         IdeTerminalGradleBuildSheet(
             project = project,
             onDismiss = { showTerminalGradleBuildSheet = false },
+            onOpenEmulatorTab = {
+                showTerminalGradleBuildSheet = false
+                activeTabName = IdeProjectTab.EMULATOR.name
+            },
         )
     }
     if (showTempRunScreen) {
@@ -937,13 +946,10 @@ fun IdeProjectScreen(
                         }
 
                         IdeProjectTab.EMULATOR -> {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(14.dp),
-                            ) {
-                                IdeEmptyWorkspaceCanvas()
-                            }
+                            IdeBlackBoxEmulatorTab(
+                                project = project,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     }
                 }
