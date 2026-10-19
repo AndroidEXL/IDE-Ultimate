@@ -67,7 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.androidexl.ideultimate.model.IdeProject
+import com.androidexl.ideultimate.data.WorkspaceItem
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,7 +75,7 @@ import java.util.Locale
 
 @Composable
 fun IdeBlackBoxEmulatorTab(
-    project: IdeProject,
+    project: WorkspaceItem,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current

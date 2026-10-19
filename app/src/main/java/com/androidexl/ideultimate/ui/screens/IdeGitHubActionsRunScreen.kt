@@ -61,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import com.androidexl.ideultimate.emulator.BlackBoxEmulatorManager
 import com.androidexl.ideultimate.data.GitHubActionsBuildEngine
@@ -721,7 +720,7 @@ fun IdeGitHubActionsRunScreen(
                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.PhoneAndroid,
+                                                imageVector = Icons.Filled.Check,
                                                 contentDescription = null,
                                                 tint = Color(0xFF042215),
                                                 modifier = Modifier.size(14.dp),
