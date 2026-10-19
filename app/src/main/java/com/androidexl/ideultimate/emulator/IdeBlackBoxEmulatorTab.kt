@@ -15,21 +15,25 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
@@ -48,26 +52,35 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.androidexl.ideultimate.data.IdeWidgetNode
+import com.androidexl.ideultimate.data.ProjectImageItem
+import com.androidexl.ideultimate.data.ProjectXmlPage
 import com.androidexl.ideultimate.data.WorkspaceItem
+import com.androidexl.ideultimate.ui.screens.RenderWidgetNodeOnPhone
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -76,19 +89,28 @@ import java.util.Locale
 @Composable
 fun IdeBlackBoxEmulatorTab(
     project: WorkspaceItem,
+    selectedXmlPage: ProjectXmlPage,
+    widgetNodes: List<IdeWidgetNode>,
+    projectImages: List<ProjectImageItem>,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val installedApps by BlackBoxEmulatorManager.installedApps.collectAsState()
     val logs by BlackBoxEmulatorManager.logs.collectAsState()
     val isReady by BlackBoxEmulatorManager.isEngineReady.collectAsState()
-    val isInstalling by BlackBoxEmulatorManager.isInstalling.collectAsState()
     val runningAppPkg by BlackBoxEmulatorManager.currentRunningApp.collectAsState()
 
     var selectedSubTab by remember { mutableIntStateOf(0) }
+    var isLiveScreenMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         BlackBoxEmulatorManager.checkEngineStatus(context)
+    }
+
+    LaunchedEffect(runningAppPkg) {
+        if (runningAppPkg != null) {
+            isLiveScreenMode = true
+        }
     }
 
     Column(
@@ -165,6 +187,38 @@ fun IdeBlackBoxEmulatorTab(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Run App button in header
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF10B981))
+                        .clickable {
+                            isLiveScreenMode = true
+                            BlackBoxEmulatorManager.log("تشغيل واجهة التطبيق المباشرة: ${project.name}", "SUCCESS")
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "تشغيل",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 11.sp,
+                            ),
+                        )
+                    }
+                }
+
                 IconButton(
                     onClick = { BlackBoxEmulatorManager.checkEngineStatus(context) },
                     modifier = Modifier.size(32.dp),
@@ -181,354 +235,688 @@ fun IdeBlackBoxEmulatorTab(
 
         Spacer(Modifier.height(10.dp))
 
-        // 2. Running App Indicator (if active)
-        AnimatedVisibility(visible = runningAppPkg != null) {
-            Row(
+        // If Live Screen is Active: Display the interactive App Window inside the Emulator!
+        if (isLiveScreenMode) {
+            EmulatorLiveAppScreenView(
+                project = project,
+                activeXmlPage = selectedXmlPage,
+                widgetNodes = widgetNodes,
+                projectImages = projectImages,
+                runningAppPkg = runningAppPkg ?: project.name,
+                onClose = {
+                    isLiveScreenMode = false
+                    BlackBoxEmulatorManager.stopVirtualApp()
+                },
+                onRestart = {
+                    BlackBoxEmulatorManager.log("إعادة تشغيل التطبيق: ${project.name}", "INFO")
+                    Toast.makeText(context, "تمت إعادة تشغيل التطبيق في المحاكي ✓", Toast.LENGTH_SHORT).show()
+                },
+            )
+        } else {
+            // Standard Tab View (Installed Apps / Event Logs / Setup)
+            // 2. Running App Indicator (if active)
+            AnimatedVisibility(visible = runningAppPkg != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF064E3B))
+                        .border(1.dp, Color(0xFF10B981), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF34D399)),
+                        )
+                        Text(
+                            text = "التطبيق قيد التشغيل الافتراضي: $runningAppPkg",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFA7F3D0),
+                                fontSize = 11.5.sp,
+                            ),
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF10B981))
+                                .clickable { isLiveScreenMode = true }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = "فتح الشاشة",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                ),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEF4444))
+                                .clickable { BlackBoxEmulatorManager.stopVirtualApp() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = "إيقاف",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Sub Tabs (Installed Apps / Engine Logs / Engine Setup)
+            TabRow(
+                selectedTabIndex = selectedSubTab,
+                containerColor = Color(0xFF1E293B),
+                contentColor = Color.White,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[selectedSubTab]),
+                        color = Color(0xFF6366F1),
+                        height = 2.5.dp,
+                    )
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF064E3B))
-                    .border(1.dp, Color(0xFF10B981), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .clip(RoundedCornerShape(8.dp)),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF34D399)),
-                    )
-                    Text(
-                        text = "التطبيق قيد التشغيل الافتراضي: $runningAppPkg",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFA7F3D0),
+                Tab(
+                    selected = selectedSubTab == 0,
+                    onClick = { selectedSubTab = 0 },
+                    text = {
+                        Text(
+                            text = "التطبيقات (${installedApps.size})",
                             fontSize = 11.5.sp,
-                        ),
-                    )
+                            fontWeight = if (selectedSubTab == 0) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                )
+                Tab(
+                    selected = selectedSubTab == 1,
+                    onClick = { selectedSubTab = 1 },
+                    text = {
+                        Text(
+                            text = "سجل الأحداث (${logs.size})",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (selectedSubTab == 1) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                )
+                Tab(
+                    selected = selectedSubTab == 2,
+                    onClick = { selectedSubTab = 2 },
+                    text = {
+                        Text(
+                            text = "إعداد المحرك",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (selectedSubTab == 2) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 4. Tab Contents
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF131D31))
+                    .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+            ) {
+                when (selectedSubTab) {
+                    0 -> {
+                        // Apps List View
+                        if (installedApps.isEmpty()) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(48.dp),
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    text = "لا توجد تطبيقات مثبتة في المحاكي بعد",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFE2E8F0),
+                                    ),
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "يمكنك الضغط على زر «تشغيل» أعلاه لفتح واجهة التطبيق الحالية مباشرة في المحاكي،\nأو اختيار «تثبيت في المحاكي» بعد إتمام البناء.",
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 12.sp,
+                                    ),
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF6366F1))
+                                        .clickable { isLiveScreenMode = true }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        text = "فتح شاشة التطبيق الحالية (${project.name})",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                        ),
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(installedApps, key = { it.packageName }) { app ->
+                                    EmulatorAppRow(
+                                        app = app,
+                                        isRunning = runningAppPkg == app.packageName,
+                                        onLaunch = {
+                                            BlackBoxEmulatorManager.launchVirtualApp(context, app)
+                                            isLiveScreenMode = true
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    1 -> {
+                        // Logs View
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "سجلات بيئة التشغيل والمحاكاة:",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = Color(0xFF94A3B8),
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                                if (logs.isNotEmpty()) {
+                                    Text(
+                                        text = "مسح السجل",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = Color(0xFFEF4444),
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                        modifier = Modifier.clickable { BlackBoxEmulatorManager.clearLogs() },
+                                    )
+                                }
+                            }
+
+                            if (logs.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "لا توجد سجلات بعد.",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            } else {
+                                val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    items(logs) { entry ->
+                                        val logColor = when (entry.level) {
+                                            "SUCCESS" -> Color(0xFF34D399)
+                                            "ERROR" -> Color(0xFFF87171)
+                                            "WARN" -> Color(0xFFFBBF24)
+                                            else -> Color(0xFFCBD5E1)
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text(
+                                                text = "[${timeFormat.format(Date(entry.timestamp))}]",
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF64748B),
+                                            )
+                                            Text(
+                                                text = entry.message,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 10.5.sp,
+                                                color = logColor,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    2 -> {
+                        // Engine Setup and Info
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = "حالة محرك NewBlackbox",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                ),
+                            )
+                            Text(
+                                text = "محرك NewBlackbox هو بيئة حاوية افتراضية (Virtual Container Engine) تسمح بتشغيل وتثبيت حزم تطبيقات الأندرويد (.apk) بشكل معزول ومستقل، وتسمح باختبار وتجربة التطبيقات المترجمة من IDE-Ultimate بدون الحاجة لجهاز خارجي.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 11.5.sp,
+                                ),
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1E293B))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "تطبيق NewBlackbox المضيف",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color.White,
+                                    )
+                                    Text(
+                                        text = if (isReady) "مثبت ونشط على جهازك ✓" else "غير مثبت على هذا الجهاز",
+                                        fontSize = 11.sp,
+                                        color = if (isReady) Color(0xFF34D399) else Color(0xFFF59E0B),
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF6366F1))
+                                        .clickable {
+                                            val intent = Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse(BlackBoxEmulatorManager.BLACKBOX_REPO_URL),
+                                            )
+                                            context.startActivity(intent)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "مستودع GitHub",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1E293B))
+                                    .clickable {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse(BlackBoxEmulatorManager.BLACKBOX_RELEASE_URL),
+                                        )
+                                        context.startActivity(intent)
+                                    }
+                                    .padding(12.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "تنزيل تطبيق NewBlackbox المضيف (APK)",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color.White,
+                                        )
+                                        Text(
+                                            text = "للحصول على بيئة تشغيل كاملة ومستقلة على الهاتف",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF94A3B8),
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = Color(0xFF818CF8),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Interactive Screen representing the running application inside the emulator!
+ */
+@Composable
+private fun EmulatorLiveAppScreenView(
+    project: WorkspaceItem,
+    activeXmlPage: ProjectXmlPage,
+    widgetNodes: List<IdeWidgetNode>,
+    projectImages: List<ProjectImageItem>,
+    runningAppPkg: String,
+    onClose: () -> Unit,
+    onRestart: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF131D31))
+            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+    ) {
+        // Top control bar for the running app
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF10B981)),
+                )
+                Text(
+                    text = "شاشة التطبيق: $runningAppPkg",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                    ),
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF334155))
+                        .clickable { onRestart() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = "إعادة تشغيل",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = Color.White,
+                                fontSize = 10.sp,
+                            ),
+                        )
+                    }
                 }
 
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(Color(0xFFEF4444))
-                        .clickable { BlackBoxEmulatorManager.stopVirtualApp() }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .clickable { onClose() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
-                    Text(
-                        text = "إيقاف",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                        ),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = "إغلاق",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = Color.White,
+                                fontSize = 10.sp,
+                            ),
+                        )
+                    }
                 }
             }
         }
 
-        // 3. Sub Tabs (Installed Apps / Engine Logs / Engine Setup)
-        TabRow(
-            selectedTabIndex = selectedSubTab,
-            containerColor = Color(0xFF1E293B),
-            contentColor = Color.White,
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    Modifier.tabIndicatorOffset(tabPositions[selectedSubTab]),
-                    color = Color(0xFF6366F1),
-                    height = 2.5.dp,
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp)),
-        ) {
-            Tab(
-                selected = selectedSubTab == 0,
-                onClick = { selectedSubTab = 0 },
-                text = {
-                    Text(
-                        text = "التطبيقات المثبتة (${installedApps.size})",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (selectedSubTab == 0) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-            )
-            Tab(
-                selected = selectedSubTab == 1,
-                onClick = { selectedSubTab = 1 },
-                text = {
-                    Text(
-                        text = "سجل الأحداث (${logs.size})",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (selectedSubTab == 1) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-            )
-            Tab(
-                selected = selectedSubTab == 2,
-                onClick = { selectedSubTab = 2 },
-                text = {
-                    Text(
-                        text = "إعداد المحرك",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (selectedSubTab == 2) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // 4. Tab Contents
+        // Virtual Phone Screen Mockup
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF131D31))
-                .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
-                .padding(12.dp),
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF0F172A))
+                .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
         ) {
-            when (selectedSubTab) {
-                0 -> {
-                    // Apps List View
-                    if (installedApps.isEmpty()) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Info,
-                                contentDescription = null,
-                                tint = Color(0xFF64748B),
-                                modifier = Modifier.size(48.dp),
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                text = "لا توجد تطبيقات مثبتة في المحاكي بعد",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFE2E8F0),
-                                ),
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "بعد ترجمة المشروع عبر Gradle أو GitHub Actions، اختر زر\n«تثبيت في المحاكي» لتثبيت التطبيق وتشغيله هنا مباشرة.",
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 12.sp,
-                                ),
-                            )
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(installedApps, key = { it.packageName }) { app ->
-                                EmulatorAppRow(
-                                    app = app,
-                                    isRunning = runningAppPkg == app.packageName,
-                                    onLaunch = { BlackBoxEmulatorManager.launchVirtualApp(context, app) },
-                                )
-                            }
-                        }
-                    }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White),
+            ) {
+                // 1. Android Status Bar Mockup
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .background(Color(0xFF1E293B))
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "12:00",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                    Text(
+                        text = "100% 🔋  4G 📶",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            color = Color.White,
+                        ),
+                    )
                 }
 
-                1 -> {
-                    // Logs View
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "سجلات بيئة التشغيل والمحاكاة:",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = Color(0xFF94A3B8),
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                            )
-                            if (logs.isNotEmpty()) {
-                                Text(
-                                    text = "مسح السجل",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = Color(0xFFEF4444),
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                    modifier = Modifier.clickable { BlackBoxEmulatorManager.clearLogs() },
-                                )
-                            }
-                        }
+                // 2. Application Toolbar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(Color(0xFF4F46E5))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = project.name,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = activeXmlPage.activityName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            color = Color(0xFFC7D2FE),
+                        ),
+                    )
+                }
 
-                        if (logs.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
+                // 3. Application View Content (Render actual widget nodes or placeholder)
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(Color.White)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        if (widgetNodes.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
                             ) {
                                 Text(
-                                    text = "لا توجد سجلات بعد.",
-                                    color = Color(0xFF64748B),
-                                    fontSize = 12.sp,
+                                    text = "مرحباً بك في تطبيق ${project.name} 🎉",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B),
+                                    ),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "الصفحة فارغة حالياً. أضف عناصر من تبويب View لتظهر هنا مباشرة.",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color(0xFF64748B),
+                                        fontSize = 12.sp,
+                                    ),
+                                    textAlign = TextAlign.Center,
                                 )
                             }
                         } else {
-                            val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                items(logs) { entry ->
-                                    val logColor = when (entry.level) {
-                                        "SUCCESS" -> Color(0xFF34D399)
-                                        "ERROR" -> Color(0xFFF87171)
-                                        "WARN" -> Color(0xFFFBBF24)
-                                        else -> Color(0xFFCBD5E1)
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Text(
-                                            text = "[${timeFormat.format(Date(entry.timestamp))}]",
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            color = Color(0xFF64748B),
-                                        )
-                                        Text(
-                                            text = entry.message,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.5.sp,
-                                            color = logColor,
-                                        )
-                                    }
-                                }
+                            widgetNodes.forEach { node ->
+                                RenderWidgetNodeOnPhone(
+                                    node = node,
+                                    projectImages = projectImages,
+                                    selectedWidgetUid = null,
+                                    draggingType = null,
+                                    draggingExistingUid = null,
+                                    hoveredContainerUid = null,
+                                    dropInsertIndex = -1,
+                                    onSelectWidget = {},
+                                    onDoubleTapWidget = {},
+                                    onStartMoveExistingWidget = { _, _ -> },
+                                    onUpdateMoveDragPos = {},
+                                    onEndMoveExistingWidget = {},
+                                    onCancelMoveExistingWidget = {},
+                                    onContainerPositioned = { _, _ -> },
+                                    onWidgetPositioned = { _, _ -> },
+                                )
                             }
                         }
                     }
                 }
 
-                2 -> {
-                    // Engine Setup and Info
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text(
-                            text = "حالة محرك NewBlackbox",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            ),
-                        )
-                        Text(
-                            text = "محرك NewBlackbox هو بيئة حاوية افتراضية (Virtual Container Engine) تسمح بتشغيل وتثبيت حزم تطبيقات الأندرويد (.apk) بشكل معزول ومستقل، وتسمح باختبار وتجربة التطبيقات المترجمة من IDE-Ultimate بدون الحاجة لجهاز خارجي.",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = Color(0xFF94A3B8),
-                                fontSize = 11.5.sp,
-                            ),
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1E293B))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Column {
-                                Text(
-                                    text = "تطبيق NewBlackbox المضيف",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = Color.White,
-                                )
-                                Text(
-                                    text = if (isReady) "مثبت ونشط على جهازك ✓" else "غير مثبت على هذا الجهاز",
-                                    fontSize = 11.sp,
-                                    color = if (isReady) Color(0xFF34D399) else Color(0xFFF59E0B),
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFF6366F1))
-                                    .clickable {
-                                        val intent = Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse(BlackBoxEmulatorManager.BLACKBOX_REPO_URL),
-                                        )
-                                        context.startActivity(intent)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                            ) {
-                                Text(
-                                    text = "مستودع GitHub",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1E293B))
-                                .clickable {
-                                    val intent = Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(BlackBoxEmulatorManager.BLACKBOX_RELEASE_URL),
-                                    )
-                                    context.startActivity(intent)
-                                }
-                                .padding(12.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "تنزيل تطبيق NewBlackbox المضيف (APK)",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = Color.White,
-                                    )
-                                    Text(
-                                        text = "للحصول على بيئة تشغيل كاملة ومستقلة على الهاتف",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF94A3B8),
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = null,
-                                    tint = Color(0xFF818CF8),
-                                )
-                            }
-                        }
-                    }
+                // 4. Android Bottom Navigation Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(36.dp)
+                        .background(Color(0xFF0F172A)),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Back
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { onClose() },
+                    )
+                    // Home
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .clickable { onClose() },
+                    )
+                    // Recents
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .border(1.5.dp, Color.White, RoundedCornerShape(2.dp)),
+                    )
                 }
             }
         }

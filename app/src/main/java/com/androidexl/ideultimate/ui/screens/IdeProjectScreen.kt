@@ -948,6 +948,9 @@ fun IdeProjectScreen(
                         IdeProjectTab.EMULATOR -> {
                             IdeBlackBoxEmulatorTab(
                                 project = project,
+                                selectedXmlPage = selectedXmlPage,
+                                widgetNodes = widgetNodes,
+                                projectImages = projectImages,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -3516,7 +3519,7 @@ private fun PhoneFrameWhiteCanvas(
 }
 
 @Composable
-private fun RenderWidgetNodeOnPhone(
+internal fun RenderWidgetNodeOnPhone(
     node: IdeWidgetNode,
     projectImages: List<ProjectImageItem>,
     parentBounds: Rect = Rect.Zero,
