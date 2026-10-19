@@ -3467,34 +3467,68 @@ $activitiesXml
             }
         }
 
-        // 3. Sync all XML Layouts & Java/Kotlin Activities
+        // 3. Sync all XML Layouts & Java/Kotlin Activities (respect project.language)
         listProjectXmlPages(project).forEach { page ->
             val xmlFile = File(root, "app/src/main/res/layout/${page.xmlFileName}")
             xmlFile.parentFile?.mkdirs()
             if (!xmlFile.exists()) {
                 xmlFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.XML_ANDROID), Charsets.UTF_8)
             }
-            val ktFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.kt")
-            ktFile.parentFile?.mkdirs()
-            if (!ktFile.exists()) {
-                ktFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.KOTLIN_ANDROID), Charsets.UTF_8)
-            }
-            val javaFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.java")
-            javaFile.parentFile?.mkdirs()
-            if (!javaFile.exists()) {
-                javaFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.JAVA_ANDROID), Charsets.UTF_8)
+            if (project.language == ProjectLanguage.JAVA) {
+                val javaFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.java")
+                javaFile.parentFile?.mkdirs()
+                if (!javaFile.exists()) {
+                    javaFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.JAVA_ANDROID), Charsets.UTF_8)
+                }
+            } else {
+                val ktFile = File(root, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+                ktFile.parentFile?.mkdirs()
+                if (!ktFile.exists()) {
+                    ktFile.writeText(readCodeForFlavor(project, page, CodeEditorFlavor.KOTLIN_ANDROID), Charsets.UTF_8)
+                }
             }
         }
 
         // 4. Default Gradle & Project files
         val appBuildGradle = File(root, "app/build.gradle.kts")
+        val isJavaProj = (project.language == ProjectLanguage.JAVA)
+        val pluginsBlock = if (isJavaProj) {
+            """plugins {
+    id("com.android.application")
+}"""
+        } else {
+            """plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}"""
+        }
+        val kotlinBlock = if (!isJavaProj) {
+            """
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+"""
+        } else {
+            ""
+        }
+        val depsBlock = if (isJavaProj) {
+            """dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+}"""
+        } else {
+            """dependencies {
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+}"""
+        }
         if (!appBuildGradle.exists()) {
             appBuildGradle.parentFile?.mkdirs()
             appBuildGradle.writeText(
-                """plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}
+                """$pluginsBlock
 
 android {
     namespace = "${project.packageName}"
@@ -3507,13 +3541,14 @@ android {
         versionCode = ${project.versionCode}
         versionName = "${project.versionName}"
     }
-}
 
-dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
+$kotlinBlock
+$depsBlock
 """,
                 Charsets.UTF_8,
             )
@@ -3552,6 +3587,7 @@ include(":app")
                 """org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
+kotlin.jvm.target.validation.mode=warning
 """,
                 Charsets.UTF_8,
             )
