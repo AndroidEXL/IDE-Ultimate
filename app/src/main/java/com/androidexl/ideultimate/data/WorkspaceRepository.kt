@@ -2976,6 +2976,71 @@ class WorkspaceRepository(context: Context) {
             File(internalResRoot, folder).mkdirs()
         }
 
+        // Ensure default launcher icon & background/foreground exist so builds never fail missing ic_launcher
+        val defaultBgFile = File(internalResRoot, "drawable/ic_launcher_background.xml")
+        if (!defaultBgFile.exists()) {
+            defaultBgFile.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF0F172A"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>
+""",
+                Charsets.UTF_8,
+            )
+        }
+        val defaultFgFile = File(internalResRoot, "drawable/ic_launcher_foreground.xml")
+        if (!defaultFgFile.exists()) {
+            defaultFgFile.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF38BDF8"
+        android:pathData="M38,34 L26,54 L38,74 M70,34 L82,54 L70,74 M59,30 L49,78"
+        android:strokeColor="#FF38BDF8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="5" />
+</vector>
+""",
+                Charsets.UTF_8,
+            )
+        }
+        val mipmapDir = File(internalResRoot, "mipmap-anydpi-v26").apply { mkdirs() }
+        val launcherMipmap = File(mipmapDir, "ic_launcher.xml")
+        if (!launcherMipmap.exists()) {
+            launcherMipmap.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+""",
+                Charsets.UTF_8,
+            )
+        }
+        val launcherRoundMipmap = File(mipmapDir, "ic_launcher_round.xml")
+        if (!launcherRoundMipmap.exists()) {
+            launcherRoundMipmap.writeText(
+                """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+""",
+                Charsets.UTF_8,
+            )
+        }
+
         // Sync existing drawables, layouts, sounds, fonts into internalResRoot so everything appears in Resources Manager
         getProjectImages(project).forEach { img ->
             val src = File(img.filePath)
