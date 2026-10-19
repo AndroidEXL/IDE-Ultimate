@@ -1280,15 +1280,18 @@ class WorkspaceRepository(context: Context) {
                     layoutFile.writeText(defaultXml, Charsets.UTF_8)
                 }
                 val pkgPath = project.packageName.replace('.', '/')
-                val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
-                ktFile.parentFile?.mkdirs()
-                if (!ktFile.exists()) {
-                    ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
-                }
-                val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
-                javaFile.parentFile?.mkdirs()
-                if (!javaFile.exists()) {
-                    javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
+                if (project.language == ProjectLanguage.JAVA) {
+                    val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
+                    javaFile.parentFile?.mkdirs()
+                    if (!javaFile.exists()) {
+                        javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
+                    }
+                } else {
+                    val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+                    ktFile.parentFile?.mkdirs()
+                    if (!ktFile.exists()) {
+                        ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
+                    }
                 }
             }
         }
@@ -1357,30 +1360,32 @@ class WorkspaceRepository(context: Context) {
                     newXmlFile.writeText(defaultXmlLayoutContent(project, newPage), Charsets.UTF_8)
                 }
 
-                val oldKtFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.kt")
-                val newKtFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.kt")
-                newKtFile.parentFile?.mkdirs()
-                if (oldKtFile.exists()) {
-                    val ktText = oldKtFile.readText(Charsets.UTF_8)
-                        .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
-                        .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
-                    newKtFile.writeText(ktText, Charsets.UTF_8)
-                    oldKtFile.delete()
+                if (project.language == ProjectLanguage.JAVA) {
+                    val oldJavaFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.java")
+                    val newJavaFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.java")
+                    newJavaFile.parentFile?.mkdirs()
+                    if (oldJavaFile.exists()) {
+                        val javaText = oldJavaFile.readText(Charsets.UTF_8)
+                            .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
+                            .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
+                        newJavaFile.writeText(javaText, Charsets.UTF_8)
+                        oldJavaFile.delete()
+                    } else {
+                        newJavaFile.writeText(defaultJavaActivityContent(project, newPage), Charsets.UTF_8)
+                    }
                 } else {
-                    newKtFile.writeText(defaultKotlinActivityContent(project, newPage), Charsets.UTF_8)
-                }
-
-                val oldJavaFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.java")
-                val newJavaFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.java")
-                newJavaFile.parentFile?.mkdirs()
-                if (oldJavaFile.exists()) {
-                    val javaText = oldJavaFile.readText(Charsets.UTF_8)
-                        .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
-                        .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
-                    newJavaFile.writeText(javaText, Charsets.UTF_8)
-                    oldJavaFile.delete()
-                } else {
-                    newJavaFile.writeText(defaultJavaActivityContent(project, newPage), Charsets.UTF_8)
+                    val oldKtFile = File(projDir, "app/src/main/java/$pkgPath/${oldPage.activityName}.kt")
+                    val newKtFile = File(projDir, "app/src/main/java/$pkgPath/${newPage.activityName}.kt")
+                    newKtFile.parentFile?.mkdirs()
+                    if (oldKtFile.exists()) {
+                        val ktText = oldKtFile.readText(Charsets.UTF_8)
+                            .replace("class ${oldPage.activityName}", "class ${newPage.activityName}")
+                            .replace("R.layout.${oldPage.layoutResourceName}", "R.layout.${newPage.layoutResourceName}")
+                        newKtFile.writeText(ktText, Charsets.UTF_8)
+                        oldKtFile.delete()
+                    } else {
+                        newKtFile.writeText(defaultKotlinActivityContent(project, newPage), Charsets.UTF_8)
+                    }
                 }
             }
         }
@@ -3559,14 +3564,19 @@ $depsBlock
             ?: File(root, "build.gradle")
         if (!rootBuildGradleFile.exists()) {
             val defaultRootGradle = File(root, "build.gradle.kts")
-            defaultRootGradle.writeText(
+            val rootPlugins = if (isJavaProj) {
+                """plugins {
+    id("com.android.application") version "8.9.2" apply false
+}
+"""
+            } else {
                 """plugins {
     id("com.android.application") version "8.9.2" apply false
     id("org.jetbrains.kotlin.android") version "2.1.20" apply false
 }
-""",
-                Charsets.UTF_8,
-            )
+"""
+            }
+            defaultRootGradle.writeText(rootPlugins, Charsets.UTF_8)
         }
 
         val settingsGradle = File(root, "settings.gradle.kts").takeIf { it.exists() }
@@ -4043,12 +4053,12 @@ kotlin.jvm.target.validation.mode=warning
         val sb = StringBuilder()
         sb.appendLine("package ${project.packageName};")
         sb.appendLine()
-        sb.appendLine("import android.app.Activity;")
         sb.appendLine("import android.os.Bundle;")
         sb.appendLine("import android.view.View;")
         sb.appendLine("import android.widget.*;")
+        sb.appendLine("import androidx.appcompat.app.AppCompatActivity;")
         sb.appendLine()
-        sb.appendLine("public class ${page.activityName} extends Activity {")
+        sb.appendLine("public class ${page.activityName} extends AppCompatActivity {")
         sb.appendLine()
         sb.appendLine("    @Override")
         sb.appendLine("    protected void onCreate(Bundle savedInstanceState) {")
@@ -4157,15 +4167,18 @@ kotlin.jvm.target.validation.mode=warning
                     if (!layoutFile.exists()) {
                         layoutFile.writeText(defaultXmlLayoutContent(project, page), Charsets.UTF_8)
                     }
-                    val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
-                    ktFile.parentFile?.mkdirs()
-                    if (!ktFile.exists()) {
-                        ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
-                    }
-                    val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
-                    javaFile.parentFile?.mkdirs()
-                    if (!javaFile.exists()) {
-                        javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
+                    if (project.language == ProjectLanguage.JAVA) {
+                        val javaFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.java")
+                        javaFile.parentFile?.mkdirs()
+                        if (!javaFile.exists()) {
+                            javaFile.writeText(defaultJavaActivityContent(project, page), Charsets.UTF_8)
+                        }
+                    } else {
+                        val ktFile = File(projDir, "app/src/main/java/$pkgPath/${page.activityName}.kt")
+                        ktFile.parentFile?.mkdirs()
+                        if (!ktFile.exists()) {
+                            ktFile.writeText(defaultKotlinActivityContent(project, page), Charsets.UTF_8)
+                        }
                     }
                 }
             }
@@ -4258,13 +4271,13 @@ kotlin.jvm.target.validation.mode=warning
     ): String = """
         package ${project.packageName};
 
-        import android.app.Activity;
         import android.os.Bundle;
+        import androidx.appcompat.app.AppCompatActivity;
 
         /**
          * Java Android Activity linked to layout: res/layout/${page.xmlFileName}
          */
-        public class ${page.activityName} extends Activity {
+        public class ${page.activityName} extends AppCompatActivity {
 
             @Override
             protected void onCreate(Bundle savedInstanceState) {
