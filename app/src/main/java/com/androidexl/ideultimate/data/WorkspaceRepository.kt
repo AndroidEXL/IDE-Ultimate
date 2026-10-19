@@ -3584,7 +3584,21 @@ $depsBlock
         if (!settingsGradle.exists()) {
             val defaultSettings = File(root, "settings.gradle.kts")
             defaultSettings.writeText(
-                """rootProject.name = "${project.name}"
+                """pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "${project.name}"
 include(":app")
 """,
                 Charsets.UTF_8,
