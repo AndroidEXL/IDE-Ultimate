@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,16 +34,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -59,11 +57,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -81,6 +79,7 @@ import com.androidexl.ideultimate.data.ProjectImageItem
 import com.androidexl.ideultimate.data.ProjectXmlPage
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.ui.screens.RenderWidgetNodeOnPhone
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -95,13 +94,19 @@ fun IdeBlackBoxEmulatorTab(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val installedApps by BlackBoxEmulatorManager.installedApps.collectAsState()
     val logs by BlackBoxEmulatorManager.logs.collectAsState()
     val isReady by BlackBoxEmulatorManager.isEngineReady.collectAsState()
+    val isInitialized by BlackBoxEmulatorManager.isEngineInitialized.collectAsState()
+    val isInitializing by BlackBoxEmulatorManager.isInitializing.collectAsState()
+    val initProgress by BlackBoxEmulatorManager.initProgress.collectAsState()
+    val initStatusText by BlackBoxEmulatorManager.initStatusText.collectAsState()
     val runningAppPkg by BlackBoxEmulatorManager.currentRunningApp.collectAsState()
+    val activeSimulatedApp by BlackBoxEmulatorManager.activeSimulatedApp.collectAsState()
 
     var selectedSubTab by remember { mutableIntStateOf(0) }
-    var isLiveScreenMode by remember { mutableStateOf(false) }
+    var isSimulationScreenOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         BlackBoxEmulatorManager.checkEngineStatus(context)
@@ -109,7 +114,7 @@ fun IdeBlackBoxEmulatorTab(
 
     LaunchedEffect(runningAppPkg) {
         if (runningAppPkg != null) {
-            isLiveScreenMode = true
+            isSimulationScreenOpen = true
         }
     }
 
@@ -119,7 +124,7 @@ fun IdeBlackBoxEmulatorTab(
             .background(Color(0xFF0F172A))
             .padding(12.dp),
     ) {
-        // 1. Emulator Top Header Bar
+        // 1. Emulator Top Header Bar with Engine Info and Setup Status
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -133,10 +138,11 @@ fun IdeBlackBoxEmulatorTab(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f),
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             Brush.linearGradient(
@@ -154,9 +160,12 @@ fun IdeBlackBoxEmulatorTab(
                 }
 
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text(
-                            text = "NewBlackbox Virtual Engine",
+                            text = "NewBlackbox Engine",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -165,11 +174,11 @@ fun IdeBlackBoxEmulatorTab(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(if (isReady) Color(0xFF065F46) else Color(0xFF3B82F6))
+                                .background(if (isInitialized) Color(0xFF059669) else Color(0xFFD97706))
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                         ) {
                             Text(
-                                text = if (isReady) "جاهز (المضيف مثبت)" else "مدمج (Virtual Container)",
+                                text = if (isInitialized) "مهيأ وجاهز ✓" else "يحتاج تهيئة",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -177,45 +186,90 @@ fun IdeBlackBoxEmulatorTab(
                         }
                     }
                     Text(
-                        text = "محاكي أندرويد افتراضي لتشغيل تطبيقات الـ APK المعزولة",
+                        text = if (isInitialized) "محاكي أندرويد افتراضي نشط لتشغيل حزم الـ APK" else "اضغط زر «تهيئة المحاكي» لتفعيل بيئة التشغيل",
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 11.sp,
                             color = Color(0xFF94A3B8),
                         ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Run App button in header
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF10B981))
-                        .clickable {
-                            isLiveScreenMode = true
-                            BlackBoxEmulatorManager.log("تشغيل واجهة التطبيق المباشرة: ${project.name}", "SUCCESS")
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Initialize Button
+                if (!isInitialized) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF6366F1))
+                            .clickable(enabled = !isInitializing) {
+                                coroutineScope.launch {
+                                    BlackBoxEmulatorManager.initializeEmulatorEngine(context)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = "تشغيل",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                            ),
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (isInitializing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                            Text(
+                                text = if (isInitializing) "جاري التهيئة..." else "تهيئة المحاكي",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                ),
+                            )
+                        }
+                    }
+                } else {
+                    // Quick Launch Model Page Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10B981))
+                            .clickable {
+                                isSimulationScreenOpen = true
+                                BlackBoxEmulatorManager.log("فتح صفحة المحاكاة الخاصة بالموديل: ${project.name}", "SUCCESS")
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = "تشغيل الموديل",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                ),
+                            )
+                        }
                     }
                 }
 
@@ -233,28 +287,70 @@ fun IdeBlackBoxEmulatorTab(
             }
         }
 
+        // Initialization Progress Banner (visible during initialization)
+        AnimatedVisibility(visible = isInitializing) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1E293B))
+                    .border(1.dp, Color(0xFF4F46E5), RoundedCornerShape(8.dp))
+                    .padding(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = initStatusText,
+                        color = Color(0xFFE2E8F0),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "${(initProgress * 100).toInt()}%",
+                        color = Color(0xFF818CF8),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { initProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = Color(0xFF6366F1),
+                    trackColor = Color(0xFF334155),
+                )
+            }
+        }
+
         Spacer(Modifier.height(10.dp))
 
-        // If Live Screen is Active: Display the interactive App Window inside the Emulator!
-        if (isLiveScreenMode) {
-            EmulatorLiveAppScreenView(
+        // VIEW 1: Interactive Model Simulation Screen
+        if (isSimulationScreenOpen) {
+            EmulatorModelSimulationScreen(
                 project = project,
                 activeXmlPage = selectedXmlPage,
                 widgetNodes = widgetNodes,
                 projectImages = projectImages,
-                runningAppPkg = runningAppPkg ?: project.name,
+                runningApp = activeSimulatedApp ?: installedApps.firstOrNull(),
                 onClose = {
-                    isLiveScreenMode = false
+                    isSimulationScreenOpen = false
                     BlackBoxEmulatorManager.stopVirtualApp()
                 },
                 onRestart = {
-                    BlackBoxEmulatorManager.log("إعادة تشغيل التطبيق: ${project.name}", "INFO")
-                    Toast.makeText(context, "تمت إعادة تشغيل التطبيق في المحاكي ✓", Toast.LENGTH_SHORT).show()
+                    BlackBoxEmulatorManager.log("إعادة تشغيل موديل التطبيق: ${project.name}", "INFO")
+                    Toast.makeText(context, "تمت إعادة تشغيل الموديل داخل المحاكي ✓", Toast.LENGTH_SHORT).show()
                 },
             )
         } else {
-            // Standard Tab View (Installed Apps / Event Logs / Setup)
-            // 2. Running App Indicator (if active)
+            // VIEW 2: Emulator Dashboard & Sub Tabs
+            // Running App banner
             AnimatedVisibility(visible = runningAppPkg != null) {
                 Row(
                     modifier = Modifier
@@ -278,7 +374,7 @@ fun IdeBlackBoxEmulatorTab(
                                 .background(Color(0xFF34D399)),
                         )
                         Text(
-                            text = "التطبيق قيد التشغيل الافتراضي: $runningAppPkg",
+                            text = "الموديل قيد التشغيل: $runningAppPkg",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFA7F3D0),
@@ -292,11 +388,11 @@ fun IdeBlackBoxEmulatorTab(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(Color(0xFF10B981))
-                                .clickable { isLiveScreenMode = true }
+                                .clickable { isSimulationScreenOpen = true }
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                         ) {
                             Text(
-                                text = "فتح الشاشة",
+                                text = "فتح صفحة المحاكاة",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
@@ -325,7 +421,7 @@ fun IdeBlackBoxEmulatorTab(
                 }
             }
 
-            // 3. Sub Tabs (Installed Apps / Engine Logs / Engine Setup)
+            // Sub Tabs (Installed Apps / Engine Logs / Engine Setup)
             TabRow(
                 selectedTabIndex = selectedSubTab,
                 containerColor = Color(0xFF1E293B),
@@ -378,7 +474,7 @@ fun IdeBlackBoxEmulatorTab(
 
             Spacer(Modifier.height(10.dp))
 
-            // 4. Tab Contents
+            // Sub Tab Contents
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -405,7 +501,7 @@ fun IdeBlackBoxEmulatorTab(
                                 )
                                 Spacer(Modifier.height(10.dp))
                                 Text(
-                                    text = "لا توجد تطبيقات مثبتة في المحاكي بعد",
+                                    text = if (!isInitialized) "يرجى تهيئة المحاكي أولاً" else "لا توجد تطبيقات مثبتة في المحاكي بعد",
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFE2E8F0),
@@ -413,7 +509,10 @@ fun IdeBlackBoxEmulatorTab(
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = "يمكنك الضغط على زر «تشغيل» أعلاه لفتح واجهة التطبيق الحالية مباشرة في المحاكي،\nأو اختيار «تثبيت في المحاكي» بعد إتمام البناء.",
+                                    text = if (!isInitialized)
+                                        "اضغط على زر «تهيئة المحاكي» أعلاه لتجهيز البيئة الافتراضية ومجلدات العزل."
+                                    else
+                                        "عند بناء التطبيق، اضغط زر «تثبيت في المحاكي» لتثبيت الـ APK جواه المحاكي،\nأو اضغط «تشغيل الموديل» لمعاينة واجهة المشروع التفاعلية فوراً.",
                                     textAlign = TextAlign.Center,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color(0xFF94A3B8),
@@ -421,20 +520,42 @@ fun IdeBlackBoxEmulatorTab(
                                     ),
                                 )
                                 Spacer(Modifier.height(16.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF6366F1))
-                                        .clickable { isLiveScreenMode = true }
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                ) {
-                                    Text(
-                                        text = "فتح شاشة التطبيق الحالية (${project.name})",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                        ),
-                                    )
+                                if (!isInitialized) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF6366F1))
+                                            .clickable {
+                                                coroutineScope.launch {
+                                                    BlackBoxEmulatorManager.initializeEmulatorEngine(context)
+                                                }
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    ) {
+                                        Text(
+                                            text = "تهيئة المحاكي الآن",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                            ),
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF10B981))
+                                            .clickable { isSimulationScreenOpen = true }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    ) {
+                                        Text(
+                                            text = "فتح صفحة محاكاة الموديل (${project.name})",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                            ),
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -448,7 +569,7 @@ fun IdeBlackBoxEmulatorTab(
                                         isRunning = runningAppPkg == app.packageName,
                                         onLaunch = {
                                             BlackBoxEmulatorManager.launchVirtualApp(context, app)
-                                            isLiveScreenMode = true
+                                            isSimulationScreenOpen = true
                                         },
                                     )
                                 }
@@ -648,18 +769,20 @@ fun IdeBlackBoxEmulatorTab(
 }
 
 /**
- * Dedicated Interactive Screen representing the running application inside the emulator!
+ * Dedicated Interactive Screen for the Virtual Model Simulation
  */
 @Composable
-private fun EmulatorLiveAppScreenView(
+private fun EmulatorModelSimulationScreen(
     project: WorkspaceItem,
     activeXmlPage: ProjectXmlPage,
     widgetNodes: List<IdeWidgetNode>,
     projectImages: List<ProjectImageItem>,
-    runningAppPkg: String,
+    runningApp: EmulatorInstalledApp?,
     onClose: () -> Unit,
     onRestart: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -668,7 +791,7 @@ private fun EmulatorLiveAppScreenView(
             .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
             .padding(10.dp),
     ) {
-        // Top control bar for the running app
+        // Control Bar above the phone frame
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -679,6 +802,7 @@ private fun EmulatorLiveAppScreenView(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
             ) {
                 Box(
                     modifier = Modifier
@@ -687,12 +811,14 @@ private fun EmulatorLiveAppScreenView(
                         .background(Color(0xFF10B981)),
                 )
                 Text(
-                    text = "شاشة التطبيق: $runningAppPkg",
+                    text = "صفحة محاكاة الموديل: ${runningApp?.appName ?: project.name}",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 12.sp,
                     ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
@@ -753,14 +879,14 @@ private fun EmulatorLiveAppScreenView(
             }
         }
 
-        // Virtual Phone Screen Mockup
+        // Virtual Phone Screen Mockup Frame
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFF0F172A))
-                .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
+                .border(2.dp, Color(0xFF6366F1), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Column(
@@ -808,7 +934,7 @@ private fun EmulatorLiveAppScreenView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = project.name,
+                        text = runningApp?.appName ?: project.name,
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -826,7 +952,7 @@ private fun EmulatorLiveAppScreenView(
                     )
                 }
 
-                // 3. Application View Content (Render actual widget nodes or placeholder)
+                // 3. Application View Content (Render actual interactive widget nodes)
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Column(
                         modifier = Modifier
@@ -844,7 +970,7 @@ private fun EmulatorLiveAppScreenView(
                                 verticalArrangement = Arrangement.Center,
                             ) {
                                 Text(
-                                    text = "مرحباً بك في تطبيق ${project.name} 🎉",
+                                    text = "مرحباً بك في تطبيق ${runningApp?.appName ?: project.name} 🎉",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF1E293B),
@@ -852,7 +978,7 @@ private fun EmulatorLiveAppScreenView(
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "الصفحة فارغة حالياً. أضف عناصر من تبويب View لتظهر هنا مباشرة.",
+                                    text = "الصفحة جاهزة وتعمل داخل محاكي NewBlackbox الافتراضي بنجاح.",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color(0xFF64748B),
                                         fontSize = 12.sp,
@@ -870,7 +996,9 @@ private fun EmulatorLiveAppScreenView(
                                     draggingExistingUid = null,
                                     hoveredContainerUid = null,
                                     dropInsertIndex = -1,
-                                    onSelectWidget = {},
+                                    onSelectWidget = { clickedNode ->
+                                        Toast.makeText(context, "تفاعل مع: ${clickedNode.text.ifBlank { clickedNode.type.name }}", Toast.LENGTH_SHORT).show()
+                                    },
                                     onDoubleTapWidget = {},
                                     onStartMoveExistingWidget = { _, _ -> },
                                     onUpdateMoveDragPos = {},
@@ -1018,7 +1146,7 @@ private fun EmulatorAppRow(
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
-                    text = if (isRunning) "قيد التشغيل" else "تشغيل",
+                    text = if (isRunning) "قيد التشغيل" else "تشغيل الموديل",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,

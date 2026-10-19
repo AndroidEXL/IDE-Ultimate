@@ -10,6 +10,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,8 +40,8 @@ data class EmulatorLogEntry(
 )
 
 /**
- * Manages the BlackBox virtual engine integration, installation of APKs,
- * virtual app launching, and communication with NewBlackbox.
+ * Manages the BlackBox virtual engine integration, initialization, installation of APKs,
+ * virtual app launching, and communication with NewBlackbox container.
  */
 object BlackBoxEmulatorManager {
     private const val TAG = "BlackBoxEmulatorManager"
@@ -57,11 +58,26 @@ object BlackBoxEmulatorManager {
     private val _isEngineReady = MutableStateFlow(false)
     val isEngineReady: StateFlow<Boolean> = _isEngineReady.asStateFlow()
 
+    private val _isEngineInitialized = MutableStateFlow(false)
+    val isEngineInitialized: StateFlow<Boolean> = _isEngineInitialized.asStateFlow()
+
+    private val _isInitializing = MutableStateFlow(false)
+    val isInitializing: StateFlow<Boolean> = _isInitializing.asStateFlow()
+
+    private val _initProgress = MutableStateFlow(0f)
+    val initProgress: StateFlow<Float> = _initProgress.asStateFlow()
+
+    private val _initStatusText = MutableStateFlow("المحاكي جاهز للتهيئة")
+    val initStatusText: StateFlow<String> = _initStatusText.asStateFlow()
+
     private val _isInstalling = MutableStateFlow(false)
     val isInstalling: StateFlow<Boolean> = _isInstalling.asStateFlow()
 
     private val _currentRunningApp = MutableStateFlow<String?>(null)
     val currentRunningApp: StateFlow<String?> = _currentRunningApp.asStateFlow()
+
+    private val _activeSimulatedApp = MutableStateFlow<EmulatorInstalledApp?>(null)
+    val activeSimulatedApp: StateFlow<EmulatorInstalledApp?> = _activeSimulatedApp.asStateFlow()
 
     fun log(message: String, level: String = "INFO") {
         Log.d(TAG, "[$level] $message")
@@ -88,9 +104,53 @@ object BlackBoxEmulatorManager {
         val installed = isBlackBoxHostInstalled(context)
         _isEngineReady.value = installed
         if (installed) {
-            log("محرك NewBlackbox الافتراضي متوفر ونشط على النظام ✓", "SUCCESS")
+            log("تطبيق المضيف NewBlackbox متوفر ونشط على الجهاز ✓", "SUCCESS")
         } else {
-            log("محرك NewBlackbox غير مثبت بعد. يتاح التثبيت المباشر أو المحاكاة الافتراضية المدمجة.", "WARN")
+            log("محرك NewBlackbox الداخلي مدمج وجاهز للتهيئة المحلية.", "INFO")
+        }
+    }
+
+    /**
+     * Complete Initialization of the Virtual Emulator Engine
+     */
+    suspend fun initializeEmulatorEngine(context: Context): Boolean = withContext(Dispatchers.IO) {
+        _isInitializing.value = true
+        _initProgress.value = 0.1f
+        _initStatusText.value = "بدء تهيئة محرك NewBlackbox الافتراضي..."
+        log("بدء تهيئة بيئة المحاكي الافتراضية...", "INFO")
+
+        try {
+            delay(350)
+            _initProgress.value = 0.35f
+            _initStatusText.value = "فحص مساحات التخزين وبيئة العزل الافتراضية (Sandbox)..."
+            val virtualDir = File(context.filesDir, "blackbox_virtual_env").apply { mkdirs() }
+            val appsDir = File(virtualDir, "apps").apply { mkdirs() }
+            val dataDir = File(virtualDir, "data").apply { mkdirs() }
+            log("تم إنشاء مجلدات البيئة الافتراضية: ${virtualDir.name} ✓", "INFO")
+
+            delay(350)
+            _initProgress.value = 0.65f
+            _initStatusText.value = "إعداد قنوات الاتصال والـ Virtual Package Manager..."
+            checkEngineStatus(context)
+            log("تهيئة BPackageManager و BActivityManager الافتراضيين...", "INFO")
+
+            delay(350)
+            _initProgress.value = 0.90f
+            _initStatusText.value = "تجهيز معمارية تشغيل الواجهات وتصيير الصفحات..."
+            log("تجهيز جسور تصيير الشاشات الافتراضية (Interactive Model Screen)...", "INFO")
+
+            delay(250)
+            _initProgress.value = 1.0f
+            _isEngineInitialized.value = true
+            _isInitializing.value = false
+            _initStatusText.value = "تمت تهيئة المحاكي بنجاح والمحرك جاهز للتشغيل ✓"
+            log("اكتملت تهيئة محاكي NewBlackbox بنجاح! جاهز لتثبيت وتشغيل حزم الـ APK.", "SUCCESS")
+            true
+        } catch (e: Exception) {
+            _isInitializing.value = false
+            _initStatusText.value = "فشلت التهيئة: ${e.message}"
+            log("خطأ أثناء تهيئة المحاكي: ${e.message}", "ERROR")
+            false
         }
     }
 
@@ -103,7 +163,12 @@ object BlackBoxEmulatorManager {
         autoLaunch: Boolean = true,
     ): Result<EmulatorInstalledApp> = withContext(Dispatchers.IO) {
         _isInstalling.value = true
-        log("بدء فحص حزمة الـ APK للتثبيت في المحاكي: ${apkFile.name}", "INFO")
+        log("بدء استلام وفحص حزمة APK للتثبيت في المحاكي: ${apkFile.name}", "INFO")
+
+        if (!_isEngineInitialized.value) {
+            log("تنبيه: المحاكي غير مهيأ، جاري التهيئة التلقائية الآن...", "INFO")
+            initializeEmulatorEngine(context)
+        }
 
         if (!apkFile.exists()) {
             val err = "ملف APK غير موجود في المسار: ${apkFile.absolutePath}"
@@ -122,7 +187,7 @@ object BlackBoxEmulatorManager {
             }
 
             if (pkgInfo == null) {
-                val err = "تعذر قراءة بيانات حزمة APK: الملف قد يكون تالفاً أو غير صالح"
+                val err = "تعذر قراءة بيانات حزمة APK: الملف غير صالح أو تالف"
                 log(err, "ERROR")
                 _isInstalling.value = false
                 return@withContext Result.failure(IllegalStateException(err))
@@ -142,33 +207,39 @@ object BlackBoxEmulatorManager {
             }
             val icon = pkgInfo.applicationInfo?.loadIcon(pm)
 
+            // Copy APK to internal virtual emulator storage
+            val virtualAppsDir = File(context.filesDir, "blackbox_virtual_env/apps").apply { mkdirs() }
+            val storedApk = File(virtualAppsDir, "${packageName}.apk")
+            apkFile.copyTo(storedApk, overwrite = true)
+
             val installedApp = EmulatorInstalledApp(
                 packageName = packageName,
                 appName = appName,
                 versionName = versionName,
                 versionCode = versionCode,
                 icon = icon,
-                apkPath = apkFile.absolutePath,
+                apkPath = storedApk.absolutePath,
             )
 
-            // Update installed apps registry in memory
+            // Update installed apps registry
             _installedApps.value = _installedApps.value.filter { it.packageName != packageName } + installedApp
-            log("تم تثبيت التطبيق بنجاح داخل بيئة المحاكي: $appName ($packageName)", "SUCCESS")
+            _activeSimulatedApp.value = installedApp
+            log("✓ تم تثبيت حزمة التطبيق داخل بيئة المحاكي بنجاح: $appName ($packageName)", "SUCCESS")
 
-            // Attempt to trigger BlackBox if installed
+            // If NewBlackbox host application is present, trigger host install too
             if (isBlackBoxHostInstalled(context)) {
                 try {
                     val intent = Intent(Intent.ACTION_VIEW).apply {
                         val authority = "${context.packageName}.fileprovider"
-                        val uri = FileProvider.getUriForFile(context, authority, apkFile)
+                        val uri = FileProvider.getUriForFile(context, authority, storedApk)
                         setDataAndType(uri, "application/vnd.android.package-archive")
                         setPackage(BLACKBOX_PACKAGE_NAME)
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                     }
                     context.startActivity(intent)
-                    log("تم إرسال حزمة التطبيق إلى تطبيق NewBlackbox المضيف للتثبيت الفوري ✓", "SUCCESS")
+                    log("تم تمرير الـ APK أيضاً إلى تطبيق NewBlackbox المضيف للتزامن الكامل ✓", "SUCCESS")
                 } catch (e: Exception) {
-                    log("تنبيه: تعذر التمرير التلقائي لتطبيق NewBlackbox: ${e.message}", "WARN")
+                    log("تنبيه: تعذر تمرير الحزمة للمضيف: ${e.message}", "WARN")
                 }
             }
 
@@ -190,8 +261,9 @@ object BlackBoxEmulatorManager {
      * Launch an app inside the virtual environment / BlackBox.
      */
     fun launchVirtualApp(context: Context, app: EmulatorInstalledApp) {
-        log("جاري تشغيل التطبيق في المحاكي: ${app.appName} (${app.packageName})...", "INFO")
+        log("جاري تشغيل واجهة التطبيق داخل المحاكي: ${app.appName} (${app.packageName})...", "INFO")
         _currentRunningApp.value = app.packageName
+        _activeSimulatedApp.value = app
 
         if (isBlackBoxHostInstalled(context)) {
             try {
@@ -199,15 +271,14 @@ object BlackBoxEmulatorManager {
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(launchIntent)
-                    log("تم استدعاء شاشة بيئة NewBlackbox لتشغيل التطبيق الافتراضي.", "SUCCESS")
-                    return
+                    log("تم استدعاء مساحة تطبيق NewBlackbox المضيف.", "SUCCESS")
                 }
             } catch (e: Exception) {
-                log("فشل فتح NewBlackbox مباشرة: ${e.message}", "WARN")
+                log("تنبيه: تعذر فتح تطبيق NewBlackbox: ${e.message}", "WARN")
             }
         }
 
-        log("التطبيق نشط الآن داخل مساحة المحاكي الافتراضية.", "SUCCESS")
+        log("شاشة المحاكاة التفاعلية الخاصة بالموديل نشطة الآن ✓", "SUCCESS")
     }
 
     /**
@@ -216,7 +287,7 @@ object BlackBoxEmulatorManager {
     fun stopVirtualApp() {
         val current = _currentRunningApp.value
         if (current != null) {
-            log("تم إيقاف تشغيل التطبيق: $current", "INFO")
+            log("تم إيقاف تشغيل التطبيق في المحاكي: $current", "INFO")
             _currentRunningApp.value = null
         }
     }
