@@ -103,22 +103,17 @@ fun IdeTerminalGradleBuildSheet(
     var isBuilding by remember { mutableStateOf(false) }
     var isInstallingTools by remember { mutableStateOf(false) }
 
-    val canDismiss = !isBuilding && !isInstallingTools
-
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
-        confirmValueChange = { targetValue ->
-            if (targetValue == androidx.compose.material3.SheetValue.Hidden) {
-                canDismiss
-            } else {
-                true
-            }
-        },
+        confirmValueChange = { false },
     )
 
-    BackHandler(enabled = !canDismiss) {
-        // Block back press while building or installing
-        Toast.makeText(context, "يرجى الانتظار حتى اكتمال العملية الحالية...", Toast.LENGTH_SHORT).show()
+    BackHandler(enabled = true) {
+        if (!isBuilding && !isInstallingTools) {
+            onDismiss()
+        } else {
+            Toast.makeText(context, "يرجى الانتظار حتى اكتمال العملية الحالية...", Toast.LENGTH_SHORT).show()
+        }
     }
 
     var isCheckingEnv by remember { mutableStateOf(true) }
@@ -252,6 +247,21 @@ fun IdeTerminalGradleBuildSheet(
                 "echo 'export PATH=/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:\$PATH' >> /root/.bashrc",
                 "echo '===> تجهيز توافقية AAPT2 لمعمارية الهاتف (aapt2 aarch64)...'",
                 "apt-get install -y --no-install-recommends aapt || true",
+                "mkdir -p /root/android-sdk/build-tools/34.0.0",
+                "if command -v aapt2 >/dev/null 2>&1; then",
+                "    NATIVE_AAPT=\$(command -v aapt2)",
+                "elif command -v aapt >/dev/null 2>&1; then",
+                "    NATIVE_AAPT=\$(command -v aapt)",
+                "else",
+                "    NATIVE_AAPT=\"\"",
+                "fi",
+                "if [ -n \"\$NATIVE_AAPT\" ]; then",
+                "    cat << 'WRAPPER' > /root/android-sdk/build-tools/34.0.0/aapt2",
+                "#!/bin/bash",
+                "exec \"\$NATIVE_AAPT\" \"\$@\"",
+                "WRAPPER",
+                "    chmod +x /root/android-sdk/build-tools/34.0.0/aapt2",
+                "fi",
                 "mkdir -p /root/.gradle",
                 "if ! grep -q \"android.aapt2FromMaven\" /root/.gradle/gradle.properties 2>/dev/null; then",
                 "    echo 'android.aapt2FromMaven=false' >> /root/.gradle/gradle.properties",
@@ -334,6 +344,24 @@ fun IdeTerminalGradleBuildSheet(
                 "fi",
                 "echo \"===> التحقق من إعدادات AAPT2 وتوافقية المعمارية (ARM64)...\"",
                 "mkdir -p /root/.gradle",
+                "if command -v aapt2 >/dev/null 2>&1; then",
+                "    NATIVE_AAPT=\$(command -v aapt2)",
+                "elif command -v aapt >/dev/null 2>&1; then",
+                "    NATIVE_AAPT=\$(command -v aapt)",
+                "else",
+                "    NATIVE_AAPT=\"\"",
+                "fi",
+                "if [ -n \"\$NATIVE_AAPT\" ]; then",
+                "    mkdir -p /root/android-sdk/build-tools/34.0.0",
+                "    cat << 'WRAPPER' > /root/android-sdk/build-tools/34.0.0/aapt2",
+                "#!/bin/bash",
+                "exec \"\$NATIVE_AAPT\" \"\$@\"",
+                "WRAPPER",
+                "    chmod +x /root/android-sdk/build-tools/34.0.0/aapt2",
+                "    find /root/.gradle/caches -name \"aapt2\" -type f 2>/dev/null | while read -r cached_aapt; do",
+                "        cp -f /root/android-sdk/build-tools/34.0.0/aapt2 \"\$cached_aapt\" 2>/dev/null || true",
+                "    done",
+                "fi",
                 "if [ ! -f gradle.properties ] || ! grep -q \"android.aapt2FromMaven\" gradle.properties 2>/dev/null; then",
                 "    echo \"android.aapt2FromMaven=false\" >> gradle.properties",
                 "fi",
@@ -401,10 +429,9 @@ fun IdeTerminalGradleBuildSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = {
-            if (!isBuilding && !isInstallingTools) onDismiss()
-        },
+        onDismissRequest = {},
         sheetState = sheetState,
+        dragHandle = null,
         containerColor = Color(0xFF070B1E),
         contentColor = Ink,
         scrimColor = Color(0xD903060F),

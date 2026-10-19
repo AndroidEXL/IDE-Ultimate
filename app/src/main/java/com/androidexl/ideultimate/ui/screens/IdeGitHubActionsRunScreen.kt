@@ -130,6 +130,7 @@ fun IdeGitHubActionsRunScreen(
     var apkDownloadProgress by remember { mutableStateOf(0f) }
     var downloadedApkFile by remember { mutableStateOf<File?>(null) }
     var downloadStatusText by remember { mutableStateOf("") }
+    var hasAutoDownloadedForRunId by remember { mutableStateOf<Long?>(null) }
 
     fun installApk(file: File) {
         try {
@@ -267,6 +268,9 @@ fun IdeGitHubActionsRunScreen(
                 }
                 if (it.conclusion == "failure") {
                     selectedErrorDetail = it.errorMessage ?: "حدث خطأ أثناء تنفيذ عملية البناء السحابي."
+                } else if (it.conclusion == "success" && hasAutoDownloadedForRunId != it.id && !isDownloadingApk) {
+                    hasAutoDownloadedForRunId = it.id
+                    downloadAndInstallBuiltApk()
                 }
             }
             val status = runDetail?.status
