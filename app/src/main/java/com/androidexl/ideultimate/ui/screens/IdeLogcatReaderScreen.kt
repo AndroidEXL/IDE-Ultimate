@@ -91,6 +91,7 @@ fun IdeLogcatReaderScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedLevelFilter by remember { mutableStateOf<LogcatLevel?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showLoggerHelperDialog by remember { mutableStateOf(false) }
 
     val logs = remember { mutableStateListOf<LogcatEntry>() }
     var isLoading by remember { mutableStateOf(false) }
@@ -168,6 +169,22 @@ fun IdeLogcatReaderScreen(
                     color = Muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            // AppLogger info / code button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF6366F1).copy(alpha = 0.2f))
+                    .border(1.dp, Color(0xFF6366F1), RoundedCornerShape(8.dp))
+                    .clickable { showLoggerHelperDialog = true }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = "كلاس AppLogger",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFFA5B4FC),
                 )
             }
 
@@ -446,6 +463,80 @@ fun IdeLogcatReaderScreen(
                 }
             }
         }
+    }
+
+    // AppLogger instructions dialog
+    if (showLoggerHelperDialog) {
+        val sampleCode = if (project.language == com.androidexl.ideultimate.data.ProjectLanguage.JAVA) {
+            """// كلاس AppLogger تم إنشاؤه تلقائياً في مشروعك!
+// لاستخدامه لإرسال اللوج إلى IDE Ultimate:
+
+AppLogger.d(this, "MyTag", "رسالة تصحيح من تطبيقي");
+AppLogger.i(this, "MyTag", "معلومات مهمة");
+AppLogger.e(this, "MyTag", "حدث خطأ غير متوقع", exception);"""
+        } else {
+            """// كلاس AppLogger تم إنشاؤه تلقائياً في مشروعك!
+// لاستخدامه لإرسال اللوج إلى IDE Ultimate:
+
+AppLogger.d(this, "MyTag", "رسالة تصحيح من تطبيقي")
+AppLogger.i(this, "MyTag", "معلومات مهمة")
+AppLogger.e(this, "MyTag", "حدث خطأ غير متوقع", exception)"""
+        }
+
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showLoggerHelperDialog = false },
+            containerColor = Midnight,
+            titleContentColor = Ink,
+            textContentColor = Ink,
+            title = {
+                Text("كلاس AppLogger لإرسال السجلات", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "يقوم IDE Ultimate تلقائياً بإضافة كلاس AppLogger داخل حزمة مشروعك (${project.packageName}). يمكنك استدعاء دواله من أي Activity أو Service لإرسال السجلات مباشرة إلى هذه الشاشة:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(IndigoDeep)
+                            .padding(10.dp),
+                    ) {
+                        Text(
+                            text = sampleCode,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontSize = 11.sp,
+                                color = Cyan,
+                            ),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cb.setPrimaryClip(ClipData.newPlainText("AppLogger", sampleCode))
+                        Toast.makeText(context, "تم نسخ الكود", Toast.LENGTH_SHORT).show()
+                        showLoggerHelperDialog = false
+                    },
+                ) {
+                    Text("نسخ الكود", color = Cyan, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showLoggerHelperDialog = false }) {
+                    Text("إغلاق", color = Muted)
+                }
+            },
+        )
     }
 }
 

@@ -182,22 +182,42 @@ fun IdeLogcatSystemScreen(
                         ),
                         color = Ink,
                     )
-                    // Shizuku Badge
+                    // Shizuku Badge / Request Action
+                    val hasPerm = remember(isShizukuAvailable) {
+                        ShizukuLogcatManager.hasShizukuPermission(context)
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isShizukuAvailable) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.2f))
-                            .border(1.dp, if (isShizukuAvailable) Color(0xFF10B981) else Color(0xFFF59E0B), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                            .background(
+                                if (hasPerm) Color(0xFF10B981).copy(alpha = 0.2f)
+                                else if (isShizukuAvailable) Color(0xFF38BDF8).copy(alpha = 0.2f)
+                                else Color(0xFFF59E0B).copy(alpha = 0.2f)
+                            )
+                            .border(
+                                1.dp,
+                                if (hasPerm) Color(0xFF10B981)
+                                else if (isShizukuAvailable) Color(0xFF38BDF8)
+                                else Color(0xFFF59E0B),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .clickable {
+                                ShizukuLogcatManager.requestShizukuPermissionOrLaunch(context)
+                            }
+                            .padding(horizontal = 7.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = if (isShizukuAvailable) "Shizuku Privileged" else "System Mode",
+                            text = if (hasPerm) "Shizuku Granted ✓"
+                            else if (isShizukuAvailable) "طلب إذن Shizuku"
+                            else "تثبيت Shizuku",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = JetBrainsMono,
                             ),
-                            color = if (isShizukuAvailable) Color(0xFF34D399) else Color(0xFFFBBF24),
+                            color = if (hasPerm) Color(0xFF34D399)
+                            else if (isShizukuAvailable) Color(0xFF38BDF8)
+                            else Color(0xFFFBBF24),
                         )
                     }
                 }
@@ -466,6 +486,43 @@ fun IdeLogcatSystemScreen(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink,
                 )
+
+                // Shizuku Permission Request Card in BottomSheet
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E1B4B))
+                        .border(1.dp, Color(0xFF6366F1).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .clickable {
+                            ShizukuLogcatManager.requestShizukuPermissionOrLaunch(context)
+                        }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF4F46E5)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("SH", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isShizukuAvailable) "خدمة Shizuku وإذن الوصول" else "تثبيت خدمة Shizuku",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Ink,
+                        )
+                        Text(
+                            text = if (isShizukuAvailable) "انقر لفتح Shizuku ومنح صلاحية قراءة سجلات النظام الكاملة" else "انقر لتحميل وتثبيت مدير Shizuku للحصول على صلاحيات متقدمة",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                        )
+                    }
+                }
 
                 // App Picker Button
                 Row(
