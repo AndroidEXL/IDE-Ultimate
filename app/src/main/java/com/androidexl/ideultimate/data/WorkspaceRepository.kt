@@ -4460,6 +4460,7 @@ public class AppLogger {
         try {
             Intent intent = new Intent(ACTION_LOG);
             intent.setPackage("com.androidexl.ideultimate");
+            intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
             intent.putExtra(EXTRA_PACKAGE, context.getPackageName());
             intent.putExtra(EXTRA_APP_NAME, "${project.name}");
             intent.putExtra(EXTRA_TAG, tag != null ? tag : "App");
@@ -4577,6 +4578,7 @@ object AppLogger {
         runCatching {
             val intent = Intent(ACTION_LOG).apply {
                 `package` = "com.androidexl.ideultimate"
+                addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
                 putExtra(EXTRA_PACKAGE, context.packageName)
                 putExtra(EXTRA_APP_NAME, "${project.name}")
                 putExtra(EXTRA_TAG, tag)

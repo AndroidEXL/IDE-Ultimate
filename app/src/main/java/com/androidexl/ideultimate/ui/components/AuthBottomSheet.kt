@@ -110,7 +110,7 @@ fun AuthBottomSheet(
     ModalBottomSheet(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -422,7 +422,7 @@ private fun AuthModeTabButton(
 @Composable
 private fun authFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = Cyan,
-    unfocusedBorderColor = Color(0x33FFFFFF),
+    unfocusedBorderColor = GlassStrokeTop,
     focusedLabelColor = Cyan,
     unfocusedLabelColor = Muted,
     cursorColor = Cyan,

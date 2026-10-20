@@ -443,7 +443,7 @@ fun UserProfileScreen(
         ModalBottomSheet(
             onDismissRequest = { actionTarget = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -563,7 +563,7 @@ fun UserProfileScreen(
     if (pendingDelete != null) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Muted,
             title = {
@@ -600,7 +600,7 @@ fun UserProfileScreen(
         var newName by remember { mutableStateOf(storeRepository.userName) }
         AlertDialog(
             onDismissRequest = { showEditNameDialog = false },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             title = { Text(stringResource(R.string.dialog_rename)) },
@@ -612,7 +612,7 @@ fun UserProfileScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),

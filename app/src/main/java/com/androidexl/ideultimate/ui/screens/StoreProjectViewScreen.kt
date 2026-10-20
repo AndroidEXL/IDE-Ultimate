@@ -379,7 +379,7 @@ fun StoreProjectViewScreen(
         ModalBottomSheet(
             onDismissRequest = { showDownloadSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),

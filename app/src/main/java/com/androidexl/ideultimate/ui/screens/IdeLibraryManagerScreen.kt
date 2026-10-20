@@ -515,9 +515,9 @@ fun IdeLibraryManagerScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedContainerColor = Color(0xFF0F1738),
-                        unfocusedContainerColor = Color(0xFF0B1028),
+                        unfocusedContainerColor = Midnight,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),
@@ -931,9 +931,9 @@ private fun SearchAndDownloadBottomSheet(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedContainerColor = Color(0xFF0F1738),
-                        unfocusedContainerColor = Color(0xFF0B1028),
+                        unfocusedContainerColor = Midnight,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),

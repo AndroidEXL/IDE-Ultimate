@@ -338,7 +338,7 @@ fun IdeLogcatSystemScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = Midnight,
                     unfocusedContainerColor = Midnight,
                     focusedTextColor = Ink,
@@ -352,7 +352,7 @@ fun IdeLogcatSystemScreen(
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (selectedLevelFilter != null || selectedTargetApp != null || selectedScopeFilter != AppScopeFilter.ALL) Cyan else IndigoDeep)
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(14.dp))
                     .clickable { showFilterSheet = true },
                 contentAlignment = Alignment.Center,
             ) {
@@ -557,7 +557,7 @@ fun IdeLogcatSystemScreen(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(CircleShape)
-                        .background(Color(0x44FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
             },
         ) {

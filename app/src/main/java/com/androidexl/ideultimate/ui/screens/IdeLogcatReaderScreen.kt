@@ -269,7 +269,7 @@ fun IdeLogcatReaderScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = Midnight,
                     unfocusedContainerColor = Midnight,
                     focusedTextColor = Ink,
@@ -283,7 +283,7 @@ fun IdeLogcatReaderScreen(
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (selectedLevelFilter != null) Cyan else IndigoDeep)
-                    .border(1.dp, if (selectedLevelFilter != null) Cyan else Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                    .border(1.dp, if (selectedLevelFilter != null) Cyan else GlassStrokeTop, RoundedCornerShape(14.dp))
                     .clickable { showFilterSheet = true },
                 contentAlignment = Alignment.Center,
             ) {
@@ -374,7 +374,7 @@ fun IdeLogcatReaderScreen(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(CircleShape)
-                        .background(Color(0x44FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
             },
         ) {

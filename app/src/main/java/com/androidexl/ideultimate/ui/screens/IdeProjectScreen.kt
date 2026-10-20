@@ -1204,7 +1204,7 @@ fun IdeProjectScreen(
         ModalBottomSheet(
             onDismissRequest = { showXmlBottomSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -2288,7 +2288,7 @@ private fun AddWidgetModalBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -2353,7 +2353,7 @@ private fun AddWidgetModalBottomSheet(
                         unfocusedTextColor = Ink,
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedLabelColor = Cyan,
                         unfocusedLabelColor = Muted,
                         focusedContainerColor = Color(0x14FFFFFF),
@@ -8221,7 +8221,7 @@ private fun IdeLogicEventWorkspace(
     if (currentRenameItem != null) {
         AlertDialog(
             onDismissRequest = { renameDialogItem = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -8247,7 +8247,7 @@ private fun IdeLogicEventWorkspace(
                         unfocusedTextColor = Ink,
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedContainerColor = Color(0x14FFFFFF),
                         unfocusedContainerColor = Color(0x0AFFFFFF),
                     ),
@@ -8513,7 +8513,7 @@ private fun AddActivityEventBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -8655,7 +8655,7 @@ private fun AddViewEventBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -8869,7 +8869,7 @@ private fun CreateOrEditFunctionBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -9124,7 +9124,7 @@ private fun AddComponentOrDrawerEventBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -9199,7 +9199,7 @@ private fun IdeLogicItemLongPressBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -10383,7 +10383,7 @@ private fun IdeLogicItemEditorBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -10474,7 +10474,7 @@ private fun IdeLogicItemEditorBottomSheet(
                         unfocusedTextColor = Ink,
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedContainerColor = Color(0xFF060A1C),
                         unfocusedContainerColor = Color(0xFF060A1C),
                     ),
@@ -10903,7 +10903,7 @@ private fun AddXmlLayoutDialog(
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
+        containerColor = Midnight,
         titleContentColor = Ink,
         textContentColor = Ink,
         shape = RoundedCornerShape(24.dp),
@@ -10936,7 +10936,7 @@ private fun AddXmlLayoutDialog(
                             unfocusedTextColor = Ink,
                             cursorColor = Cyan,
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedContainerColor = Color(0x14FFFFFF),
                             unfocusedContainerColor = Color(0x0AFFFFFF),
                         ),
@@ -11286,7 +11286,7 @@ private fun IdeWidgetPropertyEditDialog(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -12597,7 +12597,7 @@ private fun DialogTextField(
             unfocusedTextColor = Ink,
             cursorColor = Cyan,
             focusedBorderColor = Cyan,
-            unfocusedBorderColor = Color(0x33FFFFFF),
+            unfocusedBorderColor = GlassStrokeTop,
             focusedContainerColor = Color(0x14FFFFFF),
             unfocusedContainerColor = Color(0x0AFFFFFF),
         ),
@@ -12895,7 +12895,7 @@ private fun BuildMethodBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -13231,7 +13231,7 @@ private fun IdeSideMenuManagerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
+        containerColor = Midnight,
         titleContentColor = Ink,
         textContentColor = Ink,
         shape = RoundedCornerShape(24.dp),
@@ -13482,7 +13482,7 @@ private fun ImageViewSelectImageBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0B1028),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -14161,7 +14161,7 @@ private fun IdeImageManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { activeSheetImage = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -14282,7 +14282,7 @@ private fun IdeImageManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { showMultiSelectSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -14345,7 +14345,7 @@ private fun IdeImageManagerScreen(
     if (renameTarget != null) {
         AlertDialog(
             onDismissRequest = { renameTargetImage = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -14378,7 +14378,7 @@ private fun IdeImageManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = Color(0x14FFFFFF),
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
@@ -14416,7 +14416,7 @@ private fun IdeImageManagerScreen(
         }
         AlertDialog(
             onDismissRequest = { previewImage = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -14934,7 +14934,7 @@ private fun IdeSoundManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { activeSheetSound = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -15051,7 +15051,7 @@ private fun IdeSoundManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { showMultiSelectSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -15114,7 +15114,7 @@ private fun IdeSoundManagerScreen(
     if (renameTarget != null) {
         AlertDialog(
             onDismissRequest = { renameTargetSound = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -15147,7 +15147,7 @@ private fun IdeSoundManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = Color(0x14FFFFFF),
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
@@ -15601,7 +15601,7 @@ private fun IdeFontManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { activeSheetFont = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -15717,7 +15717,7 @@ private fun IdeFontManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { showMultiSelectSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -15779,7 +15779,7 @@ private fun IdeFontManagerScreen(
     if (renameTarget != null) {
         AlertDialog(
             onDismissRequest = { renameTargetFont = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -15812,7 +15812,7 @@ private fun IdeFontManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = Color(0x14FFFFFF),
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
@@ -15846,7 +15846,7 @@ private fun IdeFontManagerScreen(
     if (currentPreviewFont != null) {
         AlertDialog(
             onDismissRequest = { previewFont = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -15900,7 +15900,7 @@ private fun IdeFontManagerScreen(
                             unfocusedTextColor = Ink,
                             cursorColor = Cyan,
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -16175,7 +16175,7 @@ private fun IdeResourcesManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = Color(0xFF060A1C),
                                 unfocusedContainerColor = Color(0xFF060A1C),
                             ),
@@ -16343,7 +16343,7 @@ private fun IdeResourcesManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedEntry = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -16433,7 +16433,7 @@ private fun IdeResourcesManagerScreen(
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -16523,7 +16523,7 @@ private fun IdeResourcesManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -16563,7 +16563,7 @@ private fun IdeResourcesManagerScreen(
     if (renameEntry != null) {
         AlertDialog(
             onDismissRequest = { renameTargetEntry = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -16590,7 +16590,7 @@ private fun IdeResourcesManagerScreen(
                             unfocusedTextColor = Ink,
                             cursorColor = Cyan,
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -17130,7 +17130,7 @@ private fun IdeIconManagerScreen(
     if (targetSpec != null) {
         AlertDialog(
             onDismissRequest = { iconToAddDialog = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -17163,7 +17163,7 @@ private fun IdeIconManagerScreen(
                                 unfocusedTextColor = Ink,
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -17215,7 +17215,7 @@ private fun IdeIconManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { activeSheetIcon = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -17302,7 +17302,7 @@ private fun IdeIconManagerScreen(
     if (renameIcon != null) {
         AlertDialog(
             onDismissRequest = { renameTargetIcon = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(24.dp),
@@ -17329,7 +17329,7 @@ private fun IdeIconManagerScreen(
                             unfocusedTextColor = Ink,
                             cursorColor = Cyan,
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )

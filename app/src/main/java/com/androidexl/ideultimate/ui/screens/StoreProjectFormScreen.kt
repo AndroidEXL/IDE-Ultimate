@@ -875,7 +875,7 @@ private fun UrlInputDialog(
     var value by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
+        containerColor = Midnight,
         titleContentColor = Ink,
         textContentColor = Ink,
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
@@ -928,7 +928,7 @@ private fun UrlInputDialog(
 @Composable
 private fun storeFormFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = Cyan,
-    unfocusedBorderColor = Color(0x33FFFFFF),
+    unfocusedBorderColor = GlassStrokeTop,
     focusedLabelColor = Cyan,
     unfocusedLabelColor = Muted,
     cursorColor = Cyan,

@@ -781,7 +781,7 @@ fun WorkspaceScreen(
         ModalBottomSheet(
             onDismissRequest = { sheet = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1028),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xD903060F),
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -898,7 +898,7 @@ fun WorkspaceScreen(
         val descendants = if (isFolder) repository.descendantCount(currentDelete.id) else 0
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = Color(0xFF0D1230),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Muted,
             shape = RoundedCornerShape(26.dp),
@@ -1924,7 +1924,7 @@ private fun NameInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0D1230),
+        containerColor = Midnight,
         titleContentColor = Ink,
         textContentColor = Muted,
         shape = RoundedCornerShape(26.dp),
@@ -1959,7 +1959,7 @@ private fun NameInputDialog(
                         unfocusedTextColor = Ink,
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan.copy(alpha = 0.8f),
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedLabelColor = Cyan,
                         unfocusedLabelColor = Muted,
                         focusedContainerColor = Color(0x14FFFFFF),

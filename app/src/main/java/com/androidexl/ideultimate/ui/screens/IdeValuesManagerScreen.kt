@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
@@ -370,7 +371,7 @@ fun IdeValuesManagerScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = Midnight,
                     unfocusedContainerColor = Midnight,
                     focusedTextColor = Ink,
@@ -511,7 +512,7 @@ fun IdeValuesManagerScreen(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(CircleShape)
-                        .background(Color(0x44FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
             },
         ) {
@@ -617,6 +618,7 @@ fun IdeValuesManagerScreen(
                         label = { Text("نوع الوسم (Tag Name)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        colors = dialogFieldColors(),
                     )
                     OutlinedTextField(
                         value = newName,
@@ -624,12 +626,14 @@ fun IdeValuesManagerScreen(
                         label = { Text("اسم المفتاح (name)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        colors = dialogFieldColors(),
                     )
                     OutlinedTextField(
                         value = newValue,
                         onValueChange = { newValue = it },
                         label = { Text("القيمة (value)") },
                         modifier = Modifier.fillMaxWidth(),
+                        colors = dialogFieldColors(),
                     )
                 }
             },
@@ -687,12 +691,14 @@ fun IdeValuesManagerScreen(
                         label = { Text("اسم المفتاح (name)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        colors = dialogFieldColors(),
                     )
                     OutlinedTextField(
                         value = editVal,
                         onValueChange = { editVal = it },
                         label = { Text("القيمة (value)") },
                         modifier = Modifier.fillMaxWidth(),
+                        colors = dialogFieldColors(),
                     )
                 }
             },
@@ -723,3 +729,15 @@ fun IdeValuesManagerScreen(
         )
     }
 }
+
+@Composable
+private fun dialogFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Cyan,
+    unfocusedBorderColor = GlassStrokeTop,
+    focusedContainerColor = IndigoDeep,
+    unfocusedContainerColor = IndigoDeep,
+    focusedTextColor = Ink,
+    unfocusedTextColor = Ink,
+    focusedLabelColor = Cyan,
+    unfocusedLabelColor = Muted,
+)
