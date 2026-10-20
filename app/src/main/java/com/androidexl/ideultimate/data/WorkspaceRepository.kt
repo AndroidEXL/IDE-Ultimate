@@ -4650,7 +4650,7 @@ object AppLogger {
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 var line: String? = reader.readLine()
                 val pattern = Regex(
-                    """^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEA])/([^(:|\s]+)(?:\(\s*(\d+)\))?:\s*(.*)$"""
+                    "^(\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+([VDIWEA])/([^(:|\\s]+)(?:\\(\\s*(\\d+)\\))?:\\s*(.*)$"
                 )
 
                 while (line != null) {
