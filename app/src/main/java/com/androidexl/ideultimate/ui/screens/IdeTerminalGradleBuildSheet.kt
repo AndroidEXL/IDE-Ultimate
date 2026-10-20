@@ -293,9 +293,14 @@ fun IdeTerminalGradleBuildSheet(
                 "    done",
                 "fi",
                 "echo '✓ تم تجهيز بيئة وأدوات Android SDK الرسمية بنجاح!'",
-                if (isFlutter) "echo '===> تجهيز بيئة ومحرك Flutter SDK...'" else "echo ''",
-                if (isFlutter) "if [ ! -d /root/flutter ]; then echo '===> جلب وتثبيت Flutter SDK (قناة stable)...'; git clone -b stable --depth 1 https://github.com/flutter/flutter.git /root/flutter 2>&1 || true; fi" else "echo ''",
-                if (isFlutter) "export PATH=/root/flutter/bin:\$PATH; echo 'export PATH=/root/flutter/bin:\$PATH' >> /root/.bashrc; flutter config --no-analytics 2>/dev/null || true; flutter config --android-sdk /root/android-sdk 2>/dev/null || true" else "echo ''",
+                if (isFlutter) "echo '===> تجهيز وتحميل بيئة محرك Flutter SDK الرسمي...'" else "echo ''",
+                if (isFlutter) "git config --global --add safe.directory /root/flutter 2>/dev/null || true" else "echo ''",
+                if (isFlutter) "if [ ! -d /root/flutter ]; then echo '===> تحميل حزمة Flutter SDK من المستودع الرسمي (stable branch)...'; git clone -b stable --depth 1 https://github.com/flutter/flutter.git /root/flutter 2>&1 || true; fi" else "echo ''",
+                if (isFlutter) "export PATH=/root/flutter/bin:\$PATH; echo 'export PATH=/root/flutter/bin:\$PATH' >> /root/.bashrc" else "echo ''",
+                if (isFlutter) "echo '===> ضبط إعدادات Flutter وتحديد مسار Android SDK...'; /root/flutter/bin/flutter config --no-analytics 2>/dev/null || true; /root/flutter/bin/flutter config --android-sdk /root/android-sdk 2>/dev/null || true" else "echo ''",
+                if (isFlutter) "echo '===> الموافقة على تراخيص Android SDK...'; yes | /root/flutter/bin/flutter doctor --android-licenses 2>/dev/null || true" else "echo ''",
+                if (isFlutter) "echo '===> تنزيل وتخزين محرك ومكونات Dart و Flutter مسبقاً (precache)...'; /root/flutter/bin/flutter precache --android 2>&1 || true" else "echo ''",
+                if (isFlutter) "echo '✓ اكتمل تحميل وتثبيت بيئة Flutter SDK بنجاح!'" else "echo ''",
             ).joinToString("\n")
 
             val (rc, output) = TerminalManager.execInUbuntu(
@@ -322,7 +327,15 @@ fun IdeTerminalGradleBuildSheet(
     }
 
     fun startGradleBuild() {
-        if (isBuilding) return
+        if (isBuilding || isInstallingTools) return
+        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
+        val missing = toolStatuses.filter { !it.isInstalled }
+        if (missing.isNotEmpty()) {
+            appendLog("\n⚠️ بعض أدوات البناء غير متوفرة (${missing.joinToString { it.name }}).")
+            appendLog("===> جاري تحميل وتثبيت الأدوات المطلوبة تلقائيًا أولاً قبل البناء...")
+            installMissingTools()
+            return
+        }
         isBuilding = true
         buildSuccess = null
         apkOutputPath = null
@@ -827,7 +840,7 @@ fun IdeTerminalGradleBuildSheet(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "الأدوات المطلوبة لبناء Android و Gradle",
+                            text = if (isFlutter) "الأدوات المطلوبة لبناء تطبيق Flutter" else "الأدوات المطلوبة لبناء Android و Gradle",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color(0xFFF59E0B),
                         )
@@ -864,7 +877,7 @@ fun IdeTerminalGradleBuildSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "تثبيت أدوات Android SDK و Gradle الآن",
+                            text = if (isFlutter) "تحميل وتثبيت Flutter SDK والأدوات الآن" else "تثبيت أدوات Android SDK و Gradle الآن",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.5.sp,
@@ -1006,8 +1019,16 @@ fun IdeTerminalGradleBuildSheet(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
+                    val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
+                    val btnTitle = when {
+                        isBuilding -> "جاري البناء..."
+                        isFlutter && missingTools.isNotEmpty() -> "تحميل Flutter SDK والأدوات وبدء البناء"
+                        !isFlutter && missingTools.isNotEmpty() -> "تثبيت الأدوات وبدء البناء"
+                        isFlutter -> "بدء بناء Flutter الآن (flutter build apk)"
+                        else -> "بدء بناء Gradle الآن"
+                    }
                     Text(
-                        text = if (isBuilding) "جاري البناء..." else "بدء بناء Gradle الآن",
+                        text = btnTitle,
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.5.sp,
