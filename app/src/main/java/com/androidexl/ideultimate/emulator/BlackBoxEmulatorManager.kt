@@ -261,24 +261,54 @@ object BlackBoxEmulatorManager {
      * Launch an app inside the virtual environment / BlackBox.
      */
     fun launchVirtualApp(context: Context, app: EmulatorInstalledApp) {
-        log("جاري تشغيل واجهة التطبيق داخل المحاكي: ${app.appName} (${app.packageName})...", "INFO")
+        log("تشغيل تطبيق BlackBox: ${app.appName} (${app.packageName})...", "INFO")
         _currentRunningApp.value = app.packageName
         _activeSimulatedApp.value = app
 
+        // 1. If NewBlackbox host application is installed on device, launch via host
         if (isBlackBoxHostInstalled(context)) {
             try {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(BLACKBOX_PACKAGE_NAME)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(launchIntent)
-                    log("تم استدعاء مساحة تطبيق NewBlackbox المضيف.", "SUCCESS")
+                    log("تم فتح تطبيق NewBlackbox المضيف لتشغيل الحزمة الافتراضية ✓", "SUCCESS")
+                    return
                 }
             } catch (e: Exception) {
-                log("تنبيه: تعذر فتح تطبيق NewBlackbox: ${e.message}", "WARN")
+                log("تنبيه: تعذر فتح تطبيق NewBlackbox المضيف: ${e.message}", "WARN")
             }
         }
 
-        log("شاشة المحاكاة التفاعلية الخاصة بالموديل نشطة الآن ✓", "SUCCESS")
+        // 2. Launch installed package directly if installed on OS
+        val appIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+        if (appIntent != null) {
+            try {
+                appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(appIntent)
+                log("تم تشغيل التطبيق بنجاح: ${app.appName} ✓", "SUCCESS")
+                return
+            } catch (e: Exception) {
+                log("فشل تشغيل التطبيق: ${e.message}", "WARN")
+            }
+        }
+
+        // 3. Fallback: Open APK file through PackageInstaller
+        val apkFile = File(app.apkPath)
+        if (apkFile.exists()) {
+            try {
+                val authority = "${context.packageName}.fileprovider"
+                val uri = FileProvider.getUriForFile(context, authority, apkFile)
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                context.startActivity(installIntent)
+                log("تم فتح حزمة الـ APK لتشغيلها وتثبيتها مباشرة ✓", "SUCCESS")
+            } catch (e: Exception) {
+                log("تعذر فتح حزمة APK: ${e.message}", "ERROR")
+            }
+        }
     }
 
     /**
