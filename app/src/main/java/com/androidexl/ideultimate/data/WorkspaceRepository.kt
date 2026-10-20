@@ -4854,8 +4854,9 @@ object AppLogger {
 
         fun inspectTree(dir: androidx.documentfile.provider.DocumentFile, depth: Int = 0) {
             if (depth > 5) return
-            val files = dir.listFiles()
-            for (f in files) {
+            val files: Array<androidx.documentfile.provider.DocumentFile> = dir.listFiles()
+            for (i in files.indices) {
+                val f = files[i]
                 val fname = f.name ?: continue
                 if (f.isDirectory) {
                     if (fname == "build" || fname == ".git" || fname == ".gradle") continue
@@ -4972,8 +4973,9 @@ object AppLogger {
             targetRoot.mkdirs()
             fun copyDocumentTree(docDir: androidx.documentfile.provider.DocumentFile, destDir: File) {
                 destDir.mkdirs()
-                val children = docDir.listFiles()
-                for (child in children) {
+                val children: Array<androidx.documentfile.provider.DocumentFile> = docDir.listFiles()
+                for (i in children.indices) {
+                    val child = children[i]
                     val cname = child.name ?: continue
                     if (child.isDirectory) {
                         if (cname == "build" || cname == ".git" || cname == ".gradle") continue

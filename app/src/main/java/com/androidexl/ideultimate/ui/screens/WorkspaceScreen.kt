@@ -231,6 +231,15 @@ fun WorkspaceScreen(
     var pendingExport by remember { mutableStateOf<WorkspaceItem?>(null) }
     var pendingStoreZipName by remember { mutableStateOf<String?>(null) }
 
+    fun showMessage(text: String) {
+        lastMessage = text
+        message = text
+        runCatching {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
     val importFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -278,13 +287,6 @@ fun WorkspaceScreen(
         }
     }
 
-    fun showMessage(text: String) {
-        lastMessage = text
-        message = text
-        runCatching {
-            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
 
     val legacyPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
