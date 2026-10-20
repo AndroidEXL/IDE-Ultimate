@@ -5769,23 +5769,24 @@ private fun IdeWidgetPropertyBottomPanel(
                         .clickable(onClick = onSave),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val inkColor = Ink
                     Canvas(Modifier.size(18.dp)) {
                         val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         drawRoundRect(
-                            color = Ink,
+                            color = inkColor,
                             topLeft = Offset(size.width * 0.12f, size.height * 0.12f),
                             size = Size(size.width * 0.76f, size.height * 0.76f),
                             cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
                             style = stroke,
                         )
                         drawRect(
-                            color = Ink,
+                            color = inkColor,
                             topLeft = Offset(size.width * 0.28f, size.height * 0.12f),
                             size = Size(size.width * 0.36f, size.height * 0.24f),
                             style = stroke,
                         )
                         drawCircle(
-                            color = Ink,
+                            color = inkColor,
                             radius = size.width * 0.12f,
                             center = Offset(size.width * 0.50f, size.height * 0.62f),
                         )
