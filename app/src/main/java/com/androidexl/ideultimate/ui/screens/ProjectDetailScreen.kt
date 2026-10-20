@@ -82,7 +82,7 @@ private fun projectFiles(item: WorkspaceItem): List<ProjectFile> {
             ProjectFile("lib/main.dart", R.string.project_file_code, "DART", Cyan),
             ProjectFile("android/app/build.gradle.kts", R.string.project_file_app_build, "KTS", VioletSoft),
             ProjectFile("android/app/src/main/AndroidManifest.xml", R.string.project_file_manifest, "XML", Fuchsia),
-            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", MutedDark),
         )
         ProjectLanguage.JAVA -> listOf(
             ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
@@ -96,7 +96,7 @@ private fun projectFiles(item: WorkspaceItem): List<ProjectFile> {
                 Color(0xFFFBBF24),
             ),
             ProjectFile("app/src/main/res/values/strings.xml", R.string.project_file_resources, "XML", Cyan),
-            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", MutedDark),
         )
         ProjectLanguage.KOTLIN -> listOf(
             ProjectFile("settings.gradle.kts", R.string.project_file_settings, "KTS", Cyan),
@@ -110,7 +110,7 @@ private fun projectFiles(item: WorkspaceItem): List<ProjectFile> {
                 Teal,
             ),
             ProjectFile("app/src/main/res/values/strings.xml", R.string.project_file_resources, "XML", Cyan),
-            ProjectFile("README.md", R.string.project_file_readme, "MD", Muted),
+            ProjectFile("README.md", R.string.project_file_readme, "MD", MutedDark),
         )
     }
 }

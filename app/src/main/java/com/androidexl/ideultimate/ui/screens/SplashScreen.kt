@@ -164,13 +164,14 @@ fun SplashScreen(
         )
 
         // Vignette.
+        val vignetteColor = DeepNavy
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         Color.Transparent,
                         Color.Transparent,
-                        DeepNavy.copy(alpha = 0.72f),
+                        vignetteColor.copy(alpha = 0.72f),
                     ),
                     center = center,
                     radius = size.maxDimension * 0.72f,
