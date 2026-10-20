@@ -1,6 +1,7 @@
 package com.androidexl.ideultimate.data
 
 import android.content.Context
+import androidx.documentfile.provider.DocumentFile
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.mutableStateListOf
@@ -4353,7 +4354,8 @@ kotlin.jvm.target.validation.mode=warning
 
     fun defaultJavaAppLogger(project: WorkspaceItem): String = """package ${project.packageName};
 
-import android.content.Context;
+import android.content.Context
+import androidx.documentfile.provider.DocumentFile;
 import android.content.Intent;
 import android.os.Process;
 import android.util.Log;
@@ -4485,6 +4487,7 @@ public class AppLogger {
     fun defaultKotlinAppLogger(project: WorkspaceItem): String = """package ${project.packageName}
 
 import android.content.Context
+import androidx.documentfile.provider.DocumentFile
 import android.content.Intent
 import android.os.Process
 import android.util.Log
@@ -4856,7 +4859,7 @@ object AppLogger {
             if (depth > 5) return
             val files: Array<androidx.documentfile.provider.DocumentFile> = dir.listFiles()
             for (i in files.indices) {
-                val f = files[i]
+                val f: androidx.documentfile.provider.DocumentFile = files[i]
                 val fname = f.name ?: continue
                 if (f.isDirectory) {
                     if (fname == "build" || fname == ".git" || fname == ".gradle") continue
@@ -4975,7 +4978,7 @@ object AppLogger {
                 destDir.mkdirs()
                 val children: Array<androidx.documentfile.provider.DocumentFile> = docDir.listFiles()
                 for (i in children.indices) {
-                    val child = children[i]
+                    val child: androidx.documentfile.provider.DocumentFile = children[i]
                     val cname = child.name ?: continue
                     if (child.isDirectory) {
                         if (cname == "build" || cname == ".git" || cname == ".gradle") continue

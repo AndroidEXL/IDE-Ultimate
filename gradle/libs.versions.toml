@@ -11,6 +11,7 @@ firebaseBom = "33.7.0"
 shizuku = "13.1.5"
 
 [libraries]
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
