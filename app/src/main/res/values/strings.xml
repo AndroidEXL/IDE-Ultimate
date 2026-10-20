@@ -268,4 +268,8 @@
     <string name="ide_temp_run_desc">يتم الآن تشغيل المشروع في الصفحة المؤقتة على الواجهة والـ Activity المحددين أعلاه.</string>
     <string name="ide_temp_run_close">العودة إلى IDE Project</string>
     <string name="ide_view_drag_hint">اسحب أي عنصر من قائمة Widgets وأفلته داخل شاشة الهاتف البيضاء</string>
+    <string name="sheet_import_project">استيراد مشروع أندرويد من الهاتف</string>
+    <string name="sheet_import_project_desc">اختر مجلد مشروع أندرويد من ذاكرة الهاتف لاستخراجه وإضافته للمشاريع تلقائيًا.</string>
+    <string name="msg_project_imported">تم استيراد مشروع %1$s بنجاح!</string>
+    <string name="msg_import_failed">فشل استيراد المشروع: %1$s</string>
 </resources>

@@ -268,4 +268,8 @@
     <string name="ide_temp_run_desc">The project is currently running in this temporary page with the selected XML layout and Activity above.</string>
     <string name="ide_temp_run_close">Back to IDE Project</string>
     <string name="ide_view_drag_hint">Drag any item from Widgets and drop it into the white phone screen</string>
+    <string name="sheet_import_project">Import Android project from phone</string>
+    <string name="sheet_import_project_desc">Pick an Android project directory from storage to inspect, import and register it.</string>
+    <string name="msg_project_imported">Project %1$s imported successfully!</string>
+    <string name="msg_import_failed">Failed to import project: %1$s</string>
 </resources>

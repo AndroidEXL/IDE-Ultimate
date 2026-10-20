@@ -4822,4 +4822,200 @@ object AppLogger {
             "test",
         )
     }
+
+    /**
+     * Imports an Android project folder picked from device storage tree (via SAF DocumentFile).
+     * Inspects the directory structure, reads AndroidManifest.xml and build.gradle/kts to extract:
+     * - Project Name (from manifest, settings.gradle, or directory name)
+     * - Package Name (from AndroidManifest.xml package attr or build.gradle namespace / applicationId)
+     * - Version Name and Version Code
+     * - Project Language (Kotlin, Java, Flutter)
+     * - Project App Icon (mipmap / drawable)
+     * Copies all project files into `/storage/emulated/0/.IDE Ultimate/<projectName>/` (and internal fallback)
+     * and registers the project in [items].
+     */
+    fun importAndroidProjectFromTreeUri(
+        treeUri: android.net.Uri,
+        parentId: String?,
+    ): Result<WorkspaceItem> = runCatching {
+        val rootDoc = androidx.documentfile.provider.DocumentFile.fromTreeUri(appContext, treeUri)
+            ?: error("Cannot access selected folder")
+        if (!rootDoc.isDirectory) error("Selected path is not a directory")
+
+        val rawName = rootDoc.name?.trim().takeUnless { it.isNullOrBlank() } ?: "ImportedProject"
+
+        // Search for AndroidManifest.xml and build.gradle
+        var foundManifestDoc: androidx.documentfile.provider.DocumentFile? = null
+        var foundGradleDoc: androidx.documentfile.provider.DocumentFile? = null
+        var foundSettingsDoc: androidx.documentfile.provider.DocumentFile? = null
+        var hasJavaFiles = false
+        var hasKotlinFiles = false
+        var hasFlutterYaml = false
+
+        fun inspectTree(dir: androidx.documentfile.provider.DocumentFile, depth: Int = 0) {
+            if (depth > 5) return
+            val files = dir.listFiles()
+            for (f in files) {
+                val fname = f.name ?: continue
+                if (f.isDirectory) {
+                    if (fname == "build" || fname == ".git" || fname == ".gradle") continue
+                    inspectTree(f, depth + 1)
+                } else {
+                    if (fname.equals("AndroidManifest.xml", ignoreCase = true) && foundManifestDoc == null) {
+                        foundManifestDoc = f
+                    } else if ((fname == "build.gradle" || fname == "build.gradle.kts") && foundGradleDoc == null) {
+                        foundGradleDoc = f
+                    } else if (fname == "settings.gradle" || fname == "settings.gradle.kts") {
+                        foundSettingsDoc = f
+                    } else if (fname == "pubspec.yaml") {
+                        hasFlutterYaml = true
+                    } else if (fname.endsWith(".kt", ignoreCase = true)) {
+                        hasKotlinFiles = true
+                    } else if (fname.endsWith(".java", ignoreCase = true)) {
+                        hasJavaFiles = true
+                    }
+                }
+            }
+        }
+
+        inspectTree(rootDoc)
+
+        // Read manifest content if present
+        var extractedPackageName = ""
+        var extractedVersionCode = 1
+        var extractedVersionName = "1.0.0"
+        var extractedAppName = ""
+
+        if (foundManifestDoc != null) {
+            val manifestText = appContext.contentResolver.openInputStream(foundManifestDoc!!.uri)?.use {
+                it.bufferedReader(Charsets.UTF_8).readText()
+            }.orEmpty()
+
+            // Package attribute
+            val pkgMatch = Regex("""package\s*=\s*["\x27]([^"\x27]+)["\x27]""").find(manifestText)
+            if (pkgMatch != null) {
+                extractedPackageName = pkgMatch.groupValues[1].trim()
+            }
+
+            // Version code & name
+            val vCodeMatch = Regex("""android:versionCode\s*=\s*["\x27](\d+)["\x27]""").find(manifestText)
+            if (vCodeMatch != null) {
+                extractedVersionCode = vCodeMatch.groupValues[1].toIntOrNull() ?: 1
+            }
+            val vNameMatch = Regex("""android:versionName\s*=\s*["\x27]([^"\x27]+)["\x27]""").find(manifestText)
+            if (vNameMatch != null) {
+                extractedVersionName = vNameMatch.groupValues[1].trim()
+            }
+
+            // App label
+            val labelMatch = Regex("""android:label\s*=\s*["\x27]([^"\x27]+)["\x27]""").find(manifestText)
+            if (labelMatch != null) {
+                val lbl = labelMatch.groupValues[1].trim()
+                if (!lbl.startsWith("@string/")) {
+                    extractedAppName = lbl
+                }
+            }
+        }
+
+        // If package is still empty, look at build.gradle (namespace = "..." or applicationId = "...")
+        if (extractedPackageName.isBlank() && foundGradleDoc != null) {
+            val gradleText = appContext.contentResolver.openInputStream(foundGradleDoc!!.uri)?.use {
+                it.bufferedReader(Charsets.UTF_8).readText()
+            }.orEmpty()
+
+            val nsMatch = Regex("""(?:namespace|applicationId)\s*(?:=|\s)\s*["\x27]([^"\x27]+)["\x27]""").find(gradleText)
+            if (nsMatch != null) {
+                extractedPackageName = nsMatch.groupValues[1].trim()
+            }
+            val vcMatch = Regex("""versionCode\s*(?:=|\s)\s*(\d+)""").find(gradleText)
+            if (vcMatch != null) {
+                extractedVersionCode = vcMatch.groupValues[1].toIntOrNull() ?: extractedVersionCode
+            }
+            val vnMatch = Regex("""versionName\s*(?:=|\s)\s*["\x27]([^"\x27]+)["\x27]""").find(gradleText)
+            if (vnMatch != null) {
+                extractedVersionName = vnMatch.groupValues[1].trim()
+            }
+        }
+
+        // Determine project name
+        val projectName = extractedAppName.ifBlank { rawName }
+        val finalPackageName = extractedPackageName.ifBlank { ProjectZipExporter.packageName(projectName) }
+
+        // Determine language
+        val language = when {
+            hasFlutterYaml -> ProjectLanguage.FLUTTER
+            hasKotlinFiles -> ProjectLanguage.KOTLIN
+            hasJavaFiles -> ProjectLanguage.JAVA
+            else -> ProjectLanguage.KOTLIN
+        }
+
+        // Register in workspace
+        var uniqueName = projectName
+        var suffix = 1
+        while (items.any { it.parentId == parentId && it.name.equals(uniqueName, ignoreCase = true) }) {
+            uniqueName = "$projectName $suffix"
+            suffix += 1
+        }
+
+        val projectItem = createProject(
+            name = uniqueName,
+            parentId = parentId,
+            packageName = finalPackageName,
+            language = language,
+            versionCode = extractedVersionCode,
+            versionName = extractedVersionName,
+        )
+
+        // Copy files from DocumentFile tree to project roots
+        val roots = projectDirectoriesFor(projectItem)
+        for (targetRoot in roots) {
+            targetRoot.mkdirs()
+            fun copyDocumentTree(docDir: androidx.documentfile.provider.DocumentFile, destDir: File) {
+                destDir.mkdirs()
+                val children = docDir.listFiles()
+                for (child in children) {
+                    val cname = child.name ?: continue
+                    if (child.isDirectory) {
+                        if (cname == "build" || cname == ".git" || cname == ".gradle") continue
+                        copyDocumentTree(child, File(destDir, cname))
+                    } else {
+                        val outFile = File(destDir, cname)
+                        runCatching {
+                            appContext.contentResolver.openInputStream(child.uri)?.use { inStream ->
+                                outFile.outputStream().use { outStream ->
+                                    inStream.copyTo(outStream)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            copyDocumentTree(rootDoc, targetRoot)
+        }
+
+        // Ensure default project structure & manifest syncing
+        ensureDefaultProjectFiles(projectItem)
+
+        // Extract custom icon if any launcher icon exists in res/mipmap or res/drawable
+        val resDir = File(ensureProjectFullRoot(projectItem), "app/src/main/res")
+        if (resDir.exists()) {
+            val iconCandidate = resDir.walkTopDown().firstOrNull {
+                it.isFile && (it.name.startsWith("ic_launcher") || it.name == "app_icon.png") &&
+                    (it.name.endsWith(".png", true) || it.name.endsWith(".webp", true))
+            }
+            if (iconCandidate != null) {
+                val iconInternal = File(appContext.filesDir, "project_icons/${projectItem.id}.png")
+                iconInternal.parentFile?.mkdirs()
+                runCatching { iconCandidate.copyTo(iconInternal, overwrite = true) }
+                val idx = items.indexOfFirst { it.id == projectItem.id }
+                if (idx >= 0) {
+                    items[idx] = items[idx].copy(customIconPath = iconInternal.absolutePath)
+                    savePrefsOnly()
+                }
+            }
+        }
+
+        projectItem
+    }
+
 }

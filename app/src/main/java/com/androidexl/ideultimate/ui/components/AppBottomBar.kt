@@ -45,6 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.R
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Violet
@@ -72,14 +76,10 @@ fun AppBottomBar(
             .fillMaxWidth()
             .padding(horizontal = 22.dp)
             .clip(shape)
-            .background(
-                Brush.verticalGradient(listOf(Color(0xF50E1538), Color(0xF5070B1E))),
-            )
+            .background(Midnight)
             .border(
                 width = 1.2.dp,
-                brush = Brush.horizontalGradient(
-                    listOf(Cyan.copy(alpha = 0.38f), VioletSoft.copy(alpha = 0.38f)),
-                ),
+                color = GlassStrokeTop,
                 shape = shape,
             )
             .padding(6.dp),
@@ -116,7 +116,7 @@ private fun BottomBarItem(
     icon: @Composable () -> Unit,
 ) {
     val contentColor by animateColorAsState(
-        targetValue = if (selected) Color.White else Muted,
+        targetValue = if (selected) Ink else Muted,
         animationSpec = tween(220),
         label = "tab-color",
     )

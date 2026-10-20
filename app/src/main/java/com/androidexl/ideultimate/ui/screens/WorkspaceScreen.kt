@@ -231,6 +231,19 @@ fun WorkspaceScreen(
     var pendingExport by remember { mutableStateOf<WorkspaceItem?>(null) }
     var pendingStoreZipName by remember { mutableStateOf<String?>(null) }
 
+    val importFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            val result = repository.importAndroidProjectFromTreeUri(uri, parentId = currentParentId)
+            result.onSuccess { imported ->
+                showMessage(context.getString(R.string.msg_project_imported, imported.name))
+            }.onFailure { err ->
+                showMessage(context.getString(R.string.msg_import_failed, err.localizedMessage ?: "Unknown error"))
+            }
+        }
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
@@ -268,6 +281,9 @@ fun WorkspaceScreen(
     fun showMessage(text: String) {
         lastMessage = text
         message = text
+        runCatching {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     val legacyPermissionLauncher = rememberLauncherForActivityResult(
@@ -807,6 +823,10 @@ fun WorkspaceScreen(
                         onNewProject = {
                             sheet = null
                             projectPageMode = ProjectPageMode.Create(parentId = currentParentId)
+                        },
+                        onImportProject = {
+                            sheet = null
+                            importFolderLauncher.launch(null)
                         },
                     )
 
@@ -1608,8 +1628,8 @@ private fun SnackbarOverlay(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xF20B1028))
-                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
+                .background(Midnight)
+                .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1736,6 +1756,7 @@ private fun CreateSheetContent(
     allowProject: Boolean,
     onNewFolder: () -> Unit,
     onNewProject: () -> Unit,
+    onImportProject: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SheetHeader(
@@ -1767,6 +1788,22 @@ private fun CreateSheetContent(
                     )
                 },
                 onClick = onNewProject,
+            )
+        }
+        if (allowProject) {
+            SheetAction(
+                title = stringResource(R.string.sheet_import_project),
+                description = stringResource(R.string.sheet_import_project_desc),
+                tint = Cyan,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = null,
+                        tint = Cyan,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+                onClick = onImportProject,
             )
         }
         Spacer(Modifier.height(4.dp))
