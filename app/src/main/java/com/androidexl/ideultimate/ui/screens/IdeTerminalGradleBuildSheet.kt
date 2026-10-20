@@ -169,19 +169,32 @@ fun IdeTerminalGradleBuildSheet(
             }
 
             // Check tools via Ubuntu exec
-            val checks = listOf(
-                "OpenJDK 17" to "java -version",
-                "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
-                "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
-                "Commandline Tools & sdkmanager" to "command -v sdkmanager || [ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ] || [ -f /root/Android/Sdk/cmdline-tools/latest/bin/sdkmanager ]",
-                "Gradle Engine & Wrapper" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ] || [ -f /root/project_build/gradlew ]",
-            )
+            val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
+            val checks = if (isFlutter) {
+                listOf(
+                    "Flutter SDK" to "command -v flutter || [ -f /root/flutter/bin/flutter ]",
+                    "Dart SDK" to "command -v dart || [ -f /root/flutter/bin/cache/dart-sdk/bin/dart ]",
+                    "OpenJDK 17" to "java -version",
+                    "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
+                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
+                )
+            } else {
+                listOf(
+                    "OpenJDK 17" to "java -version",
+                    "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
+                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
+                    "Commandline Tools & sdkmanager" to "command -v sdkmanager || [ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ] || [ -f /root/Android/Sdk/cmdline-tools/latest/bin/sdkmanager ]",
+                    "Gradle Engine & Wrapper" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ] || [ -f /root/project_build/gradlew ]",
+                )
+            }
 
             val results = mutableListOf<AndroidToolStatus>()
             checks.forEach { (name, cmd) ->
                 val (rc, _) = TerminalManager.execInUbuntu(context, cmd, timeoutSec = 15)
                 val ok = (rc == 0)
                 val desc = when (name) {
+                    "Flutter SDK" -> "محرك Flutter الرسمي لتطوير وبناء التطبيقات"
+                    "Dart SDK" -> "محرك لغة Dart الرسمي المدمج مع Flutter"
                     "OpenJDK 17" -> "محرك جافا الرسمي لتشغيل Gradle وتجميع الأكواد"
                     "Android SDK (Platform 34/35)" -> "منصات ومكتبات أندرويد الرسمية لبناء الحزم"
                     "Android Build Tools (aapt2/zipalign)" -> "أدوات بناء وضغط وتوقيع ملفات الـ APK"
@@ -279,6 +292,9 @@ fun IdeTerminalGradleBuildSheet(
                 "    done",
                 "fi",
                 "echo '✓ تم تجهيز بيئة وأدوات Android SDK الرسمية بنجاح!'",
+                if (isFlutter) "echo '===> تجهيز بيئة ومحرك Flutter SDK...'" else "echo ''",
+                if (isFlutter) "if [ ! -d /root/flutter ]; then echo '===> جلب وتثبيت Flutter SDK (قناة stable)...'; git clone -b stable --depth 1 https://github.com/flutter/flutter.git /root/flutter 2>&1 || true; fi" else "echo ''",
+                if (isFlutter) "export PATH=/root/flutter/bin:\$PATH; echo 'export PATH=/root/flutter/bin:\$PATH' >> /root/.bashrc; flutter config --no-analytics 2>/dev/null || true; flutter config --android-sdk /root/android-sdk 2>/dev/null || true" else "echo ''",
             ).joinToString("\n")
 
             val (rc, output) = TerminalManager.execInUbuntu(
@@ -309,10 +325,11 @@ fun IdeTerminalGradleBuildSheet(
         isBuilding = true
         buildSuccess = null
         apkOutputPath = null
-        currentTaskName = "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش..."
+        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
+        currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش..."
         appendLog("\n==========================================")
         appendLog("=== بدء بناء مشروع: ${project.name} ===")
-        appendLog("=== الأمر: ./gradlew assembleDebug --build-cache ===")
+        appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug ===" else "=== الأمر: ./gradlew assembleDebug --build-cache ===")
         appendLog("==========================================")
 
         coroutineScope.launch(Dispatchers.IO) {
@@ -600,6 +617,9 @@ fun IdeTerminalGradleBuildSheet(
                 "        chmod +x \"\$cached_aapt\" 2>/dev/null || true",
                 "    done",
                 "fi",
+                if (isFlutter) "echo '===> مشروع Flutter: التحقق من حزم pubspec.yaml وأمر flutter build...'" else "echo ''",
+                if (isFlutter) "export PATH=/root/flutter/bin:\$PATH" else "echo ''",
+                if (isFlutter) "if command -v flutter >/dev/null 2>&1; then echo '===> flutter pub get...'; flutter pub get 2>&1; echo '===> flutter build apk --debug...'; flutter build apk --debug 2>&1; exit \$?; fi" else "echo ''",
                 "TASK_CMD=\":app:assembleDebug\"",
                 "if [ ! -d ./app ]; then",
                 "    TASK_CMD=\"assembleDebug\"",
@@ -634,7 +654,8 @@ fun IdeTerminalGradleBuildSheet(
                 if (rc == 0) {
                     buildSuccess = true
                     currentTaskName = "اكتمل البناء بنجاح ✓"
-                    val foundApk = File(projectRoot, "app/build/outputs/apk/debug/app-debug.apk").takeIf { it.exists() }
+                    val foundApk = File(projectRoot, "build/app/outputs/flutter-apk/app-debug.apk").takeIf { it.exists() }
+                        ?: File(projectRoot, "app/build/outputs/apk/debug/app-debug.apk").takeIf { it.exists() }
                         ?: projectRoot.walkTopDown().filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }.firstOrNull()
                     if (foundApk != null && foundApk.exists()) {
                         apkOutputPath = foundApk.absolutePath

@@ -168,30 +168,51 @@ private enum class IdeProjectTab(val title: String) {
 }
 
 private enum class IdeBuildMethod(
-    val title: String,
-    val subtitle: String,
-    val badge: String,
     val badgeColor: Color,
 ) {
-    GRADLE(
-        title = "Gradle",
-        subtitle = "Android Gradle Wrapper (:app:assembleDebug) • بناء كامل عبر محرك Gradle",
-        badge = "./gradlew assembleDebug",
-        badgeColor = Color(0xFF34D399),
-    ),
-    GITHUB_ACTIONS(
-        title = "GitHub Actions",
-        subtitle = "Cloud CI/CD Workflow (build-apk.yml) • بناء سحابي عبر GitHub Actions",
-        badge = "Cloud CI/CD",
-        badgeColor = Color(0xFF38BDF8),
-    ),
-    SIMPLE(
-        title = "Simple",
-        subtitle = "Fast Local Compiler & Instant Preview • بناء سريع ومباشر داخل IDE",
-        badge = "Fast Build",
-        badgeColor = Color(0xFFA78BFA),
-    ),
+    GRADLE(badgeColor = Color(0xFF34D399)),
+    GITHUB_ACTIONS(badgeColor = Color(0xFF38BDF8)),
+    SIMPLE(badgeColor = Color(0xFFA78BFA)),
     ;
+
+    fun getTitle(language: ProjectLanguage): String = when (this) {
+        GRADLE -> if (language == ProjectLanguage.FLUTTER) "Flutter Build (Terminal)" else "Gradle"
+        GITHUB_ACTIONS -> "GitHub Actions"
+        SIMPLE -> "Simple"
+    }
+
+    val title: String
+        get() = getTitle(ProjectLanguage.KOTLIN)
+
+    fun getSubtitle(language: ProjectLanguage): String = when (this) {
+        GRADLE -> if (language == ProjectLanguage.FLUTTER) {
+            "Flutter SDK (flutter build apk) • بناء ملف APK عبر محرك Flutter في Terminal"
+        } else {
+            "Android Gradle Wrapper (:app:assembleDebug) • بناء كامل عبر محرك Gradle"
+        }
+        GITHUB_ACTIONS -> if (language == ProjectLanguage.FLUTTER) {
+            "Flutter Cloud CI/CD (subosito/flutter-action) • بناء سحابي عبر GitHub Actions"
+        } else {
+            "Cloud CI/CD Workflow (build-apk.yml) • بناء سحابي عبر GitHub Actions"
+        }
+        SIMPLE -> if (language == ProjectLanguage.FLUTTER) {
+            "Fast Flutter Compiler & Preview • فحص وبناء سريع داخل IDE"
+        } else {
+            "Fast Local Compiler & Instant Preview • بناء سريع ومباشر داخل IDE"
+        }
+    }
+
+    val subtitle: String
+        get() = getSubtitle(ProjectLanguage.KOTLIN)
+
+    fun getBadge(language: ProjectLanguage): String = when (this) {
+        GRADLE -> if (language == ProjectLanguage.FLUTTER) "flutter build apk" else "./gradlew assembleDebug"
+        GITHUB_ACTIONS -> if (language == ProjectLanguage.FLUTTER) "Flutter Cloud CI" else "Cloud CI/CD"
+        SIMPLE -> "Fast Build"
+    }
+
+    val badge: String
+        get() = getBadge(ProjectLanguage.KOTLIN)
 
     companion object {
         fun fromName(raw: String): IdeBuildMethod =
@@ -12703,7 +12724,7 @@ private fun TemporaryRunScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Running via ${buildMethod.title} • ${buildMethod.badge}",
+                    text = "Running via ${buildMethod.getTitle(project.language)} • ${buildMethod.getBadge(project.language)}",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = JetBrainsMono,
                         fontSize = 10.5.sp,
@@ -12743,7 +12764,7 @@ private fun TemporaryRunScreen(
                                 .background(methodAccent),
                         )
                         Text(
-                            text = "Build Method: ${buildMethod.title}",
+                            text = "Build Method: ${buildMethod.getTitle(project.language)}",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 13.sp,
@@ -12760,7 +12781,7 @@ private fun TemporaryRunScreen(
                             .padding(horizontal = 10.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = buildMethod.badge,
+                            text = buildMethod.getBadge(project.language),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 9.5.sp,
@@ -12772,7 +12793,7 @@ private fun TemporaryRunScreen(
                 }
 
                 Text(
-                    text = buildMethod.subtitle,
+                    text = buildMethod.getSubtitle(project.language),
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = JetBrainsMono,
                         fontSize = 11.sp,
@@ -12803,7 +12824,7 @@ private fun TemporaryRunScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = method.title,
+                                text = method.getTitle(project.language),
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 10.sp,
@@ -12939,6 +12960,7 @@ private fun TemporaryRunScreen(
 @Composable
 private fun BuildMethodBottomSheet(
     selectedMethod: IdeBuildMethod,
+    projectLanguage: ProjectLanguage = ProjectLanguage.KOTLIN,
     onSelectMethod: (IdeBuildMethod) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -13047,7 +13069,7 @@ private fun BuildMethodBottomSheet(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
-                                    text = method.title,
+                                    text = method.getTitle(projectLanguage),
                                     style = MaterialTheme.typography.titleSmall.copy(
                                         fontFamily = JetBrainsMono,
                                         fontSize = 14.sp,
@@ -13062,7 +13084,7 @@ private fun BuildMethodBottomSheet(
                                         .padding(horizontal = 6.dp, vertical = 2.dp),
                                 ) {
                                     Text(
-                                        text = method.badge,
+                                        text = method.getBadge(projectLanguage),
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontFamily = JetBrainsMono,
                                             fontSize = 9.sp,
@@ -13072,7 +13094,7 @@ private fun BuildMethodBottomSheet(
                                 }
                             }
                             Text(
-                                text = method.subtitle,
+                                text = method.getSubtitle(projectLanguage),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 11.sp,

@@ -3538,6 +3538,116 @@ $activitiesXml
     fun ensureProjectFullRoot(project: WorkspaceItem): File {
         val root = File(appContext.filesDir, "project_full/${project.id}").apply { mkdirs() }
         val pkgPath = project.packageName.replace('.', '/')
+        // 0. If Flutter project, ensure pubspec.yaml and lib/main.dart exist
+        if (project.language == ProjectLanguage.FLUTTER) {
+            val pubspecFile = File(root, "pubspec.yaml")
+            if (!pubspecFile.exists()) {
+                val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                pubspecFile.writeText(
+                    """name: $dartSlug
+description: "${project.name} — built with IDE Ultimate"
+publish_to: "none"
+version: ${project.versionName}+${project.versionCode}
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+""",
+                    Charsets.UTF_8,
+                )
+            }
+            val mainDartFile = File(root, "lib/main.dart")
+            if (!mainDartFile.exists()) {
+                mainDartFile.parentFile?.mkdirs()
+                mainDartFile.writeText(
+                    """import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: '${project.name}',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF38BDF8), brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
+      home: const MyHomePage(),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  int _counter = 0;
+
+  void _incrementCounter() {
+    setState(() {
+      _counter++;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('${project.name}'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Icon(Icons.flutter_dash, size: 72, color: Color(0xFF38BDF8)),
+            const SizedBox(height: 16),
+            const Text(
+              'مرحبًا بك في تطبيق Flutter من IDE Ultimate!',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '\$_counter',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: const Color(0xFF38BDF8),
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _incrementCounter,
+        tooltip: 'زيادة العداد',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+""",
+                    Charsets.UTF_8,
+                )
+            }
+        }
+
 
         // 1. Sync AndroidManifest.xml
         val manifestFile = File(root, "app/src/main/AndroidManifest.xml")
@@ -3778,6 +3888,39 @@ kotlin.jvm.target.validation.mode=warning
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
                 if (!projDir.exists()) projDir.mkdirs()
+                if (project.language == ProjectLanguage.FLUTTER) {
+                    val pubspecFile = File(projDir, "pubspec.yaml")
+                    if (!pubspecFile.exists()) {
+                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        pubspecFile.writeText(
+                            """name: $dartSlug
+description: "${project.name} — built with IDE Ultimate"
+publish_to: "none"
+version: ${project.versionName}+${project.versionCode}
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+""",
+                            Charsets.UTF_8,
+                        )
+                    }
+                    val mainDartFile = File(projDir, "lib/main.dart")
+                    if (!mainDartFile.exists()) {
+                        mainDartFile.parentFile?.mkdirs()
+                        val fullMainDart = File(appContext.filesDir, "project_full/${project.id}/lib/main.dart")
+                        if (fullMainDart.exists()) {
+                            fullMainDart.copyTo(mainDartFile, overwrite = true)
+                        }
+                    }
+                }
+
                 root.walkTopDown().forEach { f ->
                     val rel = f.relativeTo(root).path
                     if (rel.isNotEmpty()) {
@@ -4047,6 +4190,39 @@ kotlin.jvm.target.validation.mode=warning
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
                 if (!projDir.exists()) projDir.mkdirs()
+                if (project.language == ProjectLanguage.FLUTTER) {
+                    val pubspecFile = File(projDir, "pubspec.yaml")
+                    if (!pubspecFile.exists()) {
+                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        pubspecFile.writeText(
+                            """name: $dartSlug
+description: "${project.name} — built with IDE Ultimate"
+publish_to: "none"
+version: ${project.versionName}+${project.versionCode}
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+""",
+                            Charsets.UTF_8,
+                        )
+                    }
+                    val mainDartFile = File(projDir, "lib/main.dart")
+                    if (!mainDartFile.exists()) {
+                        mainDartFile.parentFile?.mkdirs()
+                        val fullMainDart = File(appContext.filesDir, "project_full/${project.id}/lib/main.dart")
+                        if (fullMainDart.exists()) {
+                            fullMainDart.copyTo(mainDartFile, overwrite = true)
+                        }
+                    }
+                }
+
                 File(projDir, ".ide_logic_${xmlPage.layoutResourceName}.json")
                     .writeText(jsonText, Charsets.UTF_8)
             }
@@ -4284,6 +4460,39 @@ kotlin.jvm.target.validation.mode=warning
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
                 if (!projDir.exists()) projDir.mkdirs()
+                if (project.language == ProjectLanguage.FLUTTER) {
+                    val pubspecFile = File(projDir, "pubspec.yaml")
+                    if (!pubspecFile.exists()) {
+                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        pubspecFile.writeText(
+                            """name: $dartSlug
+description: "${project.name} — built with IDE Ultimate"
+publish_to: "none"
+version: ${project.versionName}+${project.versionCode}
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+""",
+                            Charsets.UTF_8,
+                        )
+                    }
+                    val mainDartFile = File(projDir, "lib/main.dart")
+                    if (!mainDartFile.exists()) {
+                        mainDartFile.parentFile?.mkdirs()
+                        val fullMainDart = File(appContext.filesDir, "project_full/${project.id}/lib/main.dart")
+                        if (fullMainDart.exists()) {
+                            fullMainDart.copyTo(mainDartFile, overwrite = true)
+                        }
+                    }
+                }
+
                 defaultPages.forEach { page ->
                     val layoutFile = File(projDir, "app/src/main/res/layout/${page.xmlFileName}")
                     layoutFile.parentFile?.mkdirs()
