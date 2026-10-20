@@ -113,6 +113,7 @@ fun IdeTerminalGradleBuildSheet(
         }
     }
 
+        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
     var isCheckingEnv by remember { mutableStateOf(true) }
     var isUbuntuReady by remember { mutableStateOf(false) }
     var toolStatuses by remember { mutableStateOf<List<AndroidToolStatus>>(emptyList()) }
@@ -169,8 +170,7 @@ fun IdeTerminalGradleBuildSheet(
             }
 
             // Check tools via Ubuntu exec
-            val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-            val checks = if (isFlutter) {
+                        val checks = if (isFlutter) {
                 listOf(
                     "Flutter SDK" to "command -v flutter || [ -f /root/flutter/bin/flutter ]",
                     "Dart SDK" to "command -v dart || [ -f /root/flutter/bin/cache/dart-sdk/bin/dart ]",
@@ -221,8 +221,7 @@ fun IdeTerminalGradleBuildSheet(
 
     fun installMissingTools() {
         isInstallingTools = true
-        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-        currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
+                currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
         appendLog(if (isFlutter) "\n=== بدء تثبيت بيئة Flutter SDK و Android Tools في Ubuntu ===" else "\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
@@ -328,8 +327,7 @@ fun IdeTerminalGradleBuildSheet(
 
     fun startGradleBuild() {
         if (isBuilding || isInstallingTools) return
-        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-        val missing = toolStatuses.filter { !it.isInstalled }
+                val missing = toolStatuses.filter { !it.isInstalled }
         if (missing.isNotEmpty()) {
             appendLog("\n⚠️ بعض أدوات البناء غير متوفرة (${missing.joinToString { it.name }}).")
             appendLog("===> جاري تحميل وتثبيت الأدوات المطلوبة تلقائيًا أولاً قبل البناء...")
@@ -339,8 +337,7 @@ fun IdeTerminalGradleBuildSheet(
         isBuilding = true
         buildSuccess = null
         apkOutputPath = null
-        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-        currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش..."
+                currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش..."
         appendLog("\n==========================================")
         appendLog("=== بدء بناء مشروع: ${project.name} ===")
         appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug ===" else "=== الأمر: ./gradlew assembleDebug --build-cache ===")
@@ -1019,8 +1016,7 @@ fun IdeTerminalGradleBuildSheet(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-                    val btnTitle = when {
+                                        val btnTitle = when {
                         isBuilding -> "جاري البناء..."
                         isFlutter && missingTools.isNotEmpty() -> "تحميل Flutter SDK والأدوات وبدء البناء"
                         !isFlutter && missingTools.isNotEmpty() -> "تثبيت الأدوات وبدء البناء"
