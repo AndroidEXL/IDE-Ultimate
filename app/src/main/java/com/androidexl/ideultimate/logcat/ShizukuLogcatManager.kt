@@ -3,6 +3,7 @@ package com.androidexl.ideultimate.logcat
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
@@ -38,6 +39,28 @@ object ShizukuLogcatManager {
 
     const val SHIZUKU_PERMISSION_CODE = 4512
     const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+    private const val PREF_SHIZUKU_GRANTED = "shizuku_permission_user_granted"
+
+    private var permissionListenerRegistered = false
+
+    private fun getPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences("shizuku_ide_prefs", Context.MODE_PRIVATE)
+    }
+
+    fun initListener(context: Context) {
+        if (!permissionListenerRegistered) {
+            permissionListenerRegistered = true
+            runCatching {
+                Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
+                    if (requestCode == SHIZUKU_PERMISSION_CODE) {
+                        if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                            getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, true).apply()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Check if Shizuku app is installed on the device
@@ -68,16 +91,36 @@ object ShizukuLogcatManager {
      * Check if Shizuku permission is granted to this app
      */
     fun hasShizukuPermission(context: Context): Boolean {
-        if (!isShizukuRunning()) return false
-        return runCatching {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        initListener(context)
+        // 1. Check via official Shizuku API
+        if (isShizukuRunning()) {
+            val granted = runCatching {
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)
+            if (granted) {
+                getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, true).apply()
+                return true
+            }
+        }
+
+        // 2. Check Android package manager permission API_V23
+        val pmGranted = runCatching {
+            context.packageManager.checkPermission("moe.shizuku.manager.permission.API_V23", context.packageName) == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
+        if (pmGranted) {
+            getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, true).apply()
+            return true
+        }
+
+        // 3. Fallback to persisted preference if user already authorized
+        return getPrefs(context).getBoolean(PREF_SHIZUKU_GRANTED, false)
     }
 
     /**
      * Request Shizuku permission or launch Shizuku manager to start the service
      */
     fun requestShizukuPermissionOrLaunch(context: Context) {
+        initListener(context)
         if (!isShizukuInstalled(context)) {
             val installIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -105,6 +148,13 @@ object ShizukuLogcatManager {
                 context.startActivity(launchIntent)
             }
         }
+    }
+
+    /**
+     * Manually mark permission as granted
+     */
+    fun setPermissionGranted(context: Context, granted: Boolean) {
+        getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, granted).apply()
     }
 
     /**
@@ -148,9 +198,8 @@ object ShizukuLogcatManager {
         runCatching {
             val cmd = arrayOf("logcat", "-d", "-v", "threadtime", "*:V")
             
-            // Execute via Shizuku reflection (to access Shizuku's elevated process if available) or standard Runtime
             var inputStream: InputStream? = null
-            if (hasShizukuPermission(context)) {
+            if (isShizukuRunning() && hasShizukuPermission(context)) {
                 runCatching {
                     val newProcMethod = Shizuku::class.java.getDeclaredMethod(
                         "newProcess",
