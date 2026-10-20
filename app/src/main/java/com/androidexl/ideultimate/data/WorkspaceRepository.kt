@@ -46,6 +46,7 @@ data class ProjectXmlPage(
     val xmlFileName: String,
     val activityName: String,
     val codeFileName: String,
+    val isCustomView: Boolean = false,
 ) {
     val layoutResourceName: String
         get() = xmlFileName.removeSuffix(".xml")
@@ -4330,7 +4331,11 @@ kotlin.jvm.target.validation.mode=warning
             cleaned.startsWith("activity_") ||
             cleaned.startsWith("fragment_") ||
             cleaned.startsWith("dialog_") ||
-            cleaned.startsWith("item_")
+            cleaned.startsWith("item_") ||
+            cleaned.startsWith("custom_") ||
+            cleaned.startsWith("view_") ||
+            cleaned.startsWith("row_") ||
+            cleaned.startsWith("cell_")
         ) {
             cleaned
         } else {

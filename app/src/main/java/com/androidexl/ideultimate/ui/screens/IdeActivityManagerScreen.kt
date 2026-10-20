@@ -153,23 +153,25 @@ fun IdeActivityManagerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        // XML Badge Box
+                        // XML / VIEW Badge Box
+                        val isCustom = page.isCustomView
+                        val badgeColor = if (isCustom) Color(0xFF8B5CF6) else Color(0xFFFB923C)
                         Box(
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFFB923C).copy(alpha = 0.16f))
-                                .border(1.dp, Color(0xFFFB923C).copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                                .background(badgeColor.copy(alpha = 0.16f))
+                                .border(1.dp, badgeColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "XML",
+                                text = if (isCustom) "VIEW" else "ACT",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = JetBrainsMono,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                 ),
-                                color = Color(0xFFFB923C),
+                                color = badgeColor,
                             )
                         }
 
@@ -220,7 +222,7 @@ fun IdeActivityManagerScreen(
                                         .background(Color(0xFF38BDF8)),
                                 )
                                 Text(
-                                    text = page.codeFileName,
+                                    text = if (page.isCustomView) "${page.layoutResourceName} • Custom View Layout" else page.codeFileName,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = JetBrainsMono,
                                         fontSize = 11.5.sp,

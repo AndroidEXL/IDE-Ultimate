@@ -440,6 +440,19 @@ fun IdeProjectScreen(
     var showGitHubActionsRunScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
     val context = LocalContext.current
+    fun refreshProjectXmlPages() {
+        val latest = repository.listProjectXmlPages(project)
+        val existingNames = xmlPages.map { it.xmlFileName }.toSet()
+        val latestNames = latest.map { it.xmlFileName }.toSet()
+        if (existingNames != latestNames || xmlPages.size != latest.size) {
+            xmlPages.clear()
+            xmlPages.addAll(latest)
+            if (selectedXmlFileName !in latestNames) {
+                selectedXmlFileName = latest.firstOrNull()?.xmlFileName ?: "activity_main.xml"
+            }
+        }
+    }
+
 
     var projectImages by remember(project.id) {
         mutableStateOf(repository.getProjectImages(project))
@@ -978,7 +991,10 @@ fun IdeProjectScreen(
                     activeTab = activeTab,
                     xmlPage = selectedXmlPage,
                     selectedBuildMethod = selectedBuildMethod,
-                    onOpenPageSelector = { showXmlBottomSheet = true },
+                    onOpenPageSelector = {
+                        refreshProjectXmlPages()
+                        showXmlBottomSheet = true
+                    },
                     onRunClick = {
                         when (selectedBuildMethod) {
                             IdeBuildMethod.GITHUB_ACTIONS -> showGitHubActionsRunScreen = true
@@ -1118,6 +1134,7 @@ fun IdeProjectScreen(
                             context.startActivity(intent)
                         }
                         IdeSideMenuItem.ACTIVITY_MANAGER -> {
+                            refreshProjectXmlPages()
                             showActivityManagerScreen = true
                         }
                         IdeSideMenuItem.ANDROID_MANIFEST_MANAGER -> {
@@ -1161,6 +1178,7 @@ fun IdeProjectScreen(
             IdeWidgetPropertyEditDialog(
                 node = targetNode,
                 property = targetProp,
+                availableXmlPages = xmlPages,
                 onDismiss = { editingPropertyRequest = null },
                 onUpdateNode = { updatedNode ->
                     updateWidgetNodes(
@@ -10817,12 +10835,15 @@ private fun XmlLayoutSheetRow(
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val isCustom = page.isCustomView
+    val badgeColor = if (isCustom) Color(0xFF8B5CF6) else Fuchsia
+    val badgeText = if (isCustom) "VIEW" else "ACT"
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape)
-                .background(if (selected) Cyan.copy(alpha = 0.16f) else Color(0x12FFFFFF))
+                .background(if (selected) Cyan.copy(alpha = 0.16f) else IndigoDeep)
                 .border(
                     width = 1.dp,
                     color = if (selected) Cyan.copy(alpha = 0.55f) else GlassStrokeTop,
@@ -10840,18 +10861,18 @@ private fun XmlLayoutSheetRow(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Fuchsia.copy(alpha = 0.16f))
-                        .border(1.dp, Fuchsia.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
+                        .background(badgeColor.copy(alpha = 0.16f))
+                        .border(1.dp, badgeColor.copy(alpha = 0.40f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 8.dp, vertical = 5.dp),
                 ) {
                     Text(
-                        text = "XML",
+                        text = badgeText,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMono,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
                         ),
-                        color = Fuchsia,
+                        color = badgeColor,
                     )
                 }
 
@@ -10867,7 +10888,7 @@ private fun XmlLayoutSheetRow(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "${page.activityName} (.kt / .java)",
+                        text = if (isCustom) "@layout/${page.layoutResourceName} • Custom View (بدون Activity)" else "${page.activityName} (.kt / .java)",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMono,
                             fontSize = 10.sp,
@@ -10971,6 +10992,7 @@ private fun AddXmlLayoutDialog(
 private fun IdeWidgetPropertyEditDialog(
     node: IdeWidgetNode,
     property: IdeWidgetProperty,
+    availableXmlPages: List<ProjectXmlPage> = emptyList(),
     onDismiss: () -> Unit,
     onUpdateNode: (IdeWidgetNode) -> Unit,
 ) {
@@ -11649,12 +11671,37 @@ private fun IdeWidgetPropertyEditDialog(
                         }
 
                         IdeWidgetProperty.CUSTOM_VIEW -> {
-                            listOf(
-                                "none" to "Default List Row Layout (بدون Custom View)",
-                                "custom_item.xml" to "Custom List Row (@layout/custom_item)",
-                                "item_card.xml" to "Card List Row (@layout/item_card)",
-                                "grid_cell.xml" to "Grid Cell Layout (@layout/grid_cell)",
-                            ).forEach { (valStr, sub) ->
+                            // Default "none" option
+                            DialogOptionRow(
+                                label = "none",
+                                subtitle = "Default List Row Layout (بدون Custom View)",
+                                selected = textInput.equals("none", ignoreCase = true) || textInput.isBlank(),
+                                onClick = {
+                                    textInput = "none"
+                                    applyAndSave("none")
+                                },
+                            )
+
+                            // Show all layouts from the project, highlighting custom views
+                            val projectLayouts = availableXmlPages.filter { it.xmlFileName != "activity_main.xml" }
+                            val displayedLayouts = if (projectLayouts.isNotEmpty()) {
+                                projectLayouts.map { page ->
+                                    val sub = if (page.isCustomView) {
+                                        "Custom View Layout (@layout/${page.layoutResourceName})"
+                                    } else {
+                                        "Layout (@layout/${page.layoutResourceName}) • ${page.activityName}"
+                                    }
+                                    page.xmlFileName to sub
+                                }
+                            } else {
+                                listOf(
+                                    "custom_item.xml" to "Custom List Row (@layout/custom_item)",
+                                    "item_card.xml" to "Card List Row (@layout/item_card)",
+                                    "grid_cell.xml" to "Grid Cell Layout (@layout/grid_cell)",
+                                )
+                            }
+
+                            displayedLayouts.forEach { (valStr, sub) ->
                                 DialogOptionRow(
                                     label = valStr,
                                     subtitle = sub,
@@ -11665,6 +11712,7 @@ private fun IdeWidgetPropertyEditDialog(
                                     },
                                 )
                             }
+
                             DialogTextField(
                                 value = textInput,
                                 onValueChange = { textInput = it },
