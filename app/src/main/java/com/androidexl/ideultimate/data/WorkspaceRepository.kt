@@ -3625,7 +3625,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             const SizedBox(height: 12),
             Text(
-              '\$_counter',
+              '${"$"}_counter',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: const Color(0xFF38BDF8),
                     fontWeight: FontWeight.bold,
