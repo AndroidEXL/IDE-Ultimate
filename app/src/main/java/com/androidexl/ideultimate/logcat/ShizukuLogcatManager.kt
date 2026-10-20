@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
+import java.io.InputStream
 import java.io.InputStreamReader
 
 data class SystemAppInfo(
@@ -96,17 +97,8 @@ object ShizukuLogcatManager {
         }
 
         runCatching {
-            if (context is Activity) {
-                if (Shizuku.isPre_V11()) {
-                    context.requestPermissions(arrayOf("moe.shizuku.manager.permission.API_V23"), SHIZUKU_PERMISSION_CODE)
-                } else {
-                    Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
-                }
-            } else {
-                Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
-            }
+            Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
         }.onFailure {
-            // Fallback: launch Shizuku app
             val launchIntent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -138,7 +130,7 @@ object ShizukuLogcatManager {
     }
 
     /**
-     * Fetch system logcat via Shizuku process execution or direct logcat execution
+     * Fetch system logcat via Shizuku or runtime process execution
      */
     suspend fun fetchSystemLogcat(
         context: Context,
@@ -155,17 +147,28 @@ object ShizukuLogcatManager {
 
         runCatching {
             val cmd = arrayOf("logcat", "-d", "-v", "threadtime", "*:V")
-            val process = if (hasShizukuPermission(context)) {
+            
+            // Execute via Shizuku reflection (to access Shizuku's elevated process if available) or standard Runtime
+            var inputStream: InputStream? = null
+            if (hasShizukuPermission(context)) {
                 runCatching {
-                    Shizuku.newProcess(cmd, null, null)
-                }.getOrElse {
-                    Runtime.getRuntime().exec(cmd)
+                    val newProcMethod = Shizuku::class.java.getDeclaredMethod(
+                        "newProcess",
+                        Array<String>::class.java,
+                        Array<String>::class.java,
+                        String::class.java,
+                    ).apply { isAccessible = true }
+                    val proc = newProcMethod.invoke(null, cmd, null, null) as Process
+                    inputStream = proc.inputStream
                 }
-            } else {
-                Runtime.getRuntime().exec(cmd)
             }
 
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            if (inputStream == null) {
+                val proc = Runtime.getRuntime().exec(cmd)
+                inputStream = proc.inputStream
+            }
+
+            val reader = BufferedReader(InputStreamReader(inputStream!!))
             var line: String? = reader.readLine()
 
             val pattern = Regex("""^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEA])\s+([^:]+):\s*(.*)$""")
