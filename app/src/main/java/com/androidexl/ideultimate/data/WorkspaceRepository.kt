@@ -838,6 +838,10 @@ class WorkspaceRepository(context: Context) {
         )
         items.add(item)
         persist()
+        runCatching {
+            ensureDefaultProjectFiles(item)
+            ensureProjectFullRoot(item)
+        }
         return item
     }
 
@@ -3157,6 +3161,9 @@ class WorkspaceRepository(context: Context) {
     <color name="colorPrimary">#38BDF8</color>
     <color name="colorPrimaryDark">#050816</color>
     <color name="colorAccent">#22C55E</color>
+    <color name="primary">#38BDF8</color>
+    <color name="primary_variant">#0284C7</color>
+    <color name="secondary">#22C55E</color>
 </resources>
 """,
                 Charsets.UTF_8,
@@ -4395,6 +4402,21 @@ kotlin.jvm.target.validation.mode=warning
                         }
                     }
                 }
+
+                // Also generate AppLogger in projDir so it's always available
+                if (project.language == ProjectLanguage.JAVA) {
+                    val logFile = File(projDir, "app/src/main/java/$pkgPath/AppLogger.java")
+                    if (!logFile.exists()) {
+                        logFile.parentFile?.mkdirs()
+                        logFile.writeText(defaultJavaAppLogger(project), Charsets.UTF_8)
+                    }
+                } else {
+                    val logFile = File(projDir, "app/src/main/java/$pkgPath/AppLogger.kt")
+                    if (!logFile.exists()) {
+                        logFile.parentFile?.mkdirs()
+                        logFile.writeText(defaultKotlinAppLogger(project), Charsets.UTF_8)
+                    }
+                }
             }
         }
     }
@@ -4431,6 +4453,119 @@ kotlin.jvm.target.validation.mode=warning
             .ifBlank { "Main" }
         return if (pascal.endsWith("Activity")) pascal else "${pascal}Activity"
     }
+
+    fun defaultJavaAppLogger(project: WorkspaceItem): String = """package ${project.packageName};
+
+import android.content.Context;
+import android.content.Intent;
+import android.util.Log;
+
+/**
+ * AppLogger for IDE Ultimate Logcat Reader.
+ * Automatically broadcasts logs from your application directly to the IDE Ultimate Logcat Reader screen.
+ */
+public class AppLogger {
+    private static final String ACTION_LOG = "com.androidexl.ideultimate.ACTION_LOG_EVENT";
+    private static final String EXTRA_PACKAGE = "extra_package_name";
+    private static final String EXTRA_APP_NAME = "extra_app_name";
+    private static final String EXTRA_TAG = "extra_tag";
+    private static final String EXTRA_LEVEL = "extra_level";
+    private static final String EXTRA_MESSAGE = "extra_message";
+    private static final String EXTRA_TIMESTAMP = "extra_timestamp";
+
+    public static void v(Context context, String tag, String msg) { send(context, "V", tag, msg); }
+    public static void d(Context context, String tag, String msg) { send(context, "D", tag, msg); }
+    public static void i(Context context, String tag, String msg) { send(context, "I", tag, msg); }
+    public static void w(Context context, String tag, String msg) { send(context, "W", tag, msg); }
+    public static void e(Context context, String tag, String msg) { send(context, "E", tag, msg); }
+    public static void e(Context context, String tag, String msg, Throwable tr) {
+        send(context, "E", tag, msg + "\n" + Log.getStackTraceString(tr));
+    }
+
+    public static void send(Context context, String level, String tag, String message) {
+        Log.println(levelToPriority(level), tag, message != null ? message : "");
+        if (context != null) {
+            try {
+                Intent intent = new Intent(ACTION_LOG);
+                intent.setPackage("com.androidexl.ideultimate");
+                intent.putExtra(EXTRA_PACKAGE, context.getPackageName());
+                intent.putExtra(EXTRA_APP_NAME, "${project.name}");
+                intent.putExtra(EXTRA_TAG, tag);
+                intent.putExtra(EXTRA_LEVEL, level);
+                intent.putExtra(EXTRA_MESSAGE, message != null ? message : "");
+                intent.putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis());
+                context.sendBroadcast(intent);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private static int levelToPriority(String level) {
+        if ("V".equals(level)) return Log.VERBOSE;
+        if ("D".equals(level)) return Log.DEBUG;
+        if ("I".equals(level)) return Log.INFO;
+        if ("W".equals(level)) return Log.WARN;
+        if ("E".equals(level)) return Log.ERROR;
+        return Log.DEBUG;
+    }
+}
+""".trimIndent()
+
+    fun defaultKotlinAppLogger(project: WorkspaceItem): String = """package ${project.packageName}
+
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+
+/**
+ * AppLogger for IDE Ultimate Logcat Reader.
+ * Automatically broadcasts logs from your application directly to the IDE Ultimate Logcat Reader screen.
+ */
+object AppLogger {
+    private const val ACTION_LOG = "com.androidexl.ideultimate.ACTION_LOG_EVENT"
+    private const val EXTRA_PACKAGE = "extra_package_name"
+    private const val EXTRA_APP_NAME = "extra_app_name"
+    private const val EXTRA_TAG = "extra_tag"
+    private const val EXTRA_LEVEL = "extra_level"
+    private const val EXTRA_MESSAGE = "extra_message"
+    private const val EXTRA_TIMESTAMP = "extra_timestamp"
+
+    fun v(context: Context?, tag: String, msg: String) = send(context, "V", tag, msg)
+    fun d(context: Context?, tag: String, msg: String) = send(context, "D", tag, msg)
+    fun i(context: Context?, tag: String, msg: String) = send(context, "I", tag, msg)
+    fun w(context: Context?, tag: String, msg: String) = send(context, "W", tag, msg)
+    fun e(context: Context?, tag: String, msg: String) = send(context, "E", tag, msg)
+    fun e(context: Context?, tag: String, msg: String, tr: Throwable?) {
+        send(context, "E", tag, msg + "\n" + Log.getStackTraceString(tr))
+    }
+
+    fun send(context: Context?, level: String, tag: String, message: String) {
+        Log.println(levelToPriority(level), tag, message)
+        if (context != null) {
+            runCatching {
+                val intent = Intent(ACTION_LOG).apply {
+                    `package` = "com.androidexl.ideultimate"
+                    putExtra(EXTRA_PACKAGE, context.packageName)
+                    putExtra(EXTRA_APP_NAME, "${project.name}")
+                    putExtra(EXTRA_TAG, tag)
+                    putExtra(EXTRA_LEVEL, level)
+                    putExtra(EXTRA_MESSAGE, message)
+                    putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis())
+                }
+                context.sendBroadcast(intent)
+            }
+        }
+    }
+
+    private fun levelToPriority(level: String): Int = when (level) {
+        "V" -> Log.VERBOSE
+        "D" -> Log.DEBUG
+        "I" -> Log.INFO
+        "W" -> Log.WARN
+        "E" -> Log.ERROR
+        else -> Log.DEBUG
+    }
+}
+""".trimIndent()
 
     private fun defaultXmlLayoutContent(
         project: WorkspaceItem,

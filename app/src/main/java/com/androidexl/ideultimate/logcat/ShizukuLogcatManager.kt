@@ -42,6 +42,7 @@ object ShizukuLogcatManager {
     private const val PREF_SHIZUKU_GRANTED = "shizuku_permission_user_granted"
 
     private var permissionListenerRegistered = false
+    private var binderListenerRegistered = false
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences("shizuku_ide_prefs", Context.MODE_PRIVATE)
@@ -54,6 +55,18 @@ object ShizukuLogcatManager {
                 Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
                     if (requestCode == SHIZUKU_PERMISSION_CODE) {
                         if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                            getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, true).apply()
+                        }
+                    }
+                }
+            }
+        }
+        if (!binderListenerRegistered) {
+            binderListenerRegistered = true
+            runCatching {
+                Shizuku.addBinderReceivedListenerSticky {
+                    runCatching {
+                        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                             getPrefs(context).edit().putBoolean(PREF_SHIZUKU_GRANTED, true).apply()
                         }
                     }
