@@ -5811,7 +5811,7 @@ private fun IdeWidgetPropertyBottomPanel(
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(if (isCurrent) Cyan.copy(alpha = 0.22f) else Color(0xFF161E3C))
+                            .background(if (isCurrent) Cyan.copy(alpha = 0.22f) else IndigoDeep)
                             .border(
                                 1.dp,
                                 if (isCurrent) Cyan else GlassStrokeTop,
@@ -6596,8 +6596,8 @@ private fun SketchPropertySquareCard(
     icon: @Composable (Color) -> Unit,
 ) {
     val shape = RoundedCornerShape(14.dp)
-    val bgColor = if (highlighted) Color(0xFF1F3166) else Color(0xFF161F40)
-    val borderColor = if (highlighted) Cyan.copy(alpha = 0.55f) else Color(0x24FFFFFF)
+    val bgColor = if (highlighted) Cyan.copy(alpha = 0.22f) else IndigoDeep
+    val borderColor = if (highlighted) Cyan else GlassStrokeTop
     val contentTint = if (highlighted) Cyan else Ink.copy(alpha = 0.90f)
 
     Column(
@@ -6645,7 +6645,7 @@ private fun SketchEventSquareCard(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val dotColor = if (isEnabled) Color(0xFF22C55E) else Color(0xFFEF4444)
-    val bgColor = if (isEnabled) Color(0xFF132A26) else Color(0xFF161F40)
+    val bgColor = if (isEnabled) Color(0xFF22C55E).copy(alpha = 0.18f) else IndigoDeep
     val borderColor = if (isEnabled) Color(0xFF22C55E).copy(alpha = 0.65f) else GlassStrokeTop
     val contentTint = if (isEnabled) Color(0xFF4ADE80) else Ink.copy(alpha = 0.92f)
 
@@ -12505,7 +12505,7 @@ private fun DialogPresetChipsGrid(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
+                    .background(if (selected) Cyan.copy(alpha = 0.22f) else IndigoDeep)
                     .border(
                         width = 1.dp,
                         color = if (selected) Cyan else GlassStrokeTop,
@@ -12546,7 +12546,7 @@ private fun DialogColorSwatches(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) Cyan.copy(alpha = 0.20f) else Color(0x16FFFFFF))
+                    .background(if (selected) Cyan.copy(alpha = 0.20f) else IndigoDeep)
                     .border(
                         width = 1.dp,
                         color = if (selected) Cyan else GlassStrokeTop,
@@ -16881,7 +16881,7 @@ private fun IdeIconManagerScreen(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
-                                        .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
+                                        .background(if (selected) Cyan.copy(alpha = 0.22f) else IndigoDeep)
                                         .border(1.dp, if (selected) Cyan else GlassStrokeTop, RoundedCornerShape(50))
                                         .clickable { selectedCategory = cat }
                                         .padding(horizontal = 12.dp, vertical = 5.dp),
