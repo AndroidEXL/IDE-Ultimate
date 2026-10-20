@@ -61,8 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.PlayArrow
-import com.androidexl.ideultimate.emulator.BlackBoxEmulatorManager
 import com.androidexl.ideultimate.data.GitHubActionsBuildEngine
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
@@ -90,7 +88,6 @@ import kotlinx.coroutines.withContext
 fun IdeGitHubActionsRunScreen(
     project: WorkspaceItem,
     onBack: () -> Unit,
-    onOpenEmulatorTab: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -149,22 +146,7 @@ fun IdeGitHubActionsRunScreen(
         }
     }
 
-    fun installToEmulator(file: File) {
-        coroutineScope.launch {
-            Toast.makeText(context, "جاري تثبيت التطبيق في محاكي NewBlackbox...", Toast.LENGTH_SHORT).show()
-            val result = BlackBoxEmulatorManager.installApkToEmulator(context, file, autoLaunch = true)
-            if (result.isSuccess) {
-                Toast.makeText(context, "تم تثبيت وتشغيل التطبيق في المحاكي بنجاح ✓", Toast.LENGTH_SHORT).show()
-                if (onOpenEmulatorTab != null) {
-                    onOpenEmulatorTab()
-                }
-            } else {
-                Toast.makeText(context, "فشل التثبيت في المحاكي: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    fun downloadAndInstallBuiltApk(targetEmulator: Boolean = false) {
+    fun downloadAndInstallBuiltApk() {
         if (isDownloadingApk) return
         isDownloadingApk = true
         apkDownloadProgress = 0.05f
@@ -236,12 +218,8 @@ fun IdeGitHubActionsRunScreen(
                     if (extractedFile != null && extractedFile!!.exists()) {
                         downloadedApkFile = extractedFile
                         downloadStatusText = "اكتمل التحميل بنجاح ✓"
-                        if (targetEmulator) {
-                            installToEmulator(extractedFile!!)
-                        } else {
-                            Toast.makeText(context, "تم تحميل التطبيق بنجاح! جاري التثبيت...", Toast.LENGTH_SHORT).show()
-                            installApk(extractedFile!!)
-                        }
+                        Toast.makeText(context, "تم تحميل التطبيق بنجاح! جاري التثبيت على الهاتف...", Toast.LENGTH_SHORT).show()
+                        installApk(extractedFile!!)
                     } else {
                         Toast.makeText(context, "لم يتم العثور على ملف APK جاهز في مخرجات البناء أو الـ Release", Toast.LENGTH_LONG).show()
                     }
@@ -713,7 +691,7 @@ fun IdeGitHubActionsRunScreen(
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(Color(0xFF10B981))
                                             .clickable { installApk(downloadedApkFile!!) }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -735,34 +713,6 @@ fun IdeGitHubActionsRunScreen(
                                             )
                                         }
                                     }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF6366F1))
-                                            .clickable { installToEmulator(downloadedApkFile!!) }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.PlayArrow,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                            Text(
-                                                text = "تثبيت في المحاكي",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 11.sp,
-                                                ),
-                                                color = Color.White,
-                                            )
-                                        }
-                                    }
                                 }
                             } else {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -770,8 +720,8 @@ fun IdeGitHubActionsRunScreen(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(Color(0xFF10B981))
-                                            .clickable { downloadAndInstallBuiltApk(targetEmulator = false) }
-                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                            .clickable { downloadAndInstallBuiltApk() }
+                                            .padding(horizontal = 12.dp, vertical = 7.dp),
                                     ) {
                                         Text(
                                             text = "تثبيت على الهاتف",
@@ -780,22 +730,6 @@ fun IdeGitHubActionsRunScreen(
                                                 fontSize = 11.sp,
                                             ),
                                             color = Color(0xFF042215),
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF6366F1))
-                                            .clickable { downloadAndInstallBuiltApk(targetEmulator = true) }
-                                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                                    ) {
-                                        Text(
-                                            text = "تثبيت في المحاكي",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                            ),
-                                            color = Color.White,
                                         )
                                     }
                                 }

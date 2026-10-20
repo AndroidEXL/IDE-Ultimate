@@ -1,6 +1,5 @@
 package com.androidexl.ideultimate.ui.screens
 
-import com.androidexl.ideultimate.emulator.IdeBlackBoxEmulatorTab
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -163,7 +162,6 @@ import kotlin.math.roundToInt
 private enum class IdeProjectTab(val title: String) {
     VIEW("View"),
     LOGIC("Logic"),
-    EMULATOR("Emulator"),
 }
 
 private enum class IdeBuildMethod(
@@ -432,6 +430,9 @@ fun IdeProjectScreen(
     var showPermissionManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showFilesManagerScreen by rememberSaveable { mutableStateOf(false) }
     var showStringsTranslationScreen by rememberSaveable { mutableStateOf(false) }
+    var showValuesManagerScreen by rememberSaveable { mutableStateOf(false) }
+    var showLogcatReaderScreen by rememberSaveable { mutableStateOf(false) }
+    var showLogcatSystemScreen by rememberSaveable { mutableStateOf(false) }
     var showGitHubToolsScreen by rememberSaveable { mutableStateOf(false) }
     var showGitHubActionsRunScreen by rememberSaveable { mutableStateOf(false) }
     var activeSideMenuItem by remember { mutableStateOf<IdeSideMenuItem?>(null) }
@@ -509,6 +510,9 @@ fun IdeProjectScreen(
             showPermissionManagerScreen -> showPermissionManagerScreen = false
             showFilesManagerScreen -> showFilesManagerScreen = false
             showStringsTranslationScreen -> showStringsTranslationScreen = false
+            showValuesManagerScreen -> showValuesManagerScreen = false
+            showLogcatReaderScreen -> showLogcatReaderScreen = false
+            showLogcatSystemScreen -> showLogcatSystemScreen = false
             showGitHubToolsScreen -> showGitHubToolsScreen = false
             showGitHubActionsRunScreen -> showGitHubActionsRunScreen = false
             activeSideMenuItem != null -> activeSideMenuItem = null
@@ -779,6 +783,32 @@ fun IdeProjectScreen(
         return
     }
 
+    if (showValuesManagerScreen) {
+        IdeValuesManagerScreen(
+            project = project,
+            onBack = { showValuesManagerScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showLogcatReaderScreen) {
+        IdeLogcatReaderScreen(
+            project = project,
+            onBack = { showLogcatReaderScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (showLogcatSystemScreen) {
+        IdeLogcatSystemScreen(
+            onBack = { showLogcatSystemScreen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     if (showGitHubToolsScreen) {
         IdeGitHubToolsScreen(
             project = project,
@@ -793,10 +823,6 @@ fun IdeProjectScreen(
         IdeGitHubActionsRunScreen(
             project = project,
             onBack = { showGitHubActionsRunScreen = false },
-            onOpenEmulatorTab = {
-                showGitHubActionsRunScreen = false
-                activeTabName = IdeProjectTab.EMULATOR.name
-            },
             modifier = modifier,
         )
         return
@@ -806,10 +832,6 @@ fun IdeProjectScreen(
         IdeTerminalGradleBuildSheet(
             project = project,
             onDismiss = { showTerminalGradleBuildSheet = false },
-            onOpenEmulatorTab = {
-                showTerminalGradleBuildSheet = false
-                activeTabName = IdeProjectTab.EMULATOR.name
-            },
         )
     }
     if (showTempRunScreen) {
@@ -942,16 +964,6 @@ fun IdeProjectScreen(
                                     codeText = updated
                                     repository.saveCodeForFlavor(project, selectedXmlPage, activeFlavor, updated)
                                 },
-                            )
-                        }
-
-                        IdeProjectTab.EMULATOR -> {
-                            IdeBlackBoxEmulatorTab(
-                                project = project,
-                                selectedXmlPage = selectedXmlPage,
-                                widgetNodes = widgetNodes,
-                                projectImages = projectImages,
-                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
@@ -1116,6 +1128,15 @@ fun IdeProjectScreen(
                         }
                         IdeSideMenuItem.STRINGS_TRANSLATION -> {
                             showStringsTranslationScreen = true
+                        }
+                        IdeSideMenuItem.VALUES_MANAGER -> {
+                            showValuesManagerScreen = true
+                        }
+                        IdeSideMenuItem.LOGCAT_READER_APP -> {
+                            showLogcatReaderScreen = true
+                        }
+                        IdeSideMenuItem.LOGCAT_SYSTEM -> {
+                            showLogcatSystemScreen = true
                         }
                         IdeSideMenuItem.GITHUB_TOOLS -> {
                             showGitHubToolsScreen = true

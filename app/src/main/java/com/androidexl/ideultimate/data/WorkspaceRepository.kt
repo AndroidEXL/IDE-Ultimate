@@ -2974,14 +2974,72 @@ class WorkspaceRepository(context: Context) {
     // Resources Manager (Full app/src/main/res Folder Browser + Create/Rename/Delete)
     // -------------------------------------------------------------------------
 
-    fun ensureProjectResRoot(project: WorkspaceItem): File {
-        val internalResRoot = File(appContext.filesDir, "project_res/${project.id}/res").apply { mkdirs() }
-        val defaultFolders = listOf("drawable", "layout", "values", "raw", "font", "xml", "mipmap-anydpi-v26", "menu", "anim")
-        defaultFolders.forEach { folder ->
-            File(internalResRoot, folder).mkdirs()
+    private fun syncProjectLauncherIcon(project: WorkspaceItem, internalResRoot: File) {
+        val customPath = project.customIconPath
+        val customFile = if (!customPath.isNullOrBlank()) File(customPath) else null
+        val hasCustomIcon = customFile != null && customFile.exists() && customFile.length() > 0L
+
+        val mipmapDir = File(internalResRoot, "mipmap").apply { mkdirs() }
+        val mipmapV26Dir = File(internalResRoot, "mipmap-anydpi-v26").apply { mkdirs() }
+        val drawableDir = File(internalResRoot, "drawable").apply { mkdirs() }
+
+        if (hasCustomIcon && customFile != null) {
+            val densities = listOf(
+                "mipmap-mdpi" to 48,
+                "mipmap-hdpi" to 72,
+                "mipmap-xhdpi" to 96,
+                "mipmap-xxhdpi" to 144,
+                "mipmap-xxxhdpi" to 192,
+            )
+            val rawBmp = runCatching { android.graphics.BitmapFactory.decodeFile(customFile.absolutePath) }.getOrNull()
+            if (rawBmp != null) {
+                densities.forEach { (dirName, size) ->
+                    val densityDir = File(internalResRoot, dirName).apply { mkdirs() }
+                    val scaled = android.graphics.Bitmap.createScaledBitmap(rawBmp, size, size, true)
+                    val launcherPng = File(densityDir, "ic_launcher.png")
+                    val roundPng = File(densityDir, "ic_launcher_round.png")
+                    java.io.FileOutputStream(launcherPng).use { out -> scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out) }
+                    java.io.FileOutputStream(roundPng).use { out -> scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out) }
+                }
+                customFile.copyTo(File(mipmapDir, "ic_launcher.png"), overwrite = true)
+                customFile.copyTo(File(mipmapDir, "ic_launcher_round.png"), overwrite = true)
+                val customDrawable = File(drawableDir, "ic_project_launcher.png")
+                customFile.copyTo(customDrawable, overwrite = true)
+
+                File(mipmapV26Dir, "ic_launcher.xml").writeText(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/white" />
+    <foreground android:drawable="@drawable/ic_project_launcher" />
+</adaptive-icon>
+""".trimIndent(),
+                    Charsets.UTF_8,
+                )
+                File(mipmapV26Dir, "ic_launcher_round.xml").writeText(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/white" />
+    <foreground android:drawable="@drawable/ic_project_launcher" />
+</adaptive-icon>
+""".trimIndent(),
+                    Charsets.UTF_8,
+                )
+                val colorsFile = File(internalResRoot, "values/colors.xml")
+                if (colorsFile.exists()) {
+                    val colorsContent = colorsFile.readText(Charsets.UTF_8)
+                    if (!colorsContent.contains("\"white\"")) {
+                        val updated = colorsContent.replace("</resources>", "    <color name=\"white\">#FFFFFFFF</color>\n</resources>")
+                        colorsFile.writeText(updated, Charsets.UTF_8)
+                    }
+                } else {
+                    File(internalResRoot, "values").mkdirs()
+                    colorsFile.writeText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    <color name=\"white\">#FFFFFFFF</color>\n</resources>", Charsets.UTF_8)
+                }
+                return
+            }
         }
 
-        // Ensure default launcher icon & background/foreground exist so builds never fail missing ic_launcher
+        // Fallback default launcher icon
         val defaultBgFile = File(internalResRoot, "drawable/ic_launcher_background.xml")
         if (!defaultBgFile.exists()) {
             defaultBgFile.writeText(
@@ -3020,8 +3078,7 @@ class WorkspaceRepository(context: Context) {
                 Charsets.UTF_8,
             )
         }
-        val mipmapDir = File(internalResRoot, "mipmap-anydpi-v26").apply { mkdirs() }
-        val launcherMipmap = File(mipmapDir, "ic_launcher.xml")
+        val launcherMipmap = File(mipmapV26Dir, "ic_launcher.xml")
         if (!launcherMipmap.exists()) {
             launcherMipmap.writeText(
                 """<?xml version="1.0" encoding="utf-8"?>
@@ -3033,7 +3090,7 @@ class WorkspaceRepository(context: Context) {
                 Charsets.UTF_8,
             )
         }
-        val launcherRoundMipmap = File(mipmapDir, "ic_launcher_round.xml")
+        val launcherRoundMipmap = File(mipmapV26Dir, "ic_launcher_round.xml")
         if (!launcherRoundMipmap.exists()) {
             launcherRoundMipmap.writeText(
                 """<?xml version="1.0" encoding="utf-8"?>
@@ -3045,6 +3102,17 @@ class WorkspaceRepository(context: Context) {
                 Charsets.UTF_8,
             )
         }
+    }
+
+    fun ensureProjectResRoot(project: WorkspaceItem): File {
+        val internalResRoot = File(appContext.filesDir, "project_res/${project.id}/res").apply { mkdirs() }
+        val defaultFolders = listOf("drawable", "layout", "values", "raw", "font", "xml", "mipmap-anydpi-v26", "menu", "anim")
+        defaultFolders.forEach { folder ->
+            File(internalResRoot, folder).mkdirs()
+        }
+
+        // Sync project launcher icon (if custom icon is selected by user, write PNGs & adaptive XML; else fallback)
+        syncProjectLauncherIcon(project, internalResRoot)
 
         // Sync existing drawables, layouts, sounds, fonts into internalResRoot so everything appears in Resources Manager
         getProjectImages(project).forEach { img ->

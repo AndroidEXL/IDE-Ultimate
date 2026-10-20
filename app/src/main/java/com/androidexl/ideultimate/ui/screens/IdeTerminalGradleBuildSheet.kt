@@ -71,7 +71,6 @@ import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
-import com.androidexl.ideultimate.emulator.BlackBoxEmulatorManager
 import com.example.ubuntuterminal.TerminalManager
 import com.example.ubuntuterminal.setup.Installer
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +96,6 @@ data class AndroidToolStatus(
 fun IdeTerminalGradleBuildSheet(
     project: WorkspaceItem,
     onDismiss: () -> Unit,
-    onOpenEmulatorTab: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -140,22 +138,6 @@ fun IdeTerminalGradleBuildSheet(
             context.startActivity(installIntent)
         } catch (e: Exception) {
             Toast.makeText(context, "فشل فتح مثبت الحزم: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun installToEmulator(filePath: String) {
-        coroutineScope.launch {
-            Toast.makeText(context, "جاري تثبيت التطبيق في محاكي NewBlackbox...", Toast.LENGTH_SHORT).show()
-            val result = BlackBoxEmulatorManager.installApkToEmulator(context, File(filePath), autoLaunch = true)
-            if (result.isSuccess) {
-                Toast.makeText(context, "تم تثبيت وتشغيل التطبيق في المحاكي بنجاح ✓", Toast.LENGTH_SHORT).show()
-                if (onOpenEmulatorTab != null) {
-                    onDismiss()
-                    onOpenEmulatorTab()
-                }
-            } else {
-                Toast.makeText(context, "فشل التثبيت في المحاكي: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-            }
         }
     }
 
@@ -433,7 +415,7 @@ fun IdeTerminalGradleBuildSheet(
                 "    mkdir -p \"\$RES_DIR\"",
                 "fi",
                 "mkdir -p \"\$RES_DIR/drawable\" \"\$RES_DIR/mipmap-anydpi-v26\" \"\$RES_DIR/values\"",
-                "if [ ! -f \"\$RES_DIR/drawable/ic_launcher_background.xml\" ]; then",
+                "if [ ! -f \"\$RES_DIR/drawable/ic_launcher_background.xml\" ] && [ ! -f \"\$RES_DIR/mipmap-hdpi/ic_launcher.png\" ] && [ ! -f \"\$RES_DIR/drawable/ic_project_launcher.png\" ]; then",
                 "    cat << 'EOF_BG' > \"\$RES_DIR/drawable/ic_launcher_background.xml\"",
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
                 "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"",
@@ -445,7 +427,7 @@ fun IdeTerminalGradleBuildSheet(
                 "</vector>",
                 "EOF_BG",
                 "fi",
-                "if [ ! -f \"\$RES_DIR/drawable/ic_launcher_foreground.xml\" ]; then",
+                "if [ ! -f \"\$RES_DIR/drawable/ic_launcher_foreground.xml\" ] && [ ! -f \"\$RES_DIR/mipmap-hdpi/ic_launcher.png\" ] && [ ! -f \"\$RES_DIR/drawable/ic_project_launcher.png\" ]; then",
                 "    cat << 'EOF_FG' > \"\$RES_DIR/drawable/ic_launcher_foreground.xml\"",
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
                 "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"",
@@ -879,7 +861,7 @@ fun IdeTerminalGradleBuildSheet(
                 ) {
                     Box(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .height(46.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
@@ -900,37 +882,7 @@ fun IdeTerminalGradleBuildSheet(
                                 text = "تثبيت على الهاتف",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 12.5.sp,
-                                ),
-                                color = Color.White,
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF4F46E5), Color(0xFF6366F1))))
-                            .clickable { installToEmulator(apkOutputPath!!) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Text(
-                                text = "تثبيت في المحاكي",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 13.sp,
                                 ),
                                 color = Color.White,
                             )
