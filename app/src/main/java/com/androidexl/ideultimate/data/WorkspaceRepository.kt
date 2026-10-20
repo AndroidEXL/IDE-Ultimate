@@ -3174,13 +3174,25 @@ class WorkspaceRepository(context: Context) {
             stylesFile.writeText(
                 """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/colorPrimary</item>
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
     </style>
 </resources>
 """,
                 Charsets.UTF_8,
             )
+        } else {
+            val content = stylesFile.readText(Charsets.UTF_8)
+            if (content.contains("android:Theme.Material")) {
+                stylesFile.writeText(
+                    content.replace("android:Theme.Material.Light.NoActionBar", "Theme.MaterialComponents.DayNight.NoActionBar")
+                           .replace("android:Theme.Material.NoActionBar", "Theme.MaterialComponents.DayNight.NoActionBar")
+                           .replace("android:Theme.Material", "Theme.MaterialComponents.DayNight.NoActionBar"),
+                    Charsets.UTF_8
+                )
+            }
         }
 
         // Sync layouts from projectDirectoriesFor(project)

@@ -434,7 +434,11 @@ object ProjectZipExporter {
     private val themesXml = """
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
-            <style name="Theme.ExportedProject" parent="android:Theme.Material.Light.NoActionBar" />
+            <style name="Theme.ExportedProject" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+                <item name="colorPrimary">@color/colorPrimary</item>
+                <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+                <item name="colorAccent">@color/colorAccent</item>
+            </style>
         </resources>
     """.trimIndent()
 
