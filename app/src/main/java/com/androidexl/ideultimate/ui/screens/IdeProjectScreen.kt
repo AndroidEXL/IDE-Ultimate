@@ -7715,7 +7715,7 @@ private fun IdeLogicEventWorkspace(
                 modifier = Modifier
                     .width(90.dp)
                     .fillMaxHeight()
-                    .background(Color(0xFF0A1026))
+                    .background(Midnight)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 18.dp, horizontal = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -7741,7 +7741,7 @@ private fun IdeLogicEventWorkspace(
                                 .height(32.dp)
                                 .clip(RoundedCornerShape(percent = 50))
                                 .background(
-                                    if (selected) Color(0xFF23326A) else Color.Transparent,
+                                    if (selected) IndigoDeep else Color.Transparent,
                                 )
                                 .then(
                                     if (selected) {
@@ -7781,7 +7781,7 @@ private fun IdeLogicEventWorkspace(
                 modifier = Modifier
                     .width(1.dp)
                     .fillMaxHeight()
-                    .background(Color(0x1FFFFFFF)),
+                    .background(GlassStrokeTop),
             )
 
             // 2. Right Content Area (Import Code button in Activity + Event/Function cards — no popup sheets on click!)
@@ -7800,10 +7800,10 @@ private fun IdeLogicEventWorkspace(
                             .fillMaxWidth()
                             .height(46.dp)
                             .clip(RoundedCornerShape(percent = 50))
-                            .background(Color(0xFF151F44))
+                            .background(IndigoDeep)
                             .border(
                                 width = 1.dp,
-                                color = Color(0x38FFFFFF),
+                                color = GlassStrokeTop,
                                 shape = RoundedCornerShape(percent = 50),
                             )
                             .clickable {
@@ -7882,8 +7882,8 @@ private fun IdeLogicEventWorkspace(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF121B3A))
-                                    .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(16.dp))
+                                    .background(IndigoDeep)
+                                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
@@ -7969,7 +7969,7 @@ private fun IdeLogicEventWorkspace(
                 .clip(RoundedCornerShape(18.dp))
                 .background(
                     Brush.linearGradient(
-                        listOf(Color(0xFF283A75), Color(0xFF364F9C)),
+                        listOf(IndigoDeep, IndigoDeep),
                     ),
                 )
                 .border(1.2.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
@@ -8251,8 +8251,8 @@ private fun IdeLogicEventWorkspace(
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan,
                         unfocusedBorderColor = GlassStrokeTop,
-                        focusedContainerColor = Color(0x14FFFFFF),
-                        unfocusedContainerColor = Color(0x0AFFFFFF),
+                        focusedContainerColor = GlassStrokeTop,
+                        unfocusedContainerColor = GlassStrokeTop,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -8412,8 +8412,8 @@ private fun IdeLogicEventCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color(0xFF151E42))
-            .border(1.dp, Color(0x2EFFFFFF), shape)
+            .background(IndigoDeep)
+            .border(1.dp, GlassStrokeTop, shape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
@@ -8472,8 +8472,8 @@ private fun IdeLogicEventCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF0B112B))
-                        .border(1.dp, Color(0x2438BDF8), RoundedCornerShape(10.dp))
+                        .background(Midnight)
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     Text(
@@ -8587,7 +8587,7 @@ private fun AddActivityEventBottomSheet(
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = if (isAdded) Cyan.copy(alpha = 0.55f) else Color(0x26FFFFFF),
+                                    color = if (isAdded) Cyan.copy(alpha = 0.55f) else GlassStrokeTop,
                                     shape = RoundedCornerShape(14.dp),
                                 )
                                 .clickable { onAddEvent(tpl) }
@@ -8718,7 +8718,7 @@ private fun AddViewEventBottomSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF131C3E))
+                                    .background(IndigoDeep)
                                     .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -8750,11 +8750,11 @@ private fun AddViewEventBottomSheet(
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(
-                                                if (isAdded) Color(0xFF132A26) else Color(0xFF1B2752),
+                                                if (isAdded) Color(0xFF132A26) else IndigoDeep,
                                             )
                                             .border(
                                                 width = 1.dp,
-                                                color = if (isAdded) Color(0xFF22C55E).copy(alpha = 0.65f) else Color(0x26FFFFFF),
+                                                color = if (isAdded) Color(0xFF22C55E).copy(alpha = 0.65f) else GlassStrokeTop,
                                                 shape = RoundedCornerShape(12.dp),
                                             )
                                             .clickable { onToggleOrOpenViewEvent(wNode, evOpt) }
@@ -8933,7 +8933,7 @@ private fun CreateOrEditFunctionBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF131C3E))
+                        .background(IndigoDeep)
                         .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -8951,7 +8951,7 @@ private fun CreateOrEditFunctionBottomSheet(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFF1C2959))
+                                        .background(IndigoDeep)
                                         .border(1.dp, Cyan.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
                                         .padding(horizontal = 12.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -9033,7 +9033,7 @@ private fun CreateOrEditFunctionBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF131C3E))
+                        .background(IndigoDeep)
                         .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -9257,7 +9257,7 @@ private fun IdeLogicItemLongPressBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF1E2952))
+                    .background(IndigoDeep)
                     .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
                     .clickable(onClick = onResetBody)
                     .padding(horizontal = 16.dp, vertical = 13.dp),
@@ -9839,7 +9839,7 @@ private fun IdeEventCodeEditorPage(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0A1028))
+                    .background(Midnight)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -9852,7 +9852,7 @@ private fun IdeEventCodeEditorPage(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(0x1FFFFFFF)),
+                        .background(GlassStrokeTop),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -9964,7 +9964,7 @@ private fun IdeEventCodeEditorPage(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0D1430))
+                    .background(Midnight)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -9980,7 +9980,7 @@ private fun IdeEventCodeEditorPage(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) Cyan.copy(alpha = 0.20f) else Color(0x14FFFFFF))
+                            .background(if (selected) Cyan.copy(alpha = 0.20f) else GlassStrokeTop)
                             .border(
                                 1.dp,
                                 if (selected) Cyan.copy(alpha = 0.75f) else GlassStrokeTop,
@@ -10020,7 +10020,7 @@ private fun IdeEventCodeEditorPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color(0xFF06091A)),
+                    .background(DeepNavy),
             ) {
                 Row(
                     modifier = Modifier
@@ -10119,13 +10119,13 @@ private fun IdeEventCodeEditorPage(
                             .heightIn(max = 128.dp)
                             .shadow(10.dp, RoundedCornerShape(12.dp))
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF0E173B))
+                            .background(IndigoDeep)
                             .border(1.dp, Cyan.copy(alpha = 0.55f), RoundedCornerShape(12.dp)),
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF09102A))
+                                .background(Midnight)
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -10224,7 +10224,7 @@ private fun IdeEventCodeEditorPage(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF080D22))
+                        .background(Midnight)
                         .imePadding(),
                 ) {
                     Box(
@@ -10309,7 +10309,7 @@ private fun IdeEventCodeEditorPage(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(7.dp))
-                                    .background(Color(0xFF132246))
+                                    .background(IndigoDeep)
                                     .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(7.dp))
                                     .clickable { insertSnippetAtCursor(clsToken) }
                                     .padding(horizontal = 8.dp, vertical = 3.dp),
@@ -10334,7 +10334,7 @@ private fun IdeEventCodeEditorPage(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF06091A))
+                            .background(DeepNavy)
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -10343,7 +10343,7 @@ private fun IdeEventCodeEditorPage(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0x1FFFFFFF))
+                                    .background(GlassStrokeTop)
                                     .border(1.dp, GlassStrokeTop, RoundedCornerShape(6.dp))
                                     .clickable {
                                         if (sym == "\"\"") {
@@ -10478,8 +10478,8 @@ private fun IdeLogicItemEditorBottomSheet(
                         cursorColor = Cyan,
                         focusedBorderColor = Cyan,
                         unfocusedBorderColor = GlassStrokeTop,
-                        focusedContainerColor = Color(0xFF060A1C),
-                        unfocusedContainerColor = Color(0xFF060A1C),
+                        focusedContainerColor = Midnight,
+                        unfocusedContainerColor = Midnight,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -10521,14 +10521,14 @@ private fun IdeLogicCodeEditor(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xE606091A))
+                .background(Midnight.copy(alpha = 0.9f))
                 .border(1.dp, VioletSoft.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
         ) {
         // 1. Code Editor Mode Switcher: Java Android | Kotlin Android | xml Android
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xCC0B1028))
+                .background(Midnight.copy(alpha = 0.8f))
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -10547,7 +10547,7 @@ private fun IdeLogicCodeEditor(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) accent.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                            .background(if (selected) accent.copy(alpha = 0.22f) else GlassStrokeTop)
                             .border(
                                 width = 1.dp,
                                 color = if (selected) accent.copy(alpha = 0.70f) else GlassStrokeTop,
@@ -10629,7 +10629,7 @@ private fun IdeLogicCodeEditor(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0x1FFFFFFF))
+                        .background(GlassStrokeTop)
                         .border(1.dp, GlassStrokeTop, RoundedCornerShape(6.dp))
                         .clickable { onCodeChange(code + sym) }
                         .padding(horizontal = 8.dp, vertical = 3.dp),
@@ -10651,7 +10651,7 @@ private fun IdeLogicCodeEditor(
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(Color(0x1FFFFFFF)),
+                .background(GlassStrokeTop),
         )
 
         // 3. Syntax-Highlighted Code Area with Line Numbers
@@ -10682,7 +10682,7 @@ private fun IdeLogicCodeEditor(
                 modifier = Modifier
                     .width(1.dp)
                     .fillMaxHeight()
-                    .background(Color(0x1FFFFFFF)),
+                    .background(GlassStrokeTop),
             )
 
             BasicTextField(
@@ -10806,7 +10806,7 @@ private fun IdeEmptyWorkspaceCanvas() {
             .fillMaxSize()
             .clip(RoundedCornerShape(18.dp))
             .background(Color(0x66060A1C))
-            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(18.dp)),
+            .border(1.dp, GlassStrokeTop, RoundedCornerShape(18.dp)),
     )
 }
 
@@ -10940,8 +10940,8 @@ private fun AddXmlLayoutDialog(
                             cursorColor = Cyan,
                             focusedBorderColor = Cyan,
                             unfocusedBorderColor = GlassStrokeTop,
-                            focusedContainerColor = Color(0x14FFFFFF),
-                            unfocusedContainerColor = Color(0x0AFFFFFF),
+                            focusedContainerColor = GlassStrokeTop,
+                            unfocusedContainerColor = GlassStrokeTop,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -12447,7 +12447,7 @@ private fun DialogOptionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Cyan.copy(alpha = 0.18f) else Color(0x14FFFFFF))
+            .background(if (selected) Cyan.copy(alpha = 0.18f) else GlassStrokeTop)
             .border(
                 width = 1.dp,
                 color = if (selected) Cyan else GlassStrokeTop,
@@ -12508,7 +12508,7 @@ private fun DialogPresetChipsGrid(
                     .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
                     .border(
                         width = 1.dp,
-                        color = if (selected) Cyan else Color(0x2EFFFFFF),
+                        color = if (selected) Cyan else GlassStrokeTop,
                         shape = RoundedCornerShape(10.dp),
                     )
                     .clickable { onSelect(preset) }
@@ -12549,7 +12549,7 @@ private fun DialogColorSwatches(
                     .background(if (selected) Cyan.copy(alpha = 0.20f) else Color(0x16FFFFFF))
                     .border(
                         width = 1.dp,
-                        color = if (selected) Cyan else Color(0x2EFFFFFF),
+                        color = if (selected) Cyan else GlassStrokeTop,
                         shape = RoundedCornerShape(10.dp),
                     )
                     .clickable { onSelectHex(hex) }
@@ -12601,8 +12601,8 @@ private fun DialogTextField(
             cursorColor = Cyan,
             focusedBorderColor = Cyan,
             unfocusedBorderColor = GlassStrokeTop,
-            focusedContainerColor = Color(0x14FFFFFF),
-            unfocusedContainerColor = Color(0x0AFFFFFF),
+            focusedContainerColor = GlassStrokeTop,
+            unfocusedContainerColor = GlassStrokeTop,
         ),
         modifier = Modifier.fillMaxWidth(),
     )
@@ -12744,10 +12744,10 @@ private fun TemporaryRunScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (active) chipColor.copy(alpha = 0.20f) else Color(0x14FFFFFF))
+                                .background(if (active) chipColor.copy(alpha = 0.20f) else GlassStrokeTop)
                                 .border(
                                     width = 1.dp,
-                                    color = if (active) chipColor else Color(0x26FFFFFF),
+                                    color = if (active) chipColor else GlassStrokeTop,
                                     shape = RoundedCornerShape(10.dp),
                                 )
                                 .clickable { onChangeBuildMethod(method) }
@@ -12965,7 +12965,7 @@ private fun BuildMethodBottomSheet(
                             )
                             .border(
                                 width = if (isSelected) 1.5.dp else 1.dp,
-                                color = if (isSelected) methodAccent else Color(0x26FFFFFF),
+                                color = if (isSelected) methodAccent else GlassStrokeTop,
                                 shape = RoundedCornerShape(16.dp),
                             )
                             .clickable { onSelectMethod(method) }
@@ -13277,7 +13277,7 @@ private fun IdeSideMenuManagerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x14FFFFFF))
+                        .background(GlassStrokeTop)
                         .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
                         .padding(12.dp),
                 ) {
@@ -13562,7 +13562,7 @@ private fun ImageViewSelectImageBottomSheet(
                             .background(if (isDefaultSelected) Cyan.copy(alpha = 0.16f) else Color(0xFF141D3F))
                             .border(
                                 width = if (isDefaultSelected) 1.5.dp else 1.dp,
-                                color = if (isDefaultSelected) Cyan else Color(0x26FFFFFF),
+                                color = if (isDefaultSelected) Cyan else GlassStrokeTop,
                                 shape = RoundedCornerShape(14.dp),
                             )
                             .clickable { onSelectImageRes("default_image") }
@@ -13574,7 +13574,7 @@ private fun ImageViewSelectImageBottomSheet(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF1E2952))
+                                .background(IndigoDeep)
                                 .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -13612,7 +13612,7 @@ private fun ImageViewSelectImageBottomSheet(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(Color(0xFF121A3A))
-                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(16.dp))
+                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                 .clickable(onClick = onOpenImageManager)
                                 .padding(horizontal = 16.dp, vertical = 22.dp),
                             contentAlignment = Alignment.Center,
@@ -13654,7 +13654,7 @@ private fun ImageViewSelectImageBottomSheet(
                                     .background(if (selected) Cyan.copy(alpha = 0.16f) else Color(0xFF141D3F))
                                     .border(
                                         width = if (selected) 1.5.dp else 1.dp,
-                                        color = if (selected) Cyan else Color(0x26FFFFFF),
+                                        color = if (selected) Cyan else GlassStrokeTop,
                                         shape = RoundedCornerShape(14.dp),
                                     )
                                     .clickable { onSelectImageRes(img.resName) }
@@ -14379,7 +14379,7 @@ private fun IdeImageManagerScreen(
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = GlassStrokeTop,
-                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                                unfocusedContainerColor = GlassStrokeTop,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -15148,7 +15148,7 @@ private fun IdeSoundManagerScreen(
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = GlassStrokeTop,
-                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                                unfocusedContainerColor = GlassStrokeTop,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -15813,7 +15813,7 @@ private fun IdeFontManagerScreen(
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
                                 focusedContainerColor = GlassStrokeTop,
-                                unfocusedContainerColor = Color(0x0AFFFFFF),
+                                unfocusedContainerColor = GlassStrokeTop,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -15865,7 +15865,7 @@ private fun IdeFontManagerScreen(
                             .fillMaxWidth()
                             .height(120.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF080D22))
+                            .background(Midnight)
                             .border(1.dp, Cyan.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                             .padding(12.dp),
                         contentAlignment = Alignment.Center,
