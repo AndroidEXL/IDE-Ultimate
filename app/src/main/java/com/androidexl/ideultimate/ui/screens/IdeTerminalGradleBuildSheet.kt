@@ -221,8 +221,9 @@ fun IdeTerminalGradleBuildSheet(
 
     fun installMissingTools() {
         isInstallingTools = true
-        currentTaskName = "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
-        appendLog("\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
+        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
+        currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
+        appendLog(if (isFlutter) "\n=== بدء تثبيت بيئة Flutter SDK و Android Tools في Ubuntu ===" else "\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
         coroutineScope.launch(Dispatchers.IO) {
