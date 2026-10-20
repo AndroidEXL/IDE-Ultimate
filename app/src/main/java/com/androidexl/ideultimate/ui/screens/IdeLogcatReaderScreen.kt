@@ -516,8 +516,8 @@ private fun LogcatCardItem(
             ProjectIconView(
                 iconPreset = project.iconPreset,
                 customIconPath = project.customIconPath,
-                language = project.language,
-                size = 36.dp,
+                modifier = Modifier.size(36.dp),
+                cornerRadius = 10.dp,
             )
 
             Column(modifier = Modifier.weight(1f)) {
