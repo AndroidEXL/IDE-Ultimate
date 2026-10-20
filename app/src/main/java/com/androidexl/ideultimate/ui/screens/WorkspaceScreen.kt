@@ -67,7 +67,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -230,6 +235,9 @@ fun WorkspaceScreen(
     var lastMessage by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<WorkspaceItem?>(null) }
     var pendingStoreZipName by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var isImporting by remember { mutableStateOf(false) }
+    var importStatusText by remember { mutableStateOf("") }
 
     fun showMessage(text: String) {
         lastMessage = text
@@ -244,11 +252,22 @@ fun WorkspaceScreen(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         if (uri != null) {
-            val result = repository.importAndroidProjectFromTreeUri(uri, parentId = currentParentId)
-            result.onSuccess { imported ->
-                showMessage(context.getString(R.string.msg_project_imported, imported.name))
-            }.onFailure { err ->
-                showMessage(context.getString(R.string.msg_import_failed, err.localizedMessage ?: "Unknown error"))
+            isImporting = true
+            importStatusText = "جاري تحضير ملفات المشروع…"
+            scope.launch {
+                val result = repository.importAndroidProjectFromTreeUri(
+                    treeUri = uri,
+                    parentId = currentParentId,
+                    onProgress = { status ->
+                        importStatusText = status
+                    },
+                )
+                isImporting = false
+                result.onSuccess { imported ->
+                    showMessage(context.getString(R.string.msg_project_imported, imported.name))
+                }.onFailure { err ->
+                    showMessage(context.getString(R.string.msg_import_failed, err.localizedMessage ?: "Unknown error"))
+                }
             }
         }
     }
@@ -913,6 +932,48 @@ fun WorkspaceScreen(
                     folderDialog = null
                 },
             )
+        }
+    }
+
+    if (isImporting) {
+        Dialog(
+            onDismissRequest = { /* Do not dismiss during heavy import */ },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Midnight)
+                    .border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(44.dp),
+                        color = Cyan,
+                        strokeWidth = 3.5.dp,
+                    )
+                    Text(
+                        text = stringResource(R.string.dialog_importing_title),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = Ink,
+                    )
+                    Text(
+                        text = importStatusText.ifBlank { stringResource(R.string.dialog_importing_desc) },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                        ),
+                        color = Muted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
         }
     }
 

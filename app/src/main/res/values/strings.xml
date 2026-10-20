@@ -271,5 +271,7 @@
     <string name="sheet_import_project">استيراد مشروع أندرويد من الهاتف</string>
     <string name="sheet_import_project_desc">اختر مجلد مشروع أندرويد من ذاكرة الهاتف لاستخراجه وإضافته للمشاريع تلقائيًا.</string>
     <string name="msg_project_imported">تم استيراد مشروع %1$s بنجاح!</string>
+        <string name="dialog_importing_title">جاري استيراد المشروع…</string>
+    <string name="dialog_importing_desc">يتم الآن نسخ الملفات ومعالجة البيانات دون استهلاك موارد النظام، يرجى الانتظار.</string>
     <string name="msg_import_failed">فشل استيراد المشروع: %1$s</string>
 </resources>
