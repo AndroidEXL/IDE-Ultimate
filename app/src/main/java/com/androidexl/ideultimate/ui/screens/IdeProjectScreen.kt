@@ -13793,7 +13793,7 @@ private fun IdeImageManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0F24))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -13900,7 +13900,7 @@ private fun IdeImageManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0x24FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
 
                 if (images.isEmpty()) {
@@ -13968,7 +13968,7 @@ private fun IdeImageManagerScreen(
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(
-                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else IndigoDeep,
                                             )
                                             .border(
                                                 width = if (isSelected) 1.8.dp else 1.dp,
@@ -14007,7 +14007,7 @@ private fun IdeImageManagerScreen(
                                                 .height(112.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(Color.White)
-                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             if (bmp != null) {
@@ -14031,7 +14031,7 @@ private fun IdeImageManagerScreen(
                                                         .size(24.dp)
                                                         .clip(CircleShape)
                                                         .background(
-                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                            if (isSelected) Cyan else Midnight.copy(alpha = 0.6f),
                                                         )
                                                         .border(
                                                             width = 1.5.dp,
@@ -14111,7 +14111,7 @@ private fun IdeImageManagerScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color(0xFF131B3A))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
                         .navigationBarsPadding()
                         .clickable { showMultiSelectSheet = true }
@@ -14378,7 +14378,7 @@ private fun IdeImageManagerScreen(
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
-                                focusedContainerColor = Color(0x14FFFFFF),
+                                focusedContainerColor = GlassStrokeTop,
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
                             modifier = Modifier.fillMaxWidth(),
@@ -14545,7 +14545,7 @@ private fun IdeSoundManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0F24))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -14659,7 +14659,7 @@ private fun IdeSoundManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0x24FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
 
                 if (sounds.isEmpty()) {
@@ -14725,7 +14725,7 @@ private fun IdeSoundManagerScreen(
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(
-                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else IndigoDeep,
                                             )
                                             .border(
                                                 width = if (isSelected || isPlaying) 1.8.dp else 1.dp,
@@ -14768,9 +14768,9 @@ private fun IdeSoundManagerScreen(
                                                 .height(96.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(
-                                                    if (isPlaying) Color(0xFF0E2923) else Color(0xFF0B112B),
+                                                    if (isPlaying) Cyan.copy(alpha = 0.2f) else IndigoDeep,
                                                 )
-                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Column(
@@ -14808,7 +14808,7 @@ private fun IdeSoundManagerScreen(
                                                         .size(24.dp)
                                                         .clip(CircleShape)
                                                         .background(
-                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                            if (isSelected) Cyan else Midnight.copy(alpha = 0.6f),
                                                         )
                                                         .border(
                                                             width = 1.5.dp,
@@ -14887,7 +14887,7 @@ private fun IdeSoundManagerScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color(0xFF131B3A))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
                         .navigationBarsPadding()
                         .clickable { showMultiSelectSheet = true }
@@ -15147,7 +15147,7 @@ private fun IdeSoundManagerScreen(
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
-                                focusedContainerColor = Color(0x14FFFFFF),
+                                focusedContainerColor = GlassStrokeTop,
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
                             modifier = Modifier.fillMaxWidth(),
@@ -15230,7 +15230,7 @@ private fun IdeFontManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0F24))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -15343,7 +15343,7 @@ private fun IdeFontManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0x24FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
 
                 if (fonts.isEmpty()) {
@@ -15408,7 +15408,7 @@ private fun IdeFontManagerScreen(
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(
-                                                if (isSelected) Cyan.copy(alpha = 0.18f) else Color(0xFF121A3A),
+                                                if (isSelected) Cyan.copy(alpha = 0.18f) else IndigoDeep,
                                             )
                                             .border(
                                                 width = if (isSelected) 1.8.dp else 1.dp,
@@ -15446,8 +15446,8 @@ private fun IdeFontManagerScreen(
                                                 .fillMaxWidth()
                                                 .height(96.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(Color(0xFF0A1026))
-                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                                .background(IndigoDeep)
+                                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             AndroidView(
@@ -15475,7 +15475,7 @@ private fun IdeFontManagerScreen(
                                                         .size(24.dp)
                                                         .clip(CircleShape)
                                                         .background(
-                                                            if (isSelected) Cyan else Color(0x990B1028),
+                                                            if (isSelected) Cyan else Midnight.copy(alpha = 0.6f),
                                                         )
                                                         .border(
                                                             width = 1.5.dp,
@@ -15554,7 +15554,7 @@ private fun IdeFontManagerScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color(0xFF131B3A))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0xFFF43F5E).copy(alpha = 0.5f))
                         .navigationBarsPadding()
                         .clickable { showMultiSelectSheet = true }
@@ -15812,7 +15812,7 @@ private fun IdeFontManagerScreen(
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
-                                focusedContainerColor = Color(0x14FFFFFF),
+                                focusedContainerColor = GlassStrokeTop,
                                 unfocusedContainerColor = Color(0x0AFFFFFF),
                             ),
                             modifier = Modifier.fillMaxWidth(),
@@ -15966,7 +15966,7 @@ private fun IdeResourcesManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0F24))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -16019,7 +16019,7 @@ private fun IdeResourcesManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0D1430))
+                        .background(IndigoDeep)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -16029,7 +16029,7 @@ private fun IdeResourcesManagerScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (currentRelativePath.isEmpty()) Cyan.copy(alpha = 0.22f) else Color(0x18FFFFFF),
+                                if (currentRelativePath.isEmpty()) Cyan.copy(alpha = 0.22f) else GlassStrokeTop,
                             )
                             .border(
                                 1.dp,
@@ -16062,7 +16062,7 @@ private fun IdeResourcesManagerScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
-                                    if (isLast) Cyan.copy(alpha = 0.22f) else Color(0x18FFFFFF),
+                                    if (isLast) Cyan.copy(alpha = 0.22f) else GlassStrokeTop,
                                 )
                                 .border(
                                     1.dp,
@@ -16092,7 +16092,7 @@ private fun IdeResourcesManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0x24FFFFFF)),
+                        .background(GlassStrokeTop),
                 )
 
                 val currentEditFile = editingFileEntry
@@ -16175,8 +16175,8 @@ private fun IdeResourcesManagerScreen(
                                 cursorColor = Cyan,
                                 focusedBorderColor = Cyan,
                                 unfocusedBorderColor = GlassStrokeTop,
-                                focusedContainerColor = Color(0xFF060A1C),
-                                unfocusedContainerColor = Color(0xFF060A1C),
+                                focusedContainerColor = Midnight,
+                                unfocusedContainerColor = Midnight,
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -16224,7 +16224,7 @@ private fun IdeResourcesManagerScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF121A3A))
+                                    .background(IndigoDeep)
                                     .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                     .combinedClickable(
                                         onClick = {
@@ -16455,7 +16455,7 @@ private fun IdeResourcesManagerScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                    .background(if (selected) Cyan.copy(alpha = 0.22f) else GlassStrokeTop)
                                     .border(1.dp, if (selected) Cyan else GlassStrokeTop, RoundedCornerShape(10.dp))
                                     .clickable { createIsDirectory = isDir }
                                     .padding(vertical = 8.dp),
@@ -16484,7 +16484,7 @@ private fun IdeResourcesManagerScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(if (selected) VioletSoft.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                        .background(if (selected) VioletSoft.copy(alpha = 0.22f) else GlassStrokeTop)
                                         .border(1.dp, if (selected) VioletSoft else GlassStrokeTop, RoundedCornerShape(10.dp))
                                         .clickable { createInRoot = inRoot }
                                         .padding(vertical = 7.dp),
@@ -16762,7 +16762,7 @@ private fun IdeIconManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0F24))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -16799,7 +16799,7 @@ private fun IdeIconManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0D1430))
+                        .background(IndigoDeep)
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -16812,7 +16812,7 @@ private fun IdeIconManagerScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                .background(if (selected) Cyan.copy(alpha = 0.22f) else GlassStrokeTop)
                                 .border(1.dp, if (selected) Cyan else GlassStrokeTop, RoundedCornerShape(10.dp))
                                 .clickable { activeTab = idx }
                                 .padding(vertical = 8.dp),
@@ -16838,7 +16838,7 @@ private fun IdeIconManagerScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF090E24))
+                            .background(Midnight)
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -16882,7 +16882,7 @@ private fun IdeIconManagerScreen(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
                                         .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x16FFFFFF))
-                                        .border(1.dp, if (selected) Cyan else Color(0x24FFFFFF), RoundedCornerShape(50))
+                                        .border(1.dp, if (selected) Cyan else GlassStrokeTop, RoundedCornerShape(50))
                                         .clickable { selectedCategory = cat }
                                         .padding(horizontal = 12.dp, vertical = 5.dp),
                                 ) {
@@ -16938,7 +16938,7 @@ private fun IdeIconManagerScreen(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(if (selected) Cyan.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                                            .background(if (selected) Cyan.copy(alpha = 0.22f) else GlassStrokeTop)
                                             .clickable { selectedSizeDp = dpVal }
                                             .padding(horizontal = 6.dp, vertical = 3.dp),
                                     ) {
@@ -16976,7 +16976,7 @@ private fun IdeIconManagerScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
-                                            .background(Color(0xFF121A3A))
+                                            .background(IndigoDeep)
                                             .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                             .clickable {
                                                 customIconResName = spec.id
@@ -16990,7 +16990,7 @@ private fun IdeIconManagerScreen(
                                             modifier = Modifier
                                                 .size(54.dp)
                                                 .clip(RoundedCornerShape(14.dp))
-                                                .background(Color(0xFF090E24))
+                                                .background(Midnight)
                                                 .border(1.dp, activeColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
@@ -17052,7 +17052,7 @@ private fun IdeIconManagerScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
-                                            .background(Color(0xFF121A3A))
+                                            .background(IndigoDeep)
                                             .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                             .combinedClickable(
                                                 onClick = { activeSheetIcon = item },
@@ -17066,8 +17066,8 @@ private fun IdeIconManagerScreen(
                                                 .fillMaxWidth()
                                                 .height(92.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(Color(0xFF090E24))
-                                                .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp)),
+                                                .background(Midnight)
+                                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             if (bmp != null) {

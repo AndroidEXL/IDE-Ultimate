@@ -421,8 +421,8 @@ fun IdeStringsTranslationScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF151E45))
-                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp))
+                            .background(IndigoDeep)
+                            .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
                             .clickable { sourceMenuExpanded = true }
                             .padding(horizontal = 10.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -460,7 +460,7 @@ fun IdeStringsTranslationScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF151E45))
+                            .background(IndigoDeep)
                             .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                             .clickable { targetMenuExpanded = true }
                             .padding(horizontal = 10.dp, vertical = 9.dp),
@@ -508,7 +508,7 @@ fun IdeStringsTranslationScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x33FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedContainerColor = IndigoDeep,
                         unfocusedContainerColor = IndigoDeep,
                         focusedTextColor = Ink,
@@ -522,7 +522,7 @@ fun IdeStringsTranslationScreen(
                     modifier = Modifier
                         .height(50.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(IndigoDeep)
                         .clickable { showAddNewSheet = true }
                         .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center,
@@ -667,8 +667,8 @@ private fun StringResourceCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF0F1530))
-            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(12.dp))
+            .background(Midnight)
+            .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
             .combinedClickable(
                 onClick = onLongClick,
                 onLongClick = onLongClick,
@@ -776,7 +776,7 @@ private fun EditStringItemBottomSheet(
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = IndigoDeep,
                     unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
@@ -794,7 +794,7 @@ private fun EditStringItemBottomSheet(
                 label = { Text("القيمة الأصلية (Original Value)", color = Muted, fontSize = 11.sp) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = IndigoDeep,
                     unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
@@ -812,7 +812,7 @@ private fun EditStringItemBottomSheet(
                 label = { Text("القيمة المترجمة (Translated Value)", color = Color(0xFF10B981), fontSize = 11.sp) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF10B981),
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = IndigoDeep,
                     unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
@@ -910,7 +910,7 @@ private fun AddNewStringBottomSheet(
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = IndigoDeep,
                     unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
@@ -928,7 +928,7 @@ private fun AddNewStringBottomSheet(
                 label = { Text("النص / القيمة", color = Muted, fontSize = 11.sp) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
+                    unfocusedBorderColor = GlassStrokeTop,
                     focusedContainerColor = IndigoDeep,
                     unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
@@ -945,7 +945,7 @@ private fun AddNewStringBottomSheet(
                     .fillMaxWidth()
                     .height(48.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (keyText.isNotBlank()) Cyan else Color(0xFF1E293B))
+                    .background(if (keyText.isNotBlank()) Cyan else IndigoDeep)
                     .clickable(enabled = keyText.isNotBlank()) {
                         onAdd(keyText.trim().replace(' ', '_'), valText.trim())
                     },
@@ -1005,8 +1005,8 @@ private fun SaveStringsBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0F1530))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+                    .background(Midnight)
+                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
                     .clickable { onSaveToPrimary() }
                     .padding(14.dp),
             ) {
@@ -1029,7 +1029,7 @@ private fun SaveStringsBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0B1938))
+                    .background(IndigoDeep)
                     .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .clickable { onSaveToNewLanguageFolder() }
                     .padding(14.dp),
@@ -1042,7 +1042,7 @@ private fun SaveStringsBottomSheet(
                 Text(
                     text = "سيتم إنشاء مجلد res/$folderName/ وتوليد ملف strings.xml مترجم يدعم التبديل اللغوي في أندرويد",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = Color(0xFF94A3B8),
+                    color = Muted,
                 )
             }
 

@@ -2,6 +2,7 @@ package com.androidexl.ideultimate.ui.screens
 
 import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.Muted
@@ -218,7 +219,7 @@ fun IdeAndroidManifestScreen(
                 Icon(
                     imageVector = IdeIcons.Undo,
                     contentDescription = "Undo",
-                    tint = if (undoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
+                    tint = if (undoStack.isNotEmpty()) Cyan else Muted,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -232,7 +233,7 @@ fun IdeAndroidManifestScreen(
                 Icon(
                     imageVector = IdeIcons.Redo,
                     contentDescription = "Redo",
-                    tint = if (redoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
+                    tint = if (redoStack.isNotEmpty()) Cyan else Muted,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -317,7 +318,7 @@ fun IdeAndroidManifestScreen(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 11.5.sp,
                                     lineHeight = 20.sp,
-                                    color = Color(0xFF4A5578),
+                                    color = Muted,
                                 ),
                             )
                         }
@@ -328,7 +329,7 @@ fun IdeAndroidManifestScreen(
                         modifier = Modifier
                             .width(1.dp)
                             .height(minEditorHeight)
-                            .background(Color(0x24FFFFFF)),
+                            .background(GlassStrokeTop),
                     )
 
                     // Editable XML BasicTextField
@@ -361,7 +362,7 @@ fun IdeAndroidManifestScreen(
                             .align(Alignment.BottomCenter)
                             .padding(8.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xF00A0F26))
+                            .background(Midnight)
                             .border(1.dp, Color(0xFFFB923C).copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -467,7 +468,7 @@ fun IdeAndroidManifestScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(IndigoDeep)
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(6.dp))
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(6.dp))
                         .clickable {
                             val cur = textFieldValue.text
                             val c = textFieldValue.selection.start

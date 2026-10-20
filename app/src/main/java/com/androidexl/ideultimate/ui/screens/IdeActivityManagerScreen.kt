@@ -143,7 +143,7 @@ fun IdeActivityManagerScreen(
                             .background(if (isCurrent) IndigoDeep else Midnight)
                             .border(
                                 width = if (isCurrent) 1.5.dp else 1.dp,
-                                color = if (isCurrent) Cyan else Color(0x24FFFFFF),
+                                color = if (isCurrent) Cyan else GlassStrokeTop,
                                 shape = RoundedCornerShape(16.dp),
                             )
                             .combinedClickable(
@@ -226,7 +226,7 @@ fun IdeActivityManagerScreen(
                                         fontFamily = JetBrainsMono,
                                         fontSize = 11.5.sp,
                                     ),
-                                    color = Color(0xFF93C5FD),
+                                    color = Muted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -304,7 +304,7 @@ fun IdeActivityManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF172044))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedPage = null
                             showRenameDialog = pageToManage
@@ -404,7 +404,7 @@ fun IdeActivityManagerScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -518,7 +518,7 @@ fun IdeActivityManagerScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x44FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),

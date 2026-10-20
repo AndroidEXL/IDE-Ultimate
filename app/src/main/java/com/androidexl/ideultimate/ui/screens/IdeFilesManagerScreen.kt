@@ -270,15 +270,15 @@ fun IdeFilesManagerScreen(
                             item.name.endsWith(".xml", ignoreCase = true) -> Color(0xFFFB923C)
                             item.name.endsWith(".kt", ignoreCase = true) -> Color(0xFFA78BFA)
                             item.name.endsWith(".java", ignoreCase = true) -> Color(0xFFF472B6)
-                            else -> Color(0xFF94A3B8)
+                            else -> Muted
                         }
 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF0F1735))
-                                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(14.dp))
+                                .background(Midnight)
+                                .border(1.dp, GlassStrokeTop, RoundedCornerShape(14.dp))
                                 .combinedClickable(
                                     onClick = {
                                         if (item.isDirectory) {
@@ -399,7 +399,7 @@ fun IdeFilesManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF172044))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedEntry = null
                             showRenameDialog = entryToManage
@@ -494,7 +494,7 @@ fun IdeFilesManagerScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -599,8 +599,8 @@ fun IdeFilesManagerScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (!isDir) Cyan.copy(alpha = 0.2f) else Color(0x11FFFFFF))
-                                .border(1.dp, if (!isDir) Cyan else Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+                                .background(if (!isDir) Cyan.copy(alpha = 0.2f) else GlassStrokeTop)
+                                .border(1.dp, if (!isDir) Cyan else GlassStrokeTop, RoundedCornerShape(10.dp))
                                 .clickable { isDir = false }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center,
@@ -616,8 +616,8 @@ fun IdeFilesManagerScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (isDir) Cyan.copy(alpha = 0.2f) else Color(0x11FFFFFF))
-                                .border(1.dp, if (isDir) Cyan else Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+                                .background(if (isDir) Cyan.copy(alpha = 0.2f) else GlassStrokeTop)
+                                .border(1.dp, if (isDir) Cyan else GlassStrokeTop, RoundedCornerShape(10.dp))
                                 .clickable { isDir = true }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center,
@@ -637,7 +637,7 @@ fun IdeFilesManagerScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -842,7 +842,7 @@ private fun IdeProjectSingleFileEditor(
                 Icon(
                     imageVector = IdeIcons.Undo,
                     contentDescription = "Undo",
-                    tint = if (undoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
+                    tint = if (undoStack.isNotEmpty()) Cyan else Muted,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -856,7 +856,7 @@ private fun IdeProjectSingleFileEditor(
                 Icon(
                     imageVector = IdeIcons.Redo,
                     contentDescription = "Redo",
-                    tint = if (redoStack.isNotEmpty()) Cyan else Color(0x40FFFFFF),
+                    tint = if (redoStack.isNotEmpty()) Cyan else Muted,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -924,7 +924,7 @@ private fun IdeProjectSingleFileEditor(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 11.5.sp,
                                     lineHeight = 20.sp,
-                                    color = Color(0xFF4A5578),
+                                    color = Muted,
                                 ),
                             )
                         }
@@ -934,7 +934,7 @@ private fun IdeProjectSingleFileEditor(
                         modifier = Modifier
                             .width(1.dp)
                             .height(minEditorHeight)
-                            .background(Color(0x24FFFFFF)),
+                            .background(GlassStrokeTop),
                     )
 
                     BasicTextField(
@@ -965,7 +965,7 @@ private fun IdeProjectSingleFileEditor(
                             .align(Alignment.BottomCenter)
                             .padding(8.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xF00A0F26))
+                            .background(Midnight)
                             .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1075,7 +1075,7 @@ private fun IdeProjectSingleFileEditor(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(IndigoDeep)
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(6.dp))
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(6.dp))
                         .clickable {
                             val cur = textFieldValue.text
                             val c = textFieldValue.selection.start

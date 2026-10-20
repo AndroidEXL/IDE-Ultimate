@@ -440,7 +440,7 @@ fun IdeLibraryManagerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -518,7 +518,7 @@ fun IdeLibraryManagerScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
                         unfocusedBorderColor = GlassStrokeTop,
-                        focusedContainerColor = Color(0xFF0F1738),
+                        focusedContainerColor = IndigoDeep,
                         unfocusedContainerColor = Midnight,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
@@ -667,10 +667,10 @@ private fun ProjectLibraryItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isChecked) Color(0xFF131D45) else Color(0xFF0F1530))
+            .background(if (isChecked) IndigoDeep else Midnight)
             .border(
                 width = 1.dp,
-                color = if (isChecked) Cyan.copy(alpha = 0.5f) else Color(0x24FFFFFF),
+                color = if (isChecked) Cyan.copy(alpha = 0.5f) else GlassStrokeTop,
                 shape = RoundedCornerShape(12.dp),
             )
             .clickable { onToggleCheck(!isChecked) }
@@ -695,7 +695,7 @@ private fun ProjectLibraryItemCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(IndigoDeep)
                         .padding(horizontal = 6.dp, vertical = 1.5.dp),
                 ) {
                     Text(
@@ -724,7 +724,7 @@ private fun ProjectLibraryItemCard(
             Text(
                 text = library.description,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                color = Color(0xFF94A3B8),
+                color = Muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -747,7 +747,7 @@ private fun ProjectLibraryItemCard(
                             fontFamily = JetBrainsMono,
                             fontSize = 9.sp,
                         ),
-                        color = Color(0xFFCBD5E1),
+                        color = Ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -878,7 +878,7 @@ private fun SearchAndDownloadBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF080C22),
+        containerColor = Midnight,
         contentColor = Ink,
         scrimColor = Color(0xD903060F),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -934,7 +934,7 @@ private fun SearchAndDownloadBottomSheet(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
                         unfocusedBorderColor = GlassStrokeTop,
-                        focusedContainerColor = Color(0xFF0F1738),
+                        focusedContainerColor = IndigoDeep,
                         unfocusedContainerColor = Midnight,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
@@ -947,7 +947,7 @@ private fun SearchAndDownloadBottomSheet(
                     modifier = Modifier
                         .height(52.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (customInput.isNotBlank()) Cyan else Color(0xFF1E293B))
+                        .background(if (customInput.isNotBlank()) Cyan else IndigoDeep)
                         .clickable(enabled = customInput.isNotBlank()) {
                             onAddCustomCoordinate(customInput.trim())
                         }
@@ -980,9 +980,9 @@ private fun SearchAndDownloadBottomSheet(
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x22FFFFFF),
-                    focusedContainerColor = Color(0xFF0C1330),
-                    unfocusedContainerColor = Color(0xFF0C1330),
+                    unfocusedBorderColor = GlassStrokeTop,
+                    focusedContainerColor = Midnight,
+                    unfocusedContainerColor = Midnight,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -1017,8 +1017,8 @@ private fun SearchAndDownloadBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF0D1434))
-                            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(12.dp))
+                            .background(Midnight)
+                            .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
                             .clickable {
                                 onSelectOrDownload(lib)
                             }
@@ -1036,7 +1036,7 @@ private fun SearchAndDownloadBottomSheet(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(Color(0xFF1E293B))
+                                        .background(IndigoDeep)
                                         .padding(horizontal = 6.dp, vertical = 1.dp),
                                 ) {
                                     Text(text = lib.category, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = Cyan)
@@ -1051,7 +1051,7 @@ private fun SearchAndDownloadBottomSheet(
                             Text(
                                 text = lib.description,
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
-                                color = Color(0xFF94A3B8),
+                                color = Muted,
                             )
 
                             // Show download URL snippet
@@ -1062,7 +1062,7 @@ private fun SearchAndDownloadBottomSheet(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 8.5.sp,
                                 ),
-                                color = Color(0xFF64748B),
+                                color = Muted,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

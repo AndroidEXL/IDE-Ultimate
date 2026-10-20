@@ -189,9 +189,9 @@ fun IdePermissionManagerScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1735),
-                    unfocusedContainerColor = Color(0xFF0C132A),
+                    unfocusedBorderColor = GlassStrokeTop,
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -214,10 +214,10 @@ fun IdePermissionManagerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (isGranted) Color(0xFF19244D) else Color(0xFF0E142E))
+                        .background(if (isGranted) IndigoDeep else Midnight)
                         .border(
                             width = if (isGranted) 1.5.dp else 1.dp,
-                            color = if (isGranted) Cyan else Color(0x22FFFFFF),
+                            color = if (isGranted) Cyan else GlassStrokeTop,
                             shape = RoundedCornerShape(14.dp),
                         )
                         .clickable {
@@ -239,7 +239,7 @@ fun IdePermissionManagerScreen(
                         colors = CheckboxDefaults.colors(
                             checkedColor = Cyan,
                             checkmarkColor = Color(0xFF050816),
-                            uncheckedColor = Color(0x44FFFFFF),
+                            uncheckedColor = GlassStrokeTop,
                         ),
                     )
 
@@ -261,7 +261,7 @@ fun IdePermissionManagerScreen(
                         Text(
                             text = desc,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = if (isGranted) Color(0xFFCBD5E1) else Muted,
+                            color = if (isGranted) Ink else Muted,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -271,7 +271,7 @@ fun IdePermissionManagerScreen(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 9.sp,
                             ),
-                            color = Color(0x77FFFFFF),
+                            color = Muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

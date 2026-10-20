@@ -161,14 +161,14 @@ fun IdeGitHubToolsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(Midnight),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -271,9 +271,9 @@ fun IdeGitHubToolsScreen(
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
-                            focusedContainerColor = Color(0xFF0F1735),
-                            unfocusedContainerColor = Color(0xFF0C132A),
+                            unfocusedBorderColor = GlassStrokeTop,
+                            focusedContainerColor = Midnight,
+                            unfocusedContainerColor = Midnight,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -326,8 +326,8 @@ fun IdeGitHubToolsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF0F1738))
-                                    .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(16.dp))
+                                    .background(Midnight)
+                                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(16.dp))
                                     .combinedClickable(
                                         onClick = { openedRepo = repoItem },
                                         onLongClick = { longPressedRepo = repoItem },
@@ -397,7 +397,7 @@ fun IdeGitHubToolsScreen(
                                             fontFamily = JetBrainsMono,
                                             fontSize = 9.5.sp,
                                         ),
-                                        color = Color(0x88FFFFFF),
+                                        color = Muted,
                                     )
                                 }
                             }
@@ -433,7 +433,7 @@ fun IdeGitHubToolsScreen(
         ModalBottomSheet(
             onDismissRequest = { showMainFabSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -456,7 +456,7 @@ fun IdeGitHubToolsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             showMainFabSheet = false
                             showUploadProjectDialog = true
@@ -490,7 +490,7 @@ fun IdeGitHubToolsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF141C3D))
+                        .background(IndigoDeep)
                         .clickable {
                             showMainFabSheet = false
                             showCreateRepoDialog = true
@@ -529,7 +529,7 @@ fun IdeGitHubToolsScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedRepo = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -562,7 +562,7 @@ fun IdeGitHubToolsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedRepo = null
                             Toast.makeText(context, "جاري تحميل مستودع ${repoToManage.name} بالكامل...", Toast.LENGTH_SHORT).show()
@@ -615,7 +615,7 @@ fun IdeGitHubToolsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF172044))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedRepo = null
                             showRenameRepoDialog = repoToManage
@@ -689,7 +689,7 @@ fun IdeGitHubToolsScreen(
         var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { if (!isSaving) showRenameRepoDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -711,7 +711,7 @@ fun IdeGitHubToolsScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -762,7 +762,7 @@ fun IdeGitHubToolsScreen(
         var isDeleting by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { if (!isDeleting) showDeleteRepoDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -822,7 +822,7 @@ fun IdeGitHubToolsScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isCreating) showCreateRepoDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -844,7 +844,7 @@ fun IdeGitHubToolsScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -856,7 +856,7 @@ fun IdeGitHubToolsScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -935,7 +935,7 @@ fun IdeGitHubToolsScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isUploading) showUploadProjectDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -962,7 +962,7 @@ fun IdeGitHubToolsScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -974,7 +974,7 @@ fun IdeGitHubToolsScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -1080,7 +1080,7 @@ private fun GitHubLoginCard(
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF1E293B))
+                .background(IndigoDeep)
                 .border(1.5.dp, Cyan, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -1127,7 +1127,7 @@ private fun GitHubLoginCard(
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Cyan,
-                unfocusedBorderColor = Color(0x33FFFFFF),
+                unfocusedBorderColor = GlassStrokeTop,
                 focusedTextColor = Ink,
                 unfocusedTextColor = Ink,
             ),
@@ -1302,14 +1302,14 @@ private fun GitHubRepoBrowserScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(Midnight),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1384,7 +1384,7 @@ private fun GitHubRepoBrowserScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0E1638))
+                        .background(Midnight)
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                         .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1452,10 +1452,10 @@ private fun GitHubRepoBrowserScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(if (isSelected) Color(0xFF1E2E5D) else Color(0xFF0F1735))
+                                .background(if (isSelected) IndigoDeep else Midnight)
                                 .border(
                                     width = if (isSelected) 1.5.dp else 1.dp,
-                                    color = if (isSelected) Cyan else Color(0x22FFFFFF),
+                                    color = if (isSelected) Cyan else GlassStrokeTop,
                                     shape = RoundedCornerShape(14.dp),
                                 )
                                 .combinedClickable(
@@ -1500,8 +1500,8 @@ private fun GitHubRepoBrowserScreen(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (item.isDirectory) Cyan.copy(alpha = 0.16f) else Color(0x18FFFFFF))
-                                    .border(1.dp, if (item.isDirectory) Cyan.copy(alpha = 0.5f) else Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
+                                    .background(if (item.isDirectory) Cyan.copy(alpha = 0.16f) else GlassStrokeTop)
+                                    .border(1.dp, if (item.isDirectory) Cyan.copy(alpha = 0.5f) else GlassStrokeTop, RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
@@ -1572,7 +1572,7 @@ private fun GitHubRepoBrowserScreen(
         ModalBottomSheet(
             onDismissRequest = { showRepoFabSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -1595,7 +1595,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             showRepoFabSheet = false
                             filePickerLauncher.launch(arrayOf("*/*"))
@@ -1613,7 +1613,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             showRepoFabSheet = false
                             folderPickerLauncher.launch(null)
@@ -1631,7 +1631,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF141C3D))
+                        .background(IndigoDeep)
                         .clickable {
                             showRepoFabSheet = false
                             showCreateFolderDialog = true
@@ -1649,7 +1649,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF141C3D))
+                        .background(IndigoDeep)
                         .clickable {
                             showRepoFabSheet = false
                             showCreateFileDialog = true
@@ -1672,7 +1672,7 @@ private fun GitHubRepoBrowserScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedFolder = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -1698,7 +1698,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedFolder = null
                             Toast.makeText(context, "جاري تحميل المجلد ${folderToManage.name} إلى التنزيلات...", Toast.LENGTH_SHORT).show()
@@ -1727,7 +1727,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF141C3D))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedFolder = null
                             isSelectionMode = true
@@ -1782,7 +1782,7 @@ private fun GitHubRepoBrowserScreen(
         ModalBottomSheet(
             onDismissRequest = { showSelectionActionsSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -1805,7 +1805,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             showSelectionActionsSheet = false
                             val toDownload = selectedEntries.toList()
@@ -1869,7 +1869,7 @@ private fun GitHubRepoBrowserScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isCreating) showCreateFolderDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -1884,7 +1884,7 @@ private fun GitHubRepoBrowserScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
-                        unfocusedBorderColor = Color(0x44FFFFFF),
+                        unfocusedBorderColor = GlassStrokeTop,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),
@@ -1934,7 +1934,7 @@ private fun GitHubRepoBrowserScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isCreating) showCreateFileDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -1950,7 +1950,7 @@ private fun GitHubRepoBrowserScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -1962,7 +1962,7 @@ private fun GitHubRepoBrowserScreen(
                         minLines = 3,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -2016,14 +2016,14 @@ private fun GitHubRepoBrowserScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF070B1E)),
+                .background(Midnight),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0C1330))
+                        .background(Midnight)
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -2124,7 +2124,7 @@ private fun GitHubRepoBrowserScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .background(Color(0xFF070B1E))
+                            .background(Midnight)
                             .padding(10.dp),
                     ) {
                         OutlinedTextField(
@@ -2139,7 +2139,7 @@ private fun GitHubRepoBrowserScreen(
                             ),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Cyan,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = GlassStrokeTop,
                                 focusedTextColor = Ink,
                                 unfocusedTextColor = Ink,
                             ),
@@ -2157,7 +2157,7 @@ private fun GitHubRepoBrowserScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedFile = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -2190,7 +2190,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF162552))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedFile = null
                             Toast.makeText(context, "جاري تحميل ${fileToManage.name} إلى التنزيلات...", Toast.LENGTH_SHORT).show()
@@ -2222,7 +2222,7 @@ private fun GitHubRepoBrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF172044))
+                        .background(IndigoDeep)
                         .clickable {
                             longPressedFile = null
                             showRenameFileDialog = fileToManage
@@ -2271,7 +2271,7 @@ private fun GitHubRepoBrowserScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isRenaming) showRenameFileDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -2290,7 +2290,7 @@ private fun GitHubRepoBrowserScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Cyan,
-                            unfocusedBorderColor = Color(0x44FFFFFF),
+                            unfocusedBorderColor = GlassStrokeTop,
                             focusedTextColor = Ink,
                             unfocusedTextColor = Ink,
                         ),
@@ -2358,7 +2358,7 @@ private fun GitHubRepoBrowserScreen(
 
         AlertDialog(
             onDismissRequest = { if (!isDeleting) showDeleteFileConfirmDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
