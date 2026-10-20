@@ -114,6 +114,12 @@ fun IdeLogcatReaderScreen(
 
     LaunchedEffect(Unit) {
         refreshLogs()
+        ProjectLogcatBridge.logFlow.collect { entry ->
+            if (entry.packageName.equals(project.packageName, ignoreCase = true) ||
+                entry.appName.equals(project.name, ignoreCase = true)) {
+                logs.add(0, entry)
+            }
+        }
     }
 
     val filteredLogs = logs.filter { item ->

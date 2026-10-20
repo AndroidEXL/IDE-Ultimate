@@ -4470,11 +4470,16 @@ kotlin.jvm.target.validation.mode=warning
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Process;
 import android.util.Log;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AppLogger for IDE Ultimate Logcat Reader.
- * Automatically broadcasts logs from your application directly to the IDE Ultimate Logcat Reader screen.
+ * Automatically broadcasts ALL application logs, crashes, and custom tags
+ * directly and live to the IDE Ultimate Logcat Reader screen.
  */
 public class AppLogger {
     private static final String ACTION_LOG = "com.androidexl.ideultimate.ACTION_LOG_EVENT";
@@ -4484,6 +4489,72 @@ public class AppLogger {
     private static final String EXTRA_LEVEL = "extra_level";
     private static final String EXTRA_MESSAGE = "extra_message";
     private static final String EXTRA_TIMESTAMP = "extra_timestamp";
+
+    private static final AtomicBoolean initialized = new AtomicBoolean(false);
+
+    /**
+     * Initialize automatic log capture and crash interception.
+     * Call this in your Application class or MainActivity.onCreate()
+     */
+    public static void init(final Context context) {
+        if (context == null || initialized.getAndSet(true)) {
+            return;
+        }
+
+        final Context appContext = context.getApplicationContext();
+
+        // 1. Intercept uncaught exceptions (crashes) and send immediately to Logcat Reader
+        final Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                try {
+                    e(appContext, "AndroidRuntime", "FATAL EXCEPTION: " + t.getName() + "\n" + Log.getStackTraceString(e));
+                } catch (Exception ignored) {}
+                if (defaultHandler != null) {
+                    defaultHandler.uncaughtException(t, e);
+                }
+            }
+        });
+
+        // 2. Start live background logcat reader thread for this process PID
+        Thread logThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int myPid = Process.myPid();
+                    java.lang.Process process = Runtime.getRuntime().exec(
+                        new String[]{"logcat", "-v", "time", "*:V"}
+                    );
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                    String line;
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                        "^(\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+([VDIWEA])/([^(:|\\s]+)(?:\\(\\s*(\\d+)\\))?:\\s*(.*)$"
+                    );
+
+                    while ((line = reader.readLine()) != null) {
+                        try {
+                            java.util.regex.Matcher matcher = pattern.matcher(line);
+                            if (matcher.matches()) {
+                                String lvl = matcher.group(2);
+                                String tag = matcher.group(3).trim();
+                                String linePid = matcher.group(4);
+                                String msg = matcher.group(5).trim();
+
+                                if (linePid == null || String.valueOf(myPid).equals(linePid) || msg.contains("${project.packageName}") || tag.contains("${project.packageName}")) {
+                                    sendBroadcastDirect(appContext, lvl, tag, msg);
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
+            }
+        }, "IDE-Ultimate-AppLogger");
+        logThread.setDaemon(true);
+        logThread.start();
+
+        i(appContext, "AppLogger", "AppLogger initialized. Live logcat streaming active.");
+    }
 
     public static void v(Context context, String tag, String msg) { send(context, "V", tag, msg); }
     public static void d(Context context, String tag, String msg) { send(context, "D", tag, msg); }
@@ -4496,19 +4567,22 @@ public class AppLogger {
 
     public static void send(Context context, String level, String tag, String message) {
         Log.println(levelToPriority(level), tag, message != null ? message : "");
-        if (context != null) {
-            try {
-                Intent intent = new Intent(ACTION_LOG);
-                intent.setPackage("com.androidexl.ideultimate");
-                intent.putExtra(EXTRA_PACKAGE, context.getPackageName());
-                intent.putExtra(EXTRA_APP_NAME, "${project.name}");
-                intent.putExtra(EXTRA_TAG, tag);
-                intent.putExtra(EXTRA_LEVEL, level);
-                intent.putExtra(EXTRA_MESSAGE, message != null ? message : "");
-                intent.putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis());
-                context.sendBroadcast(intent);
-            } catch (Exception ignored) {}
-        }
+        sendBroadcastDirect(context, level, tag, message);
+    }
+
+    private static void sendBroadcastDirect(Context context, String level, String tag, String message) {
+        if (context == null) return;
+        try {
+            Intent intent = new Intent(ACTION_LOG);
+            intent.setPackage("com.androidexl.ideultimate");
+            intent.putExtra(EXTRA_PACKAGE, context.getPackageName());
+            intent.putExtra(EXTRA_APP_NAME, "${project.name}");
+            intent.putExtra(EXTRA_TAG, tag != null ? tag : "App");
+            intent.putExtra(EXTRA_LEVEL, level != null ? level : "D");
+            intent.putExtra(EXTRA_MESSAGE, message != null ? message : "");
+            intent.putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis());
+            context.sendBroadcast(intent);
+        } catch (Exception ignored) {}
     }
 
     private static int levelToPriority(String level) {
@@ -4526,11 +4600,16 @@ public class AppLogger {
 
 import android.content.Context
 import android.content.Intent
+import android.os.Process
 import android.util.Log
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * AppLogger for IDE Ultimate Logcat Reader.
- * Automatically broadcasts logs from your application directly to the IDE Ultimate Logcat Reader screen.
+ * Automatically broadcasts ALL application logs, crashes, and custom tags
+ * directly and live to the IDE Ultimate Logcat Reader screen.
  */
 object AppLogger {
     private const val ACTION_LOG = "com.androidexl.ideultimate.ACTION_LOG_EVENT"
@@ -4540,6 +4619,59 @@ object AppLogger {
     private const val EXTRA_LEVEL = "extra_level"
     private const val EXTRA_MESSAGE = "extra_message"
     private const val EXTRA_TIMESTAMP = "extra_timestamp"
+
+    private val initialized = AtomicBoolean(false)
+
+    /**
+     * Initialize automatic log capture and crash interception.
+     * Call this in your Application class or MainActivity.onCreate()
+     */
+    fun init(context: Context?) {
+        if (context == null || initialized.getAndSet(true)) {
+            return
+        }
+
+        val appContext = context.applicationContext
+
+        // 1. Intercept uncaught exceptions (crashes) and send immediately to Logcat Reader
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try {
+                e(appContext, "AndroidRuntime", "FATAL EXCEPTION: " + t.name + "\n" + Log.getStackTraceString(e))
+            } catch (ignored: Exception) {}
+            defaultHandler?.uncaughtException(t, e)
+        }
+
+        // 2. Start live background logcat reader thread for this process PID
+        val logThread = Thread({
+            try {
+                val myPid = Process.myPid()
+                val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "time", "*:V"))
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                var line: String? = reader.readLine()
+                val pattern = Regex(
+                    """^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEA])/([^(:|\s]+)(?:\(\s*(\d+)\))?:\s*(.*)$"""
+                )
+
+                while (line != null) {
+                    try {
+                        val match = pattern.matchEntire(line)
+                        if (match != null) {
+                            val (_, lvl, tag, linePid, msg) = match.destructured
+                            if (linePid.isEmpty() || linePid == myPid.toString() || msg.contains("${project.packageName}") || tag.contains("${project.packageName}")) {
+                                sendBroadcastDirect(appContext, lvl, tag.trim(), msg.trim())
+                            }
+                        }
+                    } catch (ignored: Exception) {}
+                    line = reader.readLine()
+                }
+            } catch (ignored: Exception) {}
+        }, "IDE-Ultimate-AppLogger")
+        logThread.isDaemon = true
+        logThread.start()
+
+        i(appContext, "AppLogger", "AppLogger initialized. Live logcat streaming active.")
+    }
 
     fun v(context: Context?, tag: String, msg: String) = send(context, "V", tag, msg)
     fun d(context: Context?, tag: String, msg: String) = send(context, "D", tag, msg)
@@ -4552,19 +4684,22 @@ object AppLogger {
 
     fun send(context: Context?, level: String, tag: String, message: String) {
         Log.println(levelToPriority(level), tag, message)
-        if (context != null) {
-            runCatching {
-                val intent = Intent(ACTION_LOG).apply {
-                    `package` = "com.androidexl.ideultimate"
-                    putExtra(EXTRA_PACKAGE, context.packageName)
-                    putExtra(EXTRA_APP_NAME, "${project.name}")
-                    putExtra(EXTRA_TAG, tag)
-                    putExtra(EXTRA_LEVEL, level)
-                    putExtra(EXTRA_MESSAGE, message)
-                    putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis())
-                }
-                context.sendBroadcast(intent)
+        sendBroadcastDirect(context, level, tag, message)
+    }
+
+    private fun sendBroadcastDirect(context: Context?, level: String, tag: String, message: String) {
+        if (context == null) return
+        runCatching {
+            val intent = Intent(ACTION_LOG).apply {
+                `package` = "com.androidexl.ideultimate"
+                putExtra(EXTRA_PACKAGE, context.packageName)
+                putExtra(EXTRA_APP_NAME, "${project.name}")
+                putExtra(EXTRA_TAG, tag)
+                putExtra(EXTRA_LEVEL, level)
+                putExtra(EXTRA_MESSAGE, message)
+                putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis())
             }
+            context.sendBroadcast(intent)
         }
     }
 
@@ -4621,6 +4756,9 @@ object AppLogger {
 
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
+                // Initialize automatic live log streaming & crash interception to IDE Ultimate Logcat Reader
+                AppLogger.init(this)
+
                 setContentView(R.layout.${page.layoutResourceName})
             }
         }
@@ -4643,6 +4781,9 @@ object AppLogger {
             @Override
             protected void onCreate(Bundle savedInstanceState) {
                 super.onCreate(savedInstanceState);
+                // Initialize automatic live log streaming & crash interception to IDE Ultimate Logcat Reader
+                AppLogger.init(this);
+
                 setContentView(R.layout.${page.layoutResourceName});
             }
         }

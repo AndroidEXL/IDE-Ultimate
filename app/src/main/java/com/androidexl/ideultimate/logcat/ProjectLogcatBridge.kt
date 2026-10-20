@@ -3,6 +3,9 @@ package com.androidexl.ideultimate.logcat
 import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -35,13 +38,15 @@ data class LogcatEntry(
 )
 
 /**
- * Bridge class to collect, send and read logs for the current active project.
- * Allows apps built by the IDE or internal execution components to send structured log events,
- * as well as reading live system logcat filtered by the project's package name and PID.
+ * Bridge class to collect, send and read logs for the active project.
+ * Supports real-time streaming updates via SharedFlow.
  */
 object ProjectLogcatBridge {
     private val buffer = mutableStateListOf<LogcatEntry>()
     private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+    
+    private val _logFlow = MutableSharedFlow<LogcatEntry>(extraBufferCapacity = 500)
+    val logFlow: SharedFlow<LogcatEntry> = _logFlow.asSharedFlow()
 
     fun log(
         appName: String,
@@ -59,11 +64,12 @@ object ProjectLogcatBridge {
             message = message,
         )
         synchronized(buffer) {
-            if (buffer.size > 2000) {
+            if (buffer.size > 3000) {
                 buffer.removeRange(0, 500)
             }
             buffer.add(0, entry)
         }
+        _logFlow.tryEmit(entry)
     }
 
     fun getLogs(): List<LogcatEntry> {
@@ -137,7 +143,7 @@ object ProjectLogcatBridge {
                     timestamp = shortTimeFormat.format(Date()),
                     level = LogcatLevel.INFO,
                     tag = "IDE-Ultimate",
-                    message = "تم تفعيل مراقب سجلات Logcat للمشروع بنجاح. في انتظار مخرجات التشغيل...",
+                    message = "تم تفعيل مراقب سجلات Logcat للمشروع بنجاح. في انتظار مخرجات التشغيل وسجلات AppLogger...",
                 )
             )
         }
