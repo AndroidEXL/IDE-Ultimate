@@ -186,4 +186,122 @@ object IdeIcons {
             }
         }.build()
     }
+
+    val FilterList: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "IdeIcons.FilterList",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.White),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(10f, 18f)
+                horizontalLineTo(14f)
+                verticalLineTo(16f)
+                horizontalLineTo(10f)
+                verticalLineTo(18f)
+                close()
+                moveTo(3f, 6f)
+                verticalLineTo(8f)
+                horizontalLineTo(21f)
+                verticalLineTo(6f)
+                horizontalLineTo(3f)
+                close()
+                moveTo(6f, 13f)
+                horizontalLineTo(18f)
+                verticalLineTo(11f)
+                horizontalLineTo(6f)
+                verticalLineTo(13f)
+                close()
+            }
+        }.build()
+    }
+
+    val Apps: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "IdeIcons.Apps",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            path(
+                fill = SolidColor(Color.White),
+                fillAlpha = 1.0f,
+                stroke = null,
+                strokeAlpha = 1.0f,
+                strokeLineWidth = 1.0f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1.0f,
+                pathFillType = PathFillType.NonZero,
+            ) {
+                moveTo(4f, 8f)
+                horizontalLineTo(8f)
+                verticalLineTo(4f)
+                horizontalLineTo(4f)
+                verticalLineTo(8f)
+                close()
+                moveTo(10f, 20f)
+                horizontalLineTo(14f)
+                verticalLineTo(16f)
+                horizontalLineTo(10f)
+                verticalLineTo(20f)
+                close()
+                moveTo(4f, 20f)
+                horizontalLineTo(8f)
+                verticalLineTo(16f)
+                horizontalLineTo(4f)
+                verticalLineTo(20f)
+                close()
+                moveTo(4f, 14f)
+                horizontalLineTo(8f)
+                verticalLineTo(10f)
+                horizontalLineTo(4f)
+                verticalLineTo(14f)
+                close()
+                moveTo(10f, 14f)
+                horizontalLineTo(14f)
+                verticalLineTo(10f)
+                horizontalLineTo(10f)
+                verticalLineTo(14f)
+                close()
+                moveTo(16f, 4f)
+                verticalLineTo(8f)
+                horizontalLineTo(20f)
+                verticalLineTo(4f)
+                horizontalLineTo(16f)
+                close()
+                moveTo(10f, 8f)
+                horizontalLineTo(14f)
+                verticalLineTo(4f)
+                horizontalLineTo(10f)
+                verticalLineTo(8f)
+                close()
+                moveTo(16f, 14f)
+                horizontalLineTo(20f)
+                verticalLineTo(10f)
+                horizontalLineTo(16f)
+                verticalLineTo(14f)
+                close()
+                moveTo(16f, 20f)
+                horizontalLineTo(20f)
+                verticalLineTo(16f)
+                horizontalLineTo(16f)
+                verticalLineTo(20f)
+                close()
+            }
+        }.build()
+    }
 }

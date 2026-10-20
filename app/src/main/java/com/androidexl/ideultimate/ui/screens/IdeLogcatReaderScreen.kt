@@ -32,7 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
+
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -265,7 +265,7 @@ fun IdeLogcatReaderScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.FilterList,
+                    imageVector = IdeIcons.FilterList,
                     contentDescription = "Filter",
                     tint = if (selectedLevelFilter != null) DeepNavy else Ink,
                     modifier = Modifier.size(22.dp),

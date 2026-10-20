@@ -33,10 +33,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Apps
+
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
+
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -306,7 +306,7 @@ fun IdeLogcatSystemScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.FilterList,
+                    imageVector = IdeIcons.FilterList,
                     contentDescription = "Filter",
                     tint = if (selectedLevelFilter != null || selectedTargetApp != null || selectedScopeFilter != AppScopeFilter.ALL) DeepNavy else Ink,
                     modifier = Modifier.size(22.dp),
@@ -481,7 +481,7 @@ fun IdeLogcatSystemScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(imageVector = Icons.Filled.Apps, contentDescription = null, tint = Cyan)
+                    Icon(imageVector = IdeIcons.Apps, contentDescription = null, tint = Cyan)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "اختيار برنامج معين لإظهار اللوج",
@@ -719,7 +719,7 @@ private fun DrawableIconBox(drawable: Drawable?, size: androidx.compose.ui.unit.
                 .background(Midnight),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Apps, contentDescription = null, tint = Cyan, modifier = Modifier.size(size * 0.6f))
+            Icon(IdeIcons.Apps, contentDescription = null, tint = Cyan, modifier = Modifier.size(size * 0.6f))
         }
     }
 }
