@@ -14,18 +14,18 @@ val LocalIsDarkTheme = staticCompositionLocalOf { true }
 private val DarkAppColorScheme = darkColorScheme(
     primary = VioletSoft,
     onPrimary = Color(0xFF14092E),
-    primaryContainer = IndigoDeep,
-    onPrimaryContainer = Ink,
+    primaryContainer = IndigoDeepDark,
+    onPrimaryContainer = InkDark,
     secondary = Cyan,
-    onSecondary = DeepNavy,
+    onSecondary = DeepNavyDark,
     tertiary = Fuchsia,
-    onTertiary = DeepNavy,
-    background = DeepNavy,
-    onBackground = Ink,
-    surface = Midnight,
-    onSurface = Ink,
-    surfaceVariant = IndigoDeep,
-    onSurfaceVariant = Muted,
+    onTertiary = DeepNavyDark,
+    background = DeepNavyDark,
+    onBackground = InkDark,
+    surface = MidnightDark,
+    onSurface = InkDark,
+    surfaceVariant = IndigoDeepDark,
+    onSurfaceVariant = MutedDark,
     outline = Color(0x33FFFFFF),
     outlineVariant = Color(0x1AFFFFFF),
 )
@@ -63,4 +63,3 @@ fun IDEUltimateTheme(
         )
     }
 }
-

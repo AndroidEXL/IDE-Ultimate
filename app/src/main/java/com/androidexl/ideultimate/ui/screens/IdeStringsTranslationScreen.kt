@@ -337,7 +337,7 @@ fun IdeStringsTranslationScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -408,7 +408,7 @@ fun IdeStringsTranslationScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0E1638))
+                    .background(IndigoDeep)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -436,7 +436,7 @@ fun IdeStringsTranslationScreen(
                     DropdownMenu(
                         expanded = sourceMenuExpanded,
                         onDismissRequest = { sourceMenuExpanded = false },
-                        modifier = Modifier.background(Color(0xFF0F1738)),
+                        modifier = Modifier.background(IndigoDeep),
                     ) {
                         SUPPORTED_LANGUAGES.forEach { lang ->
                             DropdownMenuItem(
@@ -475,7 +475,7 @@ fun IdeStringsTranslationScreen(
                     DropdownMenu(
                         expanded = targetMenuExpanded,
                         onDismissRequest = { targetMenuExpanded = false },
-                        modifier = Modifier.background(Color(0xFF0F1738)),
+                        modifier = Modifier.background(IndigoDeep),
                     ) {
                         SUPPORTED_LANGUAGES.filter { it.code != "auto" }.forEach { lang ->
                             DropdownMenuItem(
@@ -507,8 +507,8 @@ fun IdeStringsTranslationScreen(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan,
                         unfocusedBorderColor = Color(0x33FFFFFF),
-                        focusedContainerColor = Color(0xFF0F1738),
-                        unfocusedContainerColor = Color(0xFF0B1028),
+                        focusedContainerColor = IndigoDeep,
+                        unfocusedContainerColor = IndigoDeep,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
                     ),
@@ -571,7 +571,7 @@ fun IdeStringsTranslationScreen(
         FloatingActionButton(
             onClick = { translateAllStrings() },
             containerColor = Cyan,
-            contentColor = Color(0xFF070B1E),
+            contentColor = DeepNavy,
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -581,7 +581,7 @@ fun IdeStringsTranslationScreen(
             if (isTranslatingAll) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
-                    color = Color(0xFF070B1E),
+                    color = DeepNavy,
                     strokeWidth = 2.5.dp,
                 )
             } else {
@@ -744,7 +744,7 @@ private fun EditStringItemBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF080C22),
+        containerColor = Midnight,
         contentColor = Ink,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
@@ -775,8 +775,8 @@ private fun EditStringItemBottomSheet(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
                     unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1738),
-                    unfocusedContainerColor = Color(0xFF0B1028),
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -793,8 +793,8 @@ private fun EditStringItemBottomSheet(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
                     unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1738),
-                    unfocusedContainerColor = Color(0xFF0B1028),
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -811,8 +811,8 @@ private fun EditStringItemBottomSheet(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF10B981),
                     unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1738),
-                    unfocusedContainerColor = Color(0xFF0B1028),
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -856,7 +856,7 @@ private fun EditStringItemBottomSheet(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("تأكيد التعديل", color = Color(0xFF070B1E), fontWeight = FontWeight.Bold)
+                    Text("تأكيد التعديل", color = DeepNavy, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -878,7 +878,7 @@ private fun AddNewStringBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF080C22),
+        containerColor = Midnight,
         contentColor = Ink,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
@@ -909,8 +909,8 @@ private fun AddNewStringBottomSheet(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
                     unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1738),
-                    unfocusedContainerColor = Color(0xFF0B1028),
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -927,8 +927,8 @@ private fun AddNewStringBottomSheet(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Cyan,
                     unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedContainerColor = Color(0xFF0F1738),
-                    unfocusedContainerColor = Color(0xFF0B1028),
+                    focusedContainerColor = IndigoDeep,
+                    unfocusedContainerColor = IndigoDeep,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
                 ),
@@ -949,7 +949,7 @@ private fun AddNewStringBottomSheet(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("إضافة إلى النصوص", color = if (keyText.isNotBlank()) Color(0xFF070B1E) else Muted, fontWeight = FontWeight.Bold)
+                Text("إضافة إلى النصوص", color = if (keyText.isNotBlank()) DeepNavy else Muted, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -973,7 +973,7 @@ private fun SaveStringsBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF080C22),
+        containerColor = Midnight,
         contentColor = Ink,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {

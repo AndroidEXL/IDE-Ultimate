@@ -1,5 +1,10 @@
 package com.androidexl.ideultimate.ui.screens
 
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.Muted
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -133,14 +138,14 @@ fun IdeFilesManagerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(DeepNavy),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -197,7 +202,7 @@ fun IdeFilesManagerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0E1638))
+                        .background(IndigoDeep)
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                         .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
@@ -361,7 +366,7 @@ fun IdeFilesManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedEntry = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -467,7 +472,7 @@ fun IdeFilesManagerScreen(
         var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -531,7 +536,7 @@ fun IdeFilesManagerScreen(
     if (itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -574,7 +579,7 @@ fun IdeFilesManagerScreen(
         var isDir by rememberSaveable { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -785,14 +790,14 @@ private fun IdeProjectSingleFileEditor(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E))
+            .background(DeepNavy)
             .imePadding(),
     ) {
         // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0C1330))
+                .background(Midnight)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -897,7 +902,7 @@ private fun IdeProjectSingleFileEditor(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color(0xFF070B1E)),
+                    .background(DeepNavy),
             ) {
                 val minEditorHeight = (linesCount * 20).coerceAtLeast(300).dp
                 Row(
@@ -1060,7 +1065,7 @@ private fun IdeProjectSingleFileEditor(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF090E24))
+                .background(DeepNavy)
                 .padding(horizontal = 6.dp, vertical = 4.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1069,7 +1074,7 @@ private fun IdeProjectSingleFileEditor(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF161E40))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(6.dp))
                         .clickable {
                             val cur = textFieldValue.text

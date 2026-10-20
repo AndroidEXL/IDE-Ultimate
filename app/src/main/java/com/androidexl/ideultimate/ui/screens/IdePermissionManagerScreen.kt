@@ -1,5 +1,10 @@
 package com.androidexl.ideultimate.ui.screens
 
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.Muted
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -89,13 +94,13 @@ fun IdePermissionManagerScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(DeepNavy),
     ) {
         // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0C1330))
+                .background(Midnight)
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -1,5 +1,10 @@
 package com.androidexl.ideultimate.ui.screens
 
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.Muted
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -85,14 +90,14 @@ fun IdeActivityManagerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(DeepNavy),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -135,7 +140,7 @@ fun IdeActivityManagerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(if (isCurrent) Color(0xFF162552) else Color(0xFF101838))
+                            .background(if (isCurrent) IndigoDeep else Midnight)
                             .border(
                                 width = if (isCurrent) 1.5.dp else 1.dp,
                                 color = if (isCurrent) Cyan else Color(0x24FFFFFF),
@@ -266,7 +271,7 @@ fun IdeActivityManagerScreen(
         ModalBottomSheet(
             onDismissRequest = { longPressedPage = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0E1430),
+            containerColor = Midnight,
             contentColor = Ink,
             scrimColor = Color(0xCC03060F),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -372,7 +377,7 @@ fun IdeActivityManagerScreen(
         var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -447,7 +452,7 @@ fun IdeActivityManagerScreen(
     if (pageToDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = null },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),
@@ -494,7 +499,7 @@ fun IdeActivityManagerScreen(
         var inputName by rememberSaveable { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAddPageDialog = false },
-            containerColor = Color(0xFF0F172A),
+            containerColor = Midnight,
             titleContentColor = Ink,
             textContentColor = Ink,
             shape = RoundedCornerShape(20.dp),

@@ -655,7 +655,7 @@ fun IdeTerminalGradleBuildSheet(
                     .fillMaxWidth()
                     .fillMaxHeight(0.92f)
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(Color(0xFF070B1E))
+                    .background(DeepNavy)
                     .border(1.dp, Color(0x2B00E5FF), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
@@ -719,7 +719,7 @@ fun IdeTerminalGradleBuildSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0F1738))
+                    .background(IndigoDeep)
                     .border(1.dp, Cyan.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

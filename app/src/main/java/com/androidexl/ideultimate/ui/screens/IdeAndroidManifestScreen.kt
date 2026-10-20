@@ -1,5 +1,10 @@
 package com.androidexl.ideultimate.ui.screens
 
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Ink
+import com.androidexl.ideultimate.ui.theme.Muted
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -166,14 +171,14 @@ fun IdeAndroidManifestScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E))
+            .background(DeepNavy)
             .imePadding(),
     ) {
         // 1. Header Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0C1330))
+                .background(Midnight)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -289,7 +294,7 @@ fun IdeAndroidManifestScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color(0xFF070B1E)),
+                    .background(DeepNavy),
             ) {
                 val minEditorHeight = (linesCount * 20).coerceAtLeast(300).dp
                 Row(
@@ -452,7 +457,7 @@ fun IdeAndroidManifestScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF090E24))
+                .background(DeepNavy)
                 .padding(horizontal = 6.dp, vertical = 4.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -461,7 +466,7 @@ fun IdeAndroidManifestScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF161E40))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(6.dp))
                         .clickable {
                             val cur = textFieldValue.text
