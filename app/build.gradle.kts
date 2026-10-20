@@ -22,8 +22,8 @@ android {
         applicationId = "com.androidexl.ideultimate"
         minSdk = 24
         targetSdk = 35
-        versionCode = 62
-        versionName = "1.61.0"
+        versionCode = 63
+        versionName = "1.62.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -115,6 +115,10 @@ dependencies {
     implementation(libs.firebase.database)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.common)
+
+    // Shizuku API & Provider
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

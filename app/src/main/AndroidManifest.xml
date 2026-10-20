@@ -10,6 +10,15 @@
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
+    <queries>
+        <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="riki.shizuku" />
+        <intent>
+            <action android:name="moe.shizuku.manager.action.REQUEST_PERMISSION" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"

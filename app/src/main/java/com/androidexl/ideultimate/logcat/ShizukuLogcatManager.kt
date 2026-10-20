@@ -1,5 +1,6 @@
 package com.androidexl.ideultimate.logcat
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -8,6 +9,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -33,8 +35,8 @@ data class SystemLogEntry(
 
 object ShizukuLogcatManager {
 
+    const val SHIZUKU_PERMISSION_CODE = 4512
     const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
-    const val SHIZUKU_PERMISSION = "moe.shizuku.manager.permission.API_V23"
 
     /**
      * Check if Shizuku app is installed on the device
@@ -53,20 +55,22 @@ object ShizukuLogcatManager {
     }
 
     /**
+     * Check if the Shizuku server binder is alive and running
+     */
+    fun isShizukuRunning(): Boolean {
+        return runCatching {
+            Shizuku.pingBinder()
+        }.getOrDefault(false)
+    }
+
+    /**
      * Check if Shizuku permission is granted to this app
      */
     fun hasShizukuPermission(context: Context): Boolean {
-        if (!isShizukuInstalled(context)) return false
-        val pm = context.packageManager
-        val perm1 = pm.checkPermission(SHIZUKU_PERMISSION, context.packageName) == PackageManager.PERMISSION_GRANTED
-        if (perm1) return true
-        // Also check if app can run elevated logcat via sh / su / shizuku shell
-        val binderCheck = runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "which shizuku || true"))
-            val out = process.inputStream.bufferedReader().readText().trim()
-            out.isNotBlank()
+        if (!isShizukuRunning()) return false
+        return runCatching {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
-        return binderCheck
     }
 
     /**
@@ -74,25 +78,40 @@ object ShizukuLogcatManager {
      */
     fun requestShizukuPermissionOrLaunch(context: Context) {
         if (!isShizukuInstalled(context)) {
-            // Open Play Store or GitHub to install Shizuku
-            val installIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RikkaApps/Shizuku/releases")).apply {
+            val installIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             runCatching { context.startActivity(installIntent) }
             return
         }
 
-        // Try launching Shizuku app directly
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
-            ?: context.packageManager.getLaunchIntentForPackage("riki.shizuku")
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(launchIntent)
-        } else {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/guide/setup/")).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        if (!isShizukuRunning()) {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
+                ?: context.packageManager.getLaunchIntentForPackage("riki.shizuku")
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
             }
-            context.startActivity(intent)
+            return
+        }
+
+        runCatching {
+            if (context is Activity) {
+                if (Shizuku.isPre_V11()) {
+                    context.requestPermissions(arrayOf("moe.shizuku.manager.permission.API_V23"), SHIZUKU_PERMISSION_CODE)
+                } else {
+                    Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
+                }
+            } else {
+                Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
+            }
+        }.onFailure {
+            // Fallback: launch Shizuku app
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
+            }
         }
     }
 
@@ -119,7 +138,7 @@ object ShizukuLogcatManager {
     }
 
     /**
-     * Fetch system logcat via Shizuku shell or direct logcat execution
+     * Fetch system logcat via Shizuku process execution or direct logcat execution
      */
     suspend fun fetchSystemLogcat(
         context: Context,
@@ -135,9 +154,17 @@ object ShizukuLogcatManager {
         val entries = mutableListOf<SystemLogEntry>()
 
         runCatching {
-            // First try shizuku shell command if available, else standard logcat
             val cmd = arrayOf("logcat", "-d", "-v", "threadtime", "*:V")
-            val process = Runtime.getRuntime().exec(cmd)
+            val process = if (hasShizukuPermission(context)) {
+                runCatching {
+                    Shizuku.newProcess(cmd, null, null)
+                }.getOrElse {
+                    Runtime.getRuntime().exec(cmd)
+                }
+            } else {
+                Runtime.getRuntime().exec(cmd)
+            }
+
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             var line: String? = reader.readLine()
 
@@ -151,7 +178,6 @@ object ShizukuLogcatManager {
                     val cleanTag = tag.trim()
                     val cleanMsg = msg.trim()
 
-                    // Try matching tag or msg to an app package
                     val matchedApp = packageToAppMap.values.firstOrNull { app ->
                         cleanTag.contains(app.packageName, ignoreCase = true) ||
                         cleanMsg.contains(app.packageName, ignoreCase = true)

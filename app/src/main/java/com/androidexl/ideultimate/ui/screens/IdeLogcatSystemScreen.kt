@@ -107,6 +107,7 @@ fun IdeLogcatSystemScreen(
     val installedApps = remember { mutableStateListOf<SystemAppInfo>() }
     var isLoading by remember { mutableStateOf(false) }
     var isShizukuAvailable by remember { mutableStateOf(false) }
+    var hasShizukuPerm by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
 
@@ -114,6 +115,15 @@ fun IdeLogcatSystemScreen(
         isLoading = true
         scope.launch {
             isShizukuAvailable = ShizukuLogcatManager.isShizukuInstalled(context)
+            hasShizukuPerm = ShizukuLogcatManager.hasShizukuPermission(context)
+
+            // Keep log empty until Shizuku permission is granted, as requested by user
+            if (!hasShizukuPerm) {
+                logs.clear()
+                isLoading = false
+                return@launch
+            }
+
             val list = ShizukuLogcatManager.fetchSystemLogcat(
                 context = context,
                 levelFilter = selectedLevelFilter,
@@ -183,20 +193,17 @@ fun IdeLogcatSystemScreen(
                         color = Ink,
                     )
                     // Shizuku Badge / Request Action
-                    val hasPerm = remember(isShizukuAvailable) {
-                        ShizukuLogcatManager.hasShizukuPermission(context)
-                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(
-                                if (hasPerm) Color(0xFF10B981).copy(alpha = 0.2f)
+                                if (hasShizukuPerm) Color(0xFF10B981).copy(alpha = 0.2f)
                                 else if (isShizukuAvailable) Color(0xFF38BDF8).copy(alpha = 0.2f)
                                 else Color(0xFFF59E0B).copy(alpha = 0.2f)
                             )
                             .border(
                                 1.dp,
-                                if (hasPerm) Color(0xFF10B981)
+                                if (hasShizukuPerm) Color(0xFF10B981)
                                 else if (isShizukuAvailable) Color(0xFF38BDF8)
                                 else Color(0xFFF59E0B),
                                 RoundedCornerShape(6.dp)
@@ -207,7 +214,7 @@ fun IdeLogcatSystemScreen(
                             .padding(horizontal = 7.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = if (hasPerm) "Shizuku Granted ✓"
+                            text = if (hasShizukuPerm) "Shizuku Granted ✓"
                             else if (isShizukuAvailable) "طلب إذن Shizuku"
                             else "تثبيت Shizuku",
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -215,7 +222,7 @@ fun IdeLogcatSystemScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = JetBrainsMono,
                             ),
-                            color = if (hasPerm) Color(0xFF34D399)
+                            color = if (hasShizukuPerm) Color(0xFF34D399)
                             else if (isShizukuAvailable) Color(0xFF38BDF8)
                             else Color(0xFFFBBF24),
                         )
@@ -426,7 +433,63 @@ fun IdeLogcatSystemScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            if (logs.isEmpty()) {
+            if (!hasShizukuPerm) {
+                // If permission is not yet granted, show clear friendly permission prompt and keep logs empty
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(IndigoDeep)
+                            .border(1.dp, Cyan.copy(alpha = 0.4f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "SH",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = JetBrainsMono,
+                            ),
+                            color = Cyan,
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "سجل النظام يتطلب إذن Shizuku",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "يظل سجل النظام فارغاً حتى يتم منح صلاحية Shizuku للتطبيق لقراءة سجلات كافة برامج النظام وحزم Android بأمان.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Cyan)
+                            .clickable {
+                                ShizukuLogcatManager.requestShizukuPermissionOrLaunch(context)
+                            }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                    ) {
+                        Text(
+                            text = if (isShizukuAvailable) "منح صلاحية Shizuku الآن" else "تثبيت مدير Shizuku",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = DeepNavy,
+                        )
+                    }
+                }
+            } else if (logs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = if (isLoading) "جاري قراءة سجل النظام..." else "لا توجد سجلات تطابق الفلاتر المحددة",
