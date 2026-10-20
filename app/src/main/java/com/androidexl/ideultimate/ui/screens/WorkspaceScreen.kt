@@ -135,6 +135,8 @@ import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.Violet
 import com.androidexl.ideultimate.ui.theme.VioletSoft
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import kotlinx.coroutines.delay
 
 private sealed interface WorkspaceSheet {

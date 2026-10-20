@@ -157,6 +157,8 @@ import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 import kotlin.math.abs
+import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import kotlin.math.roundToInt
 
 private enum class IdeProjectTab(val title: String) {

@@ -76,6 +76,7 @@ import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
 import kotlinx.coroutines.launch
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)

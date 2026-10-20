@@ -82,6 +82,7 @@ import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import kotlinx.coroutines.launch
 
 enum class AppScopeFilter(val title: String) {
