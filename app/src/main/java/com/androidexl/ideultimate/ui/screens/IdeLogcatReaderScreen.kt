@@ -32,7 +32,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,14 +69,14 @@ import com.androidexl.ideultimate.logcat.ProjectLogcatBridge
 import com.androidexl.ideultimate.ui.components.ProjectIconView
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
-import kotlinx.coroutines.launch
-import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import java.io.File
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

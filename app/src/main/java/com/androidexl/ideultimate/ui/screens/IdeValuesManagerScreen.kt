@@ -67,21 +67,21 @@ import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
-import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.Locale
 import javax.xml.parsers.DocumentBuilderFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.w3c.dom.Element
 
 data class ValueEntryItem(
     val tagName: String, // e.g. "color", "string", "dimen", "style", "bool", "integer"

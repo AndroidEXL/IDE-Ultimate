@@ -1,10 +1,5 @@
 package com.androidexl.ideultimate.ui.screens
 
-import com.androidexl.ideultimate.ui.theme.DeepNavy
-import com.androidexl.ideultimate.ui.theme.Midnight
-import com.androidexl.ideultimate.ui.theme.IndigoDeep
-import com.androidexl.ideultimate.ui.theme.Ink
-import com.androidexl.ideultimate.ui.theme.Muted
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -56,8 +51,12 @@ import androidx.compose.ui.unit.sp
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
+import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
 
 @Composable

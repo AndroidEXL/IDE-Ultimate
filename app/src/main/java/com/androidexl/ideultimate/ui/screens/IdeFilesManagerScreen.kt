@@ -1,17 +1,12 @@
 package com.androidexl.ideultimate.ui.screens
 
-import com.androidexl.ideultimate.ui.theme.DeepNavy
-import com.androidexl.ideultimate.ui.theme.Midnight
-import com.androidexl.ideultimate.ui.theme.IndigoDeep
-import com.androidexl.ideultimate.ui.theme.Ink
-import com.androidexl.ideultimate.ui.theme.Muted
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,8 +79,12 @@ import com.androidexl.ideultimate.data.ProjectResourceEntry
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.DeepNavy
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
+import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

@@ -151,15 +151,15 @@ import com.androidexl.ideultimate.ui.components.languageColor
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.DeepNavy
 import com.androidexl.ideultimate.ui.theme.Fuchsia
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
+import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
 import com.androidexl.ideultimate.ui.theme.Teal
 import com.androidexl.ideultimate.ui.theme.VioletSoft
 import kotlin.math.abs
-import com.androidexl.ideultimate.ui.theme.Midnight
-import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
-import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import kotlin.math.roundToInt
 
 private enum class IdeProjectTab(val title: String) {
