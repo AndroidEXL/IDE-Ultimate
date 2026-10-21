@@ -12743,7 +12743,7 @@ private fun TemporaryRunScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF0E1636))
+                    .background(Midnight)
                     .border(1.dp, methodAccent.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -13031,7 +13031,7 @@ private fun BuildMethodBottomSheet(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
                             .background(
-                                if (isSelected) methodAccent.copy(alpha = 0.15f) else Color(0xFF131B3A),
+                                if (isSelected) methodAccent.copy(alpha = 0.15f) else IndigoDeep,
                             )
                             .border(
                                 width = if (isSelected) 1.5.dp else 1.dp,

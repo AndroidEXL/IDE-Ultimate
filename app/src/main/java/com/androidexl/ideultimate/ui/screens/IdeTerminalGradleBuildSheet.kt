@@ -703,7 +703,7 @@ fun IdeTerminalGradleBuildSheet(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xD903060F)),
+                .background(Color.Black.copy(alpha = 0.65f)),
             contentAlignment = Alignment.BottomCenter,
         ) {
             Column(
@@ -712,7 +712,7 @@ fun IdeTerminalGradleBuildSheet(
                     .fillMaxHeight(0.92f)
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(DeepNavy)
-                    .border(1.dp, Color(0x2B00E5FF), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
             // Header Bar
@@ -815,7 +815,7 @@ fun IdeTerminalGradleBuildSheet(
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(3.dp),
                     color = Cyan,
-                    trackColor = Color(0xFF1E293B),
+                    trackColor = IndigoDeep,
                 )
             }
 
@@ -828,7 +828,7 @@ fun IdeTerminalGradleBuildSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF231628))
+                        .background(IndigoDeep)
                         .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                         .padding(12.dp),
                 ) {
@@ -908,7 +908,7 @@ fun IdeTerminalGradleBuildSheet(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(IndigoDeep)
                         .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                         .clickable { copyLogToClipboard() }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -932,7 +932,7 @@ fun IdeTerminalGradleBuildSheet(
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFF030712))
-                        .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(10.dp))
+                        .border(1.dp, IndigoDeep, RoundedCornerShape(10.dp))
                         .padding(10.dp),
                 ) {
                     Column(
@@ -1006,7 +1006,7 @@ fun IdeTerminalGradleBuildSheet(
                         .clip(RoundedCornerShape(10.dp))
                         .then(
                             if (isBuilding || isInstallingTools) {
-                                Modifier.background(Color(0xFF1E293B))
+                                Modifier.background(IndigoDeep)
                             } else {
                                 Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
                             }
@@ -1038,8 +1038,8 @@ fun IdeTerminalGradleBuildSheet(
                         .width(90.dp)
                         .height(44.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1E293B))
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp))
+                        .background(IndigoDeep)
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
                         .clickable(enabled = !isBuilding && !isInstallingTools) {
                             checkToolsEnvironment()
                         },

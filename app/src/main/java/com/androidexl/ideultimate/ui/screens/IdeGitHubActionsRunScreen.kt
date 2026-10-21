@@ -308,14 +308,14 @@ fun IdeGitHubActionsRunScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF070B1E)),
+            .background(DeepNavy),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0C1330))
+                    .background(Midnight)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -407,7 +407,7 @@ fun IdeGitHubActionsRunScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0E1638))
+                    .background(IndigoDeep)
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -420,7 +420,7 @@ fun IdeGitHubActionsRunScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (active) Cyan.copy(alpha = 0.2f) else Color(0x14FFFFFF))
+                            .background(if (active) Cyan.copy(alpha = 0.2f) else GlassStrokeBottom)
                             .border(1.dp, if (active) Cyan else Color(0x24FFFFFF), RoundedCornerShape(8.dp))
                             .clickable { activeTab = key }
                             .padding(vertical = 8.dp),
@@ -460,7 +460,7 @@ fun IdeGitHubActionsRunScreen(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF0F1735))
+                            .background(IndigoDeep)
                             .border(1.dp, Cyan.copy(alpha = 0.5f), CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -812,10 +812,10 @@ fun IdeGitHubActionsRunScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color(0xFF0F1735))
+                                    .background(IndigoDeep)
                                     .border(
                                         width = if (jobFailed) 1.5.dp else 1.dp,
-                                        color = if (jobFailed) Color(0xFFF87171) else Color(0x28FFFFFF),
+                                        color = if (jobFailed) Color(0xFFF87171) else GlassStrokeTop,
                                         shape = RoundedCornerShape(14.dp),
                                     ),
                             ) {
@@ -896,7 +896,7 @@ fun IdeGitHubActionsRunScreen(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .background(if (stepFailed) Color(0xFF2B0B17) else Color(0x14FFFFFF))
+                                                    .background(if (stepFailed) Color(0xFF2B0B17) else GlassStrokeBottom)
                                                     .border(1.dp, if (stepFailed) Color(0xFFF87171) else Color(0x18FFFFFF), RoundedCornerShape(8.dp))
                                                     .clickable {
                                                         selectedStepDetail = step
@@ -917,7 +917,7 @@ fun IdeGitHubActionsRunScreen(
                                                             when (step.conclusion) {
                                                                 "success" -> Color(0xFF22C55E).copy(alpha = 0.2f)
                                                                 "failure" -> Color(0xFFF87171).copy(alpha = 0.2f)
-                                                                else -> Color(0x22FFFFFF)
+                                                                else -> GlassStrokeTop
                                                             },
                                                         ),
                                                     contentAlignment = Alignment.Center,
@@ -1055,7 +1055,7 @@ fun IdeGitHubActionsRunScreen(
                     Text("إغلاق", color = Cyan)
                 }
             },
-            containerColor = Color(0xFF0C1330),
+            containerColor = Midnight,
         )
     }
 
@@ -1093,7 +1093,7 @@ fun IdeGitHubActionsRunScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isSelected) Cyan.copy(alpha = 0.2f) else Color(0xFF131D44))
-                                    .border(1.dp, if (isSelected) Cyan else Color(0x22FFFFFF), RoundedCornerShape(8.dp))
+                                    .border(1.dp, if (isSelected) Cyan else GlassStrokeTop, RoundedCornerShape(8.dp))
                                     .clickable {
                                         currentOwner = r.ownerLogin
                                         currentRepo = r.name
@@ -1143,7 +1143,7 @@ fun IdeGitHubActionsRunScreen(
                     Text("إغلاق", color = Cyan)
                 }
             },
-            containerColor = Color(0xFF0C1330),
+            containerColor = Midnight,
         )
     }
 
@@ -1207,7 +1207,7 @@ fun IdeGitHubActionsRunScreen(
                     Text("إلغاء", color = Muted)
                 }
             },
-            containerColor = Color(0xFF0C1330),
+            containerColor = Midnight,
         )
     }
         }
