@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.LocalIsDarkTheme
 import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.GlassStrokeBottom
 import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
