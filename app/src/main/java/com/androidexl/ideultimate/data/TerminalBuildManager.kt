@@ -48,6 +48,8 @@ object TerminalBuildManager {
         }
     }
 
+    var activeStepId: String? = null
+
     fun appendLog(line: String, isFlutter: Boolean) {
         rawLogOutput = if (rawLogOutput.isBlank()) line else "$rawLogOutput\n$line"
 
@@ -74,32 +76,45 @@ object TerminalBuildManager {
                             logs = listOf(line),
                         )
                     )
+                    activeStepId = stepId
                 }
             }
             matcher.find() -> {
                 val taskName = matcher.group(1) ?: trimmed
                 val tag = matcher.group(2) ?: "EXECUTED"
-                val stepStatus = when (tag) {
-                    "UP-TO-DATE", "SKIPPED", "FROM-CACHE" -> BuildTaskStepStatus.SKIPPED
-                    "FAILED" -> BuildTaskStepStatus.FAILED
+                val isFailed = tag.equals("FAILED", ignoreCase = true) || trimmed.endsWith("FAILED", ignoreCase = true)
+                val isSkipped = tag in listOf("UP-TO-DATE", "SKIPPED", "FROM-CACHE")
+                val stepStatus = when {
+                    isFailed -> BuildTaskStepStatus.FAILED
+                    isSkipped -> BuildTaskStepStatus.SKIPPED
                     else -> BuildTaskStepStatus.RUNNING
                 }
-                val lastRunning = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
-                if (lastRunning >= 0) {
-                    val prev = buildSteps[lastRunning]
-                    buildSteps[lastRunning] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
-                }
+
                 val existingIdx = buildSteps.indexOfFirst { it.title == taskName }
                 if (existingIdx >= 0) {
                     val item = buildSteps[existingIdx]
+                    val updatedStatus = if (isFailed) {
+                        BuildTaskStepStatus.FAILED
+                    } else if (item.status == BuildTaskStepStatus.FAILED) {
+                        BuildTaskStepStatus.FAILED
+                    } else {
+                        stepStatus
+                    }
                     buildSteps[existingIdx] = item.copy(
-                        status = stepStatus,
+                        status = updatedStatus,
                         logs = item.logs + line,
                     )
+                    activeStepId = item.id
                 } else {
+                    val lastRunning = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                    if (lastRunning >= 0 && !isFailed) {
+                        val prev = buildSteps[lastRunning]
+                        buildSteps[lastRunning] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
+                    }
+                    val newId = "task_${taskName.replace(':', '_')}"
                     buildSteps.add(
                         BuildTaskStep(
-                            id = "task_${taskName.replace(':', '_')}",
+                            id = newId,
                             title = taskName,
                             subtitle = when {
                                 taskName.contains("Kotlin", true) -> "مترجم كود Kotlin (kotlinc)"
@@ -115,6 +130,7 @@ object TerminalBuildManager {
                             logs = listOf(line),
                         )
                     )
+                    activeStepId = newId
                 }
             }
             trimmed.startsWith("Running Gradle task", ignoreCase = true) ||
@@ -136,12 +152,30 @@ object TerminalBuildManager {
                         logs = listOf(line),
                     )
                 )
+                activeStepId = stepId
             }
             else -> {
-                val lastIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
-                if (lastIdx >= 0) {
-                    val currentStep = buildSteps[lastIdx]
-                    buildSteps[lastIdx] = currentStep.copy(logs = currentStep.logs + line)
+                val stepIdx = if (activeStepId != null) {
+                    buildSteps.indexOfFirst { it.id == activeStepId }
+                } else {
+                    -1
+                }
+                val targetIdx = if (stepIdx >= 0) {
+                    stepIdx
+                } else {
+                    buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                }
+
+                if (targetIdx >= 0) {
+                    val currentStep = buildSteps[targetIdx]
+                    val markFailed = trimmed.contains("FAILED", ignoreCase = true) ||
+                                     trimmed.contains("error:", ignoreCase = true) ||
+                                     trimmed.contains("Android resource linking failed", ignoreCase = true)
+                    val newStatus = if (markFailed) BuildTaskStepStatus.FAILED else currentStep.status
+                    buildSteps[targetIdx] = currentStep.copy(
+                        status = newStatus,
+                        logs = currentStep.logs + line,
+                    )
                 }
             }
         }

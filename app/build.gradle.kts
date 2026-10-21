@@ -22,8 +22,8 @@ android {
         applicationId = "com.androidexl.ideultimate"
         minSdk = 24
         targetSdk = 35
-        versionCode = 87
-        versionName = "1.67.19"
+        versionCode = 88
+        versionName = "1.67.20"
 
         vectorDrawables {
             useSupportLibrary = true

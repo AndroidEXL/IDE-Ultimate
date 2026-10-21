@@ -148,6 +148,7 @@ fun IdeTerminalGradleBuildSheet(
 
     var selectedSheetStep by remember { mutableStateOf<BuildTaskStep?>(null) }
     var expandedStepIds by remember { mutableStateOf(setOf<String>()) }
+    var buildViewTab by remember { mutableStateOf(0) } // 0: Tasks Tree, 1: Raw Log
     val terminalScrollState = rememberScrollState()
 
     // Keep running in background when user navigates back!
@@ -966,210 +967,273 @@ fun IdeTerminalGradleBuildSheet(
                 .weight(1f)
                 .padding(horizontal = 16.dp, vertical = 6.dp),
         ) {
+            // Switcher Tabs: Tasks Tree vs Raw Terminal Log
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "شجرة عمليات البناء (Build Tasks Tree):",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontFamily = JetBrainsMono,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                    ),
-                    color = Cyan,
-                )
-                Text(
-                    text = "اضغط لعرض التفاصيل في نافذة سفلية",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                    color = Muted,
-                )
-            }
-
-            if (buildSteps.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
                         .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DeepNavy)
-                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
-                        .padding(16.dp),
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (buildViewTab == 0) Cyan.copy(alpha = 0.18f) else IndigoDeep)
+                        .border(
+                            1.dp,
+                            if (buildViewTab == 0) Cyan else GlassStrokeTop,
+                            RoundedCornerShape(8.dp),
+                        )
+                        .clickable { buildViewTab = 0 },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            tint = Cyan.copy(alpha = 0.6f),
-                            modifier = Modifier.size(36.dp),
-                        )
-                        Text(
-                            text = "جاهز لتنفيذ عملية البناء المفصلة",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Ink,
-                        )
-                        Text(
-                            text = if (isFlutter) "سيتم تتبع أوامر flutter pub get و flutter build apk -v خطوة بخطوة" else "سيتم استخراج كل مهمة Gradle وعرض تفاصيلها المباشرة",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = Muted,
-                        )
-                    }
+                    Text(
+                        text = "شجرة المهام (${buildSteps.size})",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                        ),
+                        color = if (buildViewTab == 0) Cyan else Muted,
+                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DeepNavy)
-                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(buildSteps, key = { it.id }) { step ->
-                        val isExpanded = expandedStepIds.contains(step.id)
-                        val statusColor = when (step.status) {
-                            BuildTaskStepStatus.SUCCESS -> Color(0xFF10B981)
-                            BuildTaskStepStatus.RUNNING -> Cyan
-                            BuildTaskStepStatus.FAILED -> Color(0xFFEF4444)
-                            BuildTaskStepStatus.SKIPPED -> Muted
-                            BuildTaskStepStatus.PENDING -> Muted
-                        }
 
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (buildViewTab == 1) Cyan.copy(alpha = 0.18f) else IndigoDeep)
+                        .border(
+                            1.dp,
+                            if (buildViewTab == 1) Cyan else GlassStrokeTop,
+                            RoundedCornerShape(8.dp),
+                        )
+                        .clickable { buildViewTab = 1 },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "السجل الطرفي الكامل (Terminal)",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                        ),
+                        color = if (buildViewTab == 1) Cyan else Muted,
+                    )
+                }
+            }
+
+            if (buildViewTab == 0) {
+                if (buildSteps.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DeepNavy)
+                            .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(IndigoDeep)
-                                .border(
-                                    width = 1.dp,
-                                    color = if (step.status == BuildTaskStepStatus.RUNNING) Cyan.copy(alpha = 0.5f) else GlassStrokeTop,
-                                    shape = RoundedCornerShape(8.dp),
-                                )
-                                .padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Row(
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Cyan.copy(alpha = 0.6f),
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Text(
+                                text = "جاهز لتنفيذ عملية البناء المفصلة",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                            )
+                            Text(
+                                text = if (isFlutter) "سيتم تتبع أوامر flutter pub get و flutter build apk -v خطوة بخطوة" else "سيتم استخراج كل مهمة Gradle وعرض تفاصيلها المباشرة",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = Muted,
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DeepNavy)
+                            .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(buildSteps, key = { it.id }) { step ->
+                            val isExpanded = expandedStepIds.contains(step.id)
+                            val statusColor = when (step.status) {
+                                BuildTaskStepStatus.SUCCESS -> Color(0xFF10B981)
+                                BuildTaskStepStatus.RUNNING -> Cyan
+                                BuildTaskStepStatus.FAILED -> Color(0xFFEF4444)
+                                BuildTaskStepStatus.SKIPPED -> Muted
+                                BuildTaskStepStatus.PENDING -> Muted
+                            }
+
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        // Tap opens bottom sheet details
-                                        selectedSheetStep = step
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(IndigoDeep)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (step.status == BuildTaskStepStatus.RUNNING) Cyan.copy(alpha = 0.5f) else GlassStrokeTop,
+                                        shape = RoundedCornerShape(8.dp),
+                                    )
+                                    .padding(8.dp),
                             ) {
                                 Row(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedSheetStep = step
+                                        },
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    // Status Indicator
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(statusColor),
-                                    )
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = step.title,
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontFamily = JetBrainsMono,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.5.sp,
-                                            ),
-                                            color = Ink,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(statusColor),
                                         )
-                                        if (step.subtitle.isNotBlank()) {
+                                        Column(Modifier.weight(1f)) {
                                             Text(
-                                                text = step.subtitle,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontSize = 9.5.sp,
+                                                text = step.title,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.5.sp,
                                                 ),
-                                                color = Muted,
+                                                color = Ink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            if (step.subtitle.isNotBlank()) {
+                                                Text(
+                                                    text = step.subtitle,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 9.5.sp,
+                                                    ),
+                                                    color = Muted,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(statusColor.copy(alpha = 0.15f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        ) {
+                                            Text(
+                                                text = step.status.name,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontFamily = JetBrainsMono,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                                color = statusColor,
+                                            )
+                                        }
+                                        IconButton(
+                                            modifier = Modifier.size(28.dp),
+                                            onClick = {
+                                                expandedStepIds = if (isExpanded) {
+                                                    expandedStepIds - step.id
+                                                } else {
+                                                    expandedStepIds + step.id
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                                contentDescription = null,
+                                                tint = Muted,
+                                                modifier = Modifier.size(16.dp),
                                             )
                                         }
                                     }
                                 }
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
+                                AnimatedVisibility(
+                                    visible = isExpanded,
+                                    enter = expandVertically() + fadeIn(),
+                                    exit = shrinkVertically() + fadeOut(),
+                                ) {
+                                    Column(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(statusColor.copy(alpha = 0.15f))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                            .fillMaxWidth()
+                                            .padding(top = 6.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF030712))
+                                            .padding(8.dp),
                                     ) {
                                         Text(
-                                            text = step.status.name,
-                                            style = MaterialTheme.typography.labelSmall.copy(
+                                            text = step.logs.takeLast(10).joinToString("\n").ifBlank { "لا توجد تفاصيل إضافية مسجلة لهذه المهمة." },
+                                            style = MaterialTheme.typography.bodySmall.copy(
                                                 fontFamily = JetBrainsMono,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.5.sp,
+                                                lineHeight = 14.sp,
                                             ),
-                                            color = statusColor,
+                                            color = Color(0xFFE2E8F0),
                                         )
-                                    }
-                                    IconButton(
-                                        modifier = Modifier.size(28.dp),
-                                        onClick = {
-                                            expandedStepIds = if (isExpanded) {
-                                                expandedStepIds - step.id
-                                            } else {
-                                                expandedStepIds + step.id
-                                            }
-                                        },
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            tint = Muted,
-                                            modifier = Modifier.size(16.dp),
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = "اضغط على المهمة لفتح النافذة السفلية الكاملة",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                            color = Cyan,
+                                            modifier = Modifier.clickable { selectedSheetStep = step },
                                         )
                                     }
                                 }
                             }
-
-                            // Inline preview details when toggled
-                            AnimatedVisibility(
-                                visible = isExpanded,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut(),
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 6.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF030712))
-                                        .padding(8.dp),
-                                ) {
-                                    Text(
-                                        text = step.logs.takeLast(10).joinToString("\n").ifBlank { "لا توجد تفاصيل إضافية مسجلة لهذه المهمة." },
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontFamily = JetBrainsMono,
-                                            fontSize = 9.5.sp,
-                                            lineHeight = 14.sp,
-                                        ),
-                                        color = Color(0xFFE2E8F0),
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = "اضغط على المهمة لفتح النافذة السفلية الكاملة",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                        color = Cyan,
-                                        modifier = Modifier.clickable { selectedSheetStep = step },
-                                    )
-                                }
-                            }
+                        }
+                    }
+                }
+            } else {
+                // Raw Terminal Output Console (سجل الطرفية الكامل)
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF030712))
+                            .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(terminalScrollState)
+                                .horizontalScroll(rememberScrollState()),
+                        ) {
+                            Text(
+                                text = rawLogOutput.ifBlank { "جاهز لبدء البناء... ستظهر مخرجات الطرفية الكاملة هنا مباشرة." },
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    lineHeight = 15.sp,
+                                ),
+                                color = Color(0xFFE2E8F0),
+                            )
                         }
                     }
                 }
