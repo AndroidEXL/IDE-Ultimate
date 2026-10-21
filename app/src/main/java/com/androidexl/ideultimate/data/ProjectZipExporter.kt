@@ -139,7 +139,7 @@ object ProjectZipExporter {
         }
 
         return when (baseSlug) {
-            "flutter", "flutter_test", "sky_engine", "dart", "test" -> "${"$"}{baseSlug}_app"
+            "flutter", "flutter_test", "sky_engine", "dart", "test" -> "${baseSlug}_app"
             else -> baseSlug
         }
     }
