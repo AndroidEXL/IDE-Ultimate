@@ -3721,7 +3721,7 @@ class _MyHomePageState extends State<MyHomePage> {
             if (androidSettingsOld.exists() && !androidSettingsKts.exists()) {
                 androidSettingsOld.delete()
             }
-            if (!androidSettingsKts.exists() || androidSettingsKts.readText().contains("\${"\$"}flutterSdkPath")) {
+            if (!androidSettingsKts.exists() || androidSettingsKts.readText().contains("\${'$'}flutterSdkPath")) {
                 androidSettingsKts.writeText(
                     """pluginManagement {
     val flutterSdkPath =
