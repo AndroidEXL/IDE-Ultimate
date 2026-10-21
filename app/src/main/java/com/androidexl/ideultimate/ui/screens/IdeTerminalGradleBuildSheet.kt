@@ -1337,8 +1337,12 @@ fun IdeTerminalGradleBuildSheet(
                     .weight(1f)
                     .height(46.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (isBuilding) DeepNavy else Brush.horizontalGradient(listOf(Color(0xFF0284C7), Cyan))
+                    .then(
+                        if (isBuilding) {
+                            Modifier.background(DeepNavy)
+                        } else {
+                            Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF0284C7), Cyan)))
+                        }
                     )
                     .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     .clickable {
