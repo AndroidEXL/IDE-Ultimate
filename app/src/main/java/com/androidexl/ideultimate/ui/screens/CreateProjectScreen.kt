@@ -365,48 +365,7 @@ fun CreateProjectScreen(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ProjectIconPresets.forEach { preset ->
-                    val selected = customIconPath == null && iconPreset == preset.id
-                    val borderTint by animateColorAsState(
-                        targetValue = if (selected) Cyan else Color(0x22FFFFFF),
-                        animationSpec = tween(220),
-                        label = "preset-border",
-                    )
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (selected) Cyan.copy(alpha = 0.14f) else Color(0x0AFFFFFF))
-                            .border(1.2.dp, borderTint, RoundedCornerShape(16.dp))
-                            .clickable {
-                                customIconPath = null
-                                iconPreset = preset.id
-                            }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                    ) {
-                        ProjectIconView(
-                            iconPreset = preset.id,
-                            customIconPath = null,
-                            modifier = Modifier.size(40.dp),
-                            cornerRadius = 13.dp,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = preset.label,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                            color = if (selected) Cyan else Muted,
-                        )
-                    }
-                }
-            }
         }
 
         Spacer(Modifier.height(14.dp))
@@ -547,7 +506,7 @@ fun CreateProjectScreen(
                             Brush.horizontalGradient(
                                 listOf(
                                     langTint.copy(alpha = if (isEdit) 0.10f else 0.18f),
-                                    Color(0x14FFFFFF),
+                                    IndigoDeep.copy(alpha = 0.45f),
                                 ),
                             ),
                         )
@@ -618,8 +577,8 @@ fun CreateProjectScreen(
                     expanded = spinnerExpanded && !isEdit,
                     onDismissRequest = { spinnerExpanded = false },
                     modifier = Modifier
-                        .background(Color(0xFF0E1535))
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp)),
+                        .background(Midnight)
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(14.dp)),
                 ) {
                     ProjectLanguage.entries.forEach { option ->
                         val selected = option == language

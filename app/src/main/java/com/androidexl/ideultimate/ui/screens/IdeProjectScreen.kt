@@ -18,6 +18,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -3530,7 +3532,7 @@ private fun PhoneFrameWhiteCanvas(
             -1
         }
 
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -3538,10 +3540,16 @@ private fun PhoneFrameWhiteCanvas(
                 .background(Color.White)
                 .onGloballyPositioned { coords ->
                     interiorBounds = coords.boundsInRoot()
-                }
-                .verticalScroll(rememberScrollState(), enabled = draggingType == null),
-            verticalArrangement = Arrangement.Top,
+                },
         ) {
+            val phoneScreenMaxHeight = maxHeight
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = phoneScreenMaxHeight)
+                    .verticalScroll(rememberScrollState(), enabled = draggingType == null),
+                verticalArrangement = Arrangement.Top,
+            ) {
             var visibleSlot = 0
             widgetNodes.forEach { node ->
                 val isMovingThis = node.uid == draggingExistingUid
@@ -3580,6 +3588,7 @@ private fun PhoneFrameWhiteCanvas(
                 )
             }
         }
+    }
     }
 }
 
@@ -3632,6 +3641,15 @@ internal fun RenderWidgetNodeOnPhone(
         customWidthDp != null && customWidthDp > 0 -> Modifier.width(customWidthDp.coerceIn(16, 320).dp)
         node.layoutWidth == "match_parent" -> Modifier.fillMaxWidth()
         else -> Modifier.wrapContentWidth()
+    }
+
+    val heightModifier = when {
+        customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(18, 600).dp)
+        node.layoutHeight == "match_parent" -> {
+            val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 480.dp
+            Modifier.height(parentH)
+        }
+        else -> Modifier.wrapContentHeight()
     }
 
     val visualPad = (node.paddingDp / 2).coerceIn(2, 16).dp
@@ -3713,7 +3731,10 @@ internal fun RenderWidgetNodeOnPhone(
                     .then(
                         when {
                             customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 400).dp)
-                            node.layoutHeight == "match_parent" -> Modifier.fillMaxHeight().defaultMinSize(minHeight = 120.dp)
+                            node.layoutHeight == "match_parent" -> {
+                        val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 500.dp
+                        Modifier.height(parentH)
+                    }
                             isEmpty -> Modifier.height(30.dp)
                             else -> Modifier.heightIn(min = 32.dp)
                         },
@@ -3827,7 +3848,10 @@ internal fun RenderWidgetNodeOnPhone(
                     .then(
                         when {
                             customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 400).dp)
-                            node.layoutHeight == "match_parent" -> Modifier.fillMaxHeight().defaultMinSize(minHeight = 120.dp)
+                            node.layoutHeight == "match_parent" -> {
+                        val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 500.dp
+                        Modifier.height(parentH)
+                    }
                             isEmpty -> Modifier.height(30.dp)
                             node.type == IdeWidgetType.SCROLL_H -> Modifier.heightIn(min = 38.dp, max = 180.dp)
                             else -> Modifier.heightIn(min = 32.dp)
@@ -3969,10 +3993,13 @@ internal fun RenderWidgetNodeOnPhone(
                     .padding(visualMargin)
                     .then(widthModifier)
                     .then(
-                        if (customHeightDp != null && customHeightDp > 0) {
-                            Modifier.height(customHeightDp.coerceIn(18, 220).dp)
-                        } else {
-                            Modifier
+                        when {
+                            customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(18, 500).dp)
+                            node.layoutHeight == "match_parent" -> {
+                                val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 480.dp
+                                Modifier.height(parentH)
+                            }
+                            else -> Modifier
                         },
                     )
                     .then(transformModifier)
@@ -4189,7 +4216,10 @@ internal fun RenderWidgetNodeOnPhone(
             }
             val imgHeightMod = when {
                 customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 260).dp)
-                node.layoutHeight == "match_parent" -> Modifier.height(140.dp)
+                node.layoutHeight == "match_parent" -> {
+                    val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 280.dp
+                    Modifier.height(parentH)
+                }
                 else -> Modifier.height(defaultH)
             }
 
@@ -4405,11 +4435,14 @@ internal fun RenderWidgetNodeOnPhone(
                             Modifier.size((customWidthDp ?: 44).coerceIn(32, 96).dp)
                         } else {
                             widthModifier.then(
-                                if (customHeightDp != null && customHeightDp > 0) {
-                                    Modifier.height(customHeightDp.coerceIn(24, 160).dp)
-                                } else {
-                                    Modifier.heightIn(min = 32.dp)
-                                },
+                                when {
+                                    customHeightDp != null && customHeightDp > 0 -> Modifier.height(customHeightDp.coerceIn(24, 500).dp)
+                                    node.layoutHeight == "match_parent" -> {
+                                        val parentH = if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 480.dp
+                                        Modifier.height(parentH)
+                                    }
+                                    else -> Modifier.heightIn(min = 32.dp)
+                                }
                             )
                         },
                     )
@@ -4729,7 +4762,11 @@ internal fun RenderWidgetNodeOnPhone(
         IdeWidgetType.GECKO_WEB_VIEW,
         IdeWidgetType.AD_WEB_VIEW,
         IdeWidgetType.SWIPE_WEB_VIEW -> {
-            val webHeightDp = customHeightDp?.coerceIn(48, 280)?.dp ?: 110.dp
+            val webHeightDp = when {
+                customHeightDp != null && customHeightDp > 0 -> customHeightDp.coerceIn(48, 600).dp
+                node.layoutHeight == "match_parent" -> if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 280.dp
+                else -> 110.dp
+            }
             val webShape = RoundedCornerShape(6.dp)
             Column(
                 modifier = Modifier
@@ -4871,7 +4908,11 @@ internal fun RenderWidgetNodeOnPhone(
         IdeWidgetType.HORIZONTAL_LIST_VIEW,
         IdeWidgetType.CAROUSEL_VIEW,
         IdeWidgetType.SWIPE_LIST_VIEW -> {
-            val listHeightDp = customHeightDp?.coerceIn(56, 280)?.dp ?: 110.dp
+            val listHeightDp = when {
+                customHeightDp != null && customHeightDp > 0 -> customHeightDp.coerceIn(56, 600).dp
+                node.layoutHeight == "match_parent" -> if (!parentBounds.isEmpty && parentBounds.height > 10f) with(density) { parentBounds.height.toDp() } else 280.dp
+                else -> 110.dp
+            }
             val listShape = RoundedCornerShape(6.dp)
             Column(
                 modifier = Modifier

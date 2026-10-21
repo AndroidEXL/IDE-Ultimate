@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.androidexl.ideultimate.data.ProjectLanguage
+import com.androidexl.ideultimate.data.TerminalBuildManager
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
@@ -133,165 +134,38 @@ fun IdeTerminalGradleBuildSheet(
     val repository = remember { WorkspaceRepository(context) }
     val isFlutter = (project.language == ProjectLanguage.FLUTTER)
 
-    var isBuilding by remember { mutableStateOf(false) }
-    var isInstallingTools by remember { mutableStateOf(false) }
-    var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var activeProcess by remember { mutableStateOf<Process?>(null) }
+    val buildMgr = TerminalBuildManager
+    val isBuilding = buildMgr.isBuilding
+    val isInstallingTools = buildMgr.isInstallingTools
+    val isCheckingEnv = buildMgr.isCheckingEnv
+    val isUbuntuReady = buildMgr.isUbuntuReady
+    val toolStatuses = buildMgr.toolStatuses
+    val rawLogOutput = buildMgr.rawLogOutput
+    val currentTaskName = buildMgr.currentTaskName
+    val buildSuccess = buildMgr.buildSuccess
+    val apkOutputPath = buildMgr.apkOutputPath
+    val buildSteps = buildMgr.buildSteps
 
-    var isCheckingEnv by remember { mutableStateOf(true) }
-    var isUbuntuReady by remember { mutableStateOf(false) }
-    var toolStatuses by remember { mutableStateOf<List<AndroidToolStatus>>(emptyList()) }
-
-    var rawLogOutput by remember { mutableStateOf("") }
-    var currentTaskName by remember { mutableStateOf("جاري فحص بيئة البناء...") }
-    var buildSuccess by remember { mutableStateOf<Boolean?>(null) }
-    var apkOutputPath by remember { mutableStateOf<String?>(null) }
-
-    // Tree / List of Build Steps
-    val buildSteps = remember { mutableStateListOf<BuildTaskStep>() }
     var selectedSheetStep by remember { mutableStateOf<BuildTaskStep?>(null) }
     var expandedStepIds by remember { mutableStateOf(setOf<String>()) }
-
     val terminalScrollState = rememberScrollState()
 
-    fun cancelAndClose() {
-        runCatching {
-            activeProcess?.destroyForcibly()
-        }
-        activeProcess = null
-        activeJob?.cancel()
-        activeJob = null
-        isBuilding = false
-        isInstallingTools = false
+    // Keep running in background when user navigates back!
+    BackHandler(enabled = true) {
         onBack()
         onDismiss()
     }
 
-    BackHandler(enabled = true) {
-        cancelAndClose()
+    fun abortBuildAndClose() {
+        buildMgr.abortBuild()
+        onBack()
+        onDismiss()
     }
 
     fun appendLog(line: String) {
-        rawLogOutput = if (rawLogOutput.isBlank()) line else "$rawLogOutput\n$line"
-
-        // Step categorization & Tree parser
-        val trimmed = line.trim()
-        val gradleTaskPattern = Pattern.compile("^>\\s*Task\\s+([:\\w\\-\\.]+)(?:\\s+([\\w\\-]+))?")
-        val matcher = gradleTaskPattern.matcher(trimmed)
-
-        when {
-            trimmed.startsWith("===>") -> {
-                val stepTitle = trimmed.removePrefix("===>").trim()
-                if (stepTitle.isNotBlank()) {
-                    val stepId = "step_${System.currentTimeMillis()}_${buildSteps.size}"
-                    // Mark previous running steps as success
-                    val lastIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
-                    if (lastIdx >= 0) {
-                        val prev = buildSteps[lastIdx]
-                        buildSteps[lastIdx] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
-                    }
-                    buildSteps.add(
-                        BuildTaskStep(
-                            id = stepId,
-                            title = stepTitle,
-                            subtitle = if (isFlutter) "عملية إعداد محرك فلاتر" else "خطوة إعداد البيئة ومسارات البناء",
-                            status = BuildTaskStepStatus.RUNNING,
-                            logs = listOf(line),
-                        )
-                    )
-                }
-            }
-            matcher.find() -> {
-                val taskName = matcher.group(1) ?: trimmed
-                val tag = matcher.group(2) ?: "EXECUTED"
-                val stepStatus = when (tag) {
-                    "UP-TO-DATE", "SKIPPED", "FROM-CACHE" -> BuildTaskStepStatus.SKIPPED
-                    "FAILED" -> BuildTaskStepStatus.FAILED
-                    else -> BuildTaskStepStatus.RUNNING
-                }
-                val lastRunning = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
-                if (lastRunning >= 0) {
-                    val prev = buildSteps[lastRunning]
-                    buildSteps[lastRunning] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
-                }
-                val existingIdx = buildSteps.indexOfFirst { it.title == taskName }
-                if (existingIdx >= 0) {
-                    val item = buildSteps[existingIdx]
-                    buildSteps[existingIdx] = item.copy(
-                        status = stepStatus,
-                        logs = item.logs + line,
-                    )
-                } else {
-                    buildSteps.add(
-                        BuildTaskStep(
-                            id = "task_${taskName.replace(':', '_')}",
-                            title = taskName,
-                            subtitle = when {
-                                taskName.contains("Kotlin", true) -> "مترجم كود Kotlin (kotlinc)"
-                                taskName.contains("Java", true) -> "مترجم كود Java (javac)"
-                                taskName.contains("dex", true) -> "تحويل الأكواد إلى تنسيق Dalvik (D8/Dex)"
-                                taskName.contains("Res", true) || taskName.contains("Aapt", true) -> "معالجة وضغط الموارد بواسطة AAPT2"
-                                taskName.contains("Manifest", true) -> "دمج وضبط أذونات AndroidManifest.xml"
-                                taskName.contains("package", true) -> "تجميع وحزم الـ APK النهائي"
-                                else -> "مهمة بناء Gradle الفرعية"
-                            },
-                            status = stepStatus,
-                            logs = listOf(line),
-                        )
-                    )
-                }
-            }
-            trimmed.contains("flutter pub get", true) || trimmed.contains("resolving dependencies", true) -> {
-                val existingIdx = buildSteps.indexOfFirst { it.id == "flutter_pub_get" }
-                if (existingIdx >= 0) {
-                    val item = buildSteps[existingIdx]
-                    buildSteps[existingIdx] = item.copy(logs = item.logs + line)
-                } else {
-                    buildSteps.add(
-                        BuildTaskStep(
-                            id = "flutter_pub_get",
-                            title = "flutter pub get (جلب وتحميل حزم المكتبات)",
-                            subtitle = "فحص pubspec.yaml وتنزيل حزم Dart و Flutter",
-                            status = BuildTaskStepStatus.RUNNING,
-                            logs = listOf(line),
-                        )
-                    )
-                }
-            }
-            trimmed.contains("flutter build apk", true) || trimmed.contains("Compiling, licensing", true) -> {
-                val existingIdx = buildSteps.indexOfFirst { it.id == "flutter_build_apk" }
-                if (existingIdx >= 0) {
-                    val item = buildSteps[existingIdx]
-                    buildSteps[existingIdx] = item.copy(logs = item.logs + line)
-                } else {
-                    buildSteps.add(
-                        BuildTaskStep(
-                            id = "flutter_build_apk",
-                            title = "flutter build apk (بناء حزمة أندرويد عبر Flutter)",
-                            subtitle = "ترجمة شجرة الودجات وإنشاء حزم APK للهاتف",
-                            status = BuildTaskStepStatus.RUNNING,
-                            logs = listOf(line),
-                        )
-                    )
-                }
-            }
-            else -> {
-                // Append line to current active step
-                val activeIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
-                if (activeIdx >= 0) {
-                    val item = buildSteps[activeIdx]
-                    buildSteps[activeIdx] = item.copy(logs = item.logs + line)
-                } else if (buildSteps.isNotEmpty()) {
-                    val lastIdx = buildSteps.lastIndex
-                    val item = buildSteps[lastIdx]
-                    buildSteps[lastIdx] = item.copy(logs = item.logs + line)
-                }
-            }
-        }
-
-        // If a bottom sheet is opened for this step, update its reference
+        buildMgr.appendLog(line, isFlutter)
         if (selectedSheetStep != null) {
-            val updated = buildSteps.firstOrNull { it.id == selectedSheetStep?.id }
+            val updated = buildMgr.buildSteps.firstOrNull { it.id == selectedSheetStep?.id }
             if (updated != null) {
                 selectedSheetStep = updated
             }
@@ -330,8 +204,8 @@ fun IdeTerminalGradleBuildSheet(
 
             if (!ubuntuInstalled) {
                 withContext(Dispatchers.Main) {
-                    isCheckingEnv = false
-                    currentTaskName = "بيئة Ubuntu Terminal غير مثبتة"
+                    buildMgr.isCheckingEnv = false
+                    buildMgr.currentTaskName = "بيئة Ubuntu Terminal غير مثبتة"
                     appendLog("⚠️ بيئة نظام Ubuntu Terminal غير مثبتة على الهاتف.")
                     appendLog("يرجى فتح Terminal من القائمة الجانبية لإتمام تثبيت نظام Ubuntu الأساسي أولاً.")
                 }
@@ -373,15 +247,15 @@ fun IdeTerminalGradleBuildSheet(
             }
 
             withContext(Dispatchers.Main) {
-                toolStatuses = results
-                isCheckingEnv = false
+                buildMgr.toolStatuses = results
+                buildMgr.isCheckingEnv = false
                 val allInstalled = results.all { it.isInstalled }
                 if (allInstalled) {
-                    currentTaskName = "بيئة البناء جاهزة ومكتملة"
+                    buildMgr.currentTaskName = "بيئة البناء جاهزة ومكتملة"
                     appendLog("✓ جميع أدوات الأندرويد وجافا ومحرك Gradle متوفرة وجاهزة.")
                 } else {
                     val missingNames = results.filter { !it.isInstalled }.joinToString { it.name }
-                    currentTaskName = "أدوات البناء غير مكتملة ($missingNames)"
+                    buildMgr.currentTaskName = "أدوات البناء غير مكتملة ($missingNames)"
                     appendLog("⚠️ يلزم تثبيت الأدوات التالية قبل تشغيل البناء: $missingNames")
                 }
             }
@@ -389,12 +263,12 @@ fun IdeTerminalGradleBuildSheet(
     }
 
     fun installMissingTools() {
-        isInstallingTools = true
-        currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
+        buildMgr.isInstallingTools = true
+        buildMgr.currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
         appendLog(if (isFlutter) "\n=== بدء تثبيت بيئة Flutter SDK و Android Tools في Ubuntu ===" else "\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
-        activeJob = coroutineScope.launch(Dispatchers.IO) {
+        buildMgr.activeJob = coroutineScope.launch(Dispatchers.IO) {
             val installScript = listOf(
                 "export DEBIAN_FRONTEND=noninteractive",
                 "echo '===> تنظيف حزم Gradle و Kotlin القديمة من apt...'",
@@ -482,13 +356,13 @@ fun IdeTerminalGradleBuildSheet(
                     }
                 },
                 onProcessStarted = { proc ->
-                    activeProcess = proc
+                    buildMgr.activeProcess = proc
                 },
             )
-            activeProcess = null
+            buildMgr.activeProcess = null
 
             withContext(Dispatchers.Main) {
-                isInstallingTools = false
+                buildMgr.isInstallingTools = false
                 if (rc == 0) {
                     appendLog("\n✓ تم تثبيت بيئة وأدوات البناء بنجاح!")
                     checkToolsEnvironment()
@@ -508,18 +382,18 @@ fun IdeTerminalGradleBuildSheet(
             installMissingTools()
             return
         }
-        isBuilding = true
-        buildSuccess = null
-        apkOutputPath = null
+        buildMgr.isBuilding = true
+        buildMgr.buildSuccess = null
+        buildMgr.apkOutputPath = null
         buildSteps.clear()
         expandedStepIds = emptySet()
-        currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug -v..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش والتفاصيل..."
+        buildMgr.currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug -v..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش والتفاصيل..."
         appendLog("\n==========================================")
         appendLog("=== بدء بناء مشروع: ${project.name} ===")
         appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug -v ===" else "=== الأمر: ./gradlew assembleDebug --info --build-cache --stacktrace ===")
         appendLog("==========================================")
 
-        activeJob = coroutineScope.launch(Dispatchers.IO) {
+        buildMgr.activeJob = coroutineScope.launch(Dispatchers.IO) {
             val projectRoot = repository.ensureProjectFullRoot(project)
             val buildScript = listOf(
                 "export HOME=/root",
@@ -836,13 +710,13 @@ fun IdeTerminalGradleBuildSheet(
                     }
                 },
                 onProcessStarted = { proc ->
-                    activeProcess = proc
+                    buildMgr.activeProcess = proc
                 },
             )
-            activeProcess = null
+            buildMgr.activeProcess = null
 
             withContext(Dispatchers.Main) {
-                isBuilding = false
+                buildMgr.isBuilding = false
                 // Mark any last running step
                 val runningIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
                 if (runningIdx >= 0) {
@@ -853,29 +727,32 @@ fun IdeTerminalGradleBuildSheet(
                 }
 
                 if (rc == 0) {
-                    buildSuccess = true
-                    currentTaskName = "اكتمل البناء بنجاح ✓"
+                    buildMgr.buildSuccess = true
+                    buildMgr.currentTaskName = "اكتمل البناء بنجاح ✓"
                     val foundApk = File(projectRoot, "build/app/outputs/flutter-apk/app-debug.apk").takeIf { it.exists() }
                         ?: File(projectRoot, "app/build/outputs/apk/debug/app-debug.apk").takeIf { it.exists() }
                         ?: projectRoot.walkTopDown().filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }.firstOrNull()
                     if (foundApk != null && foundApk.exists()) {
-                        apkOutputPath = foundApk.absolutePath
+                        buildMgr.apkOutputPath = foundApk.absolutePath
                         appendLog("\n🎉 تم العثور على ملف APK بنجاح:\n${foundApk.absolutePath}")
                         installApk(foundApk.absolutePath)
                     } else {
                         appendLog("\n✓ اكتمل أمر البناء (كود 0)، لكن لم يتم العثور على ملف apk مجمع داخل المشروع.")
                     }
                 } else {
-                    buildSuccess = false
-                    currentTaskName = "فشل البناء (كود الخطأ: $rc)"
+                    buildMgr.buildSuccess = false
+                    buildMgr.currentTaskName = "فشل البناء (كود الخطأ: $rc)"
                     appendLog("\n✕ فشلت عملية البناء. يمكنك فحص الخطأ أعلاه أو فتح تفاصيل المهمة.")
                 }
             }
         }
     }
 
-    LaunchedEffect(Unit) {
-        checkToolsEnvironment()
+    LaunchedEffect(project.id) {
+        if (!buildMgr.isBuilding && !buildMgr.isInstallingTools) {
+            buildMgr.resetForProject(project.id)
+            checkToolsEnvironment()
+        }
     }
 
     LaunchedEffect(rawLogOutput) {
@@ -906,7 +783,7 @@ fun IdeTerminalGradleBuildSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IconButton(onClick = { cancelAndClose() }) {
+                IconButton(onClick = { onBack(); onDismiss() }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -943,7 +820,7 @@ fun IdeTerminalGradleBuildSheet(
                         tint = Cyan,
                     )
                 }
-                IconButton(onClick = { cancelAndClose() }) {
+                IconButton(onClick = { onBack(); onDismiss() }) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "Close",
@@ -1362,18 +1239,37 @@ fun IdeTerminalGradleBuildSheet(
                 )
             }
 
+            if (isBuilding || isInstallingTools) {
+                Box(
+                    modifier = Modifier
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFEF4444).copy(alpha = 0.18f))
+                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .clickable { abortBuildAndClose() }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "إلغاء البناء",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFEF4444),
+                    )
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .height(46.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(IndigoDeep)
                     .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
-                    .clickable { cancelAndClose() }
+                    .clickable { onBack(); onDismiss() }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "إغلاق",
+                    text = if (isBuilding) "الخلفية (إخفاء)" else "إغلاق",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink,
                 )

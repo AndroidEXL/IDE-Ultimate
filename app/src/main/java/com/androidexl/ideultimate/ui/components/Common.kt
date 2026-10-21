@@ -51,12 +51,15 @@ fun GlassCard(
     contentPadding: PaddingValues = PaddingValues(18.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val topColor = if (isDark) Color(0x1FFFFFFF) else Color(0xFFFFFFFF)
+    val botColor = if (isDark) Color(0x08FFFFFF) else Color(0xF7FFFFFF)
     Column(
         modifier = modifier
             .clip(shape)
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0x1FFFFFFF), Color(0x08FFFFFF)),
+                    colors = listOf(topColor, botColor),
                 ),
             )
             .border(
