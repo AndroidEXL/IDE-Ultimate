@@ -73,6 +73,7 @@ import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
 import com.androidexl.ideultimate.ui.theme.Muted
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.example.ubuntuterminal.TerminalManager
 import com.example.ubuntuterminal.setup.Installer
 import kotlinx.coroutines.Dispatchers
