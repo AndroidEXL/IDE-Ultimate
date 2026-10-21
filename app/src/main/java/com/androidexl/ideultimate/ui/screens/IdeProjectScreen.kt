@@ -868,8 +868,10 @@ fun IdeProjectScreen(
     if (showTerminalGradleBuildSheet) {
         IdeTerminalGradleBuildSheet(
             project = project,
-            onDismiss = { showTerminalGradleBuildSheet = false },
+            onBack = { showTerminalGradleBuildSheet = false },
+            modifier = modifier,
         )
+        return
     }
     if (showTempRunScreen) {
         TemporaryRunScreen(

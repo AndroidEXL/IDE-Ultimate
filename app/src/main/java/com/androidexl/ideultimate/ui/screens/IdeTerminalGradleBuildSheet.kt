@@ -1,14 +1,16 @@
 package com.androidexl.ideultimate.ui.screens
 
-import android.content.Intent
-import androidx.activity.compose.BackHandler
-import androidx.core.content.FileProvider
-
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,37 +20,42 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,25 +68,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import com.androidexl.ideultimate.data.ProjectLanguage
 import com.androidexl.ideultimate.data.WorkspaceItem
 import com.androidexl.ideultimate.data.WorkspaceRepository
 import com.androidexl.ideultimate.ui.theme.Cyan
 import com.androidexl.ideultimate.ui.theme.DeepNavy
-import com.androidexl.ideultimate.ui.theme.Midnight
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.androidexl.ideultimate.ui.theme.IndigoDeep
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono
+import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Muted
-import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
 import com.example.ubuntuterminal.TerminalManager
 import com.example.ubuntuterminal.setup.Installer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.regex.Pattern
 
 data class AndroidToolStatus(
     val name: String,
@@ -88,25 +99,60 @@ data class AndroidToolStatus(
     val description: String,
 )
 
+enum class BuildTaskStepStatus {
+    PENDING,
+    RUNNING,
+    SUCCESS,
+    FAILED,
+    SKIPPED,
+}
+
+data class BuildTaskStep(
+    val id: String,
+    val title: String,
+    val subtitle: String = "",
+    val status: BuildTaskStepStatus = BuildTaskStepStatus.PENDING,
+    val logs: List<String> = emptyList(),
+)
+
 /**
- * Bottom Sheet for running local Gradle builds inside the PRoot Ubuntu terminal environment.
- * Automatically checks for Java 17, Android SDK / cmdline-tools, AAPT2, Gradle and Kotlin compiler.
- * If any tool is missing, guides the user to install them with one tap, caches dependencies permanently,
- * and includes a dedicated copy button for build and installation logs.
+ * Activity-style Full Screen for running Terminal/Gradle/Flutter builds in PRoot Ubuntu.
+ * Organizes execution steps into an interactive Tree/ListView where tapping an operation
+ * displays its details inline or opens an interactive Bottom Sheet with full verbose logs.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IdeTerminalGradleBuildSheet(
     project: WorkspaceItem,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit = {},
+    onDismiss: () -> Unit = onBack,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { WorkspaceRepository(context) }
+    val isFlutter = (project.language == ProjectLanguage.FLUTTER)
+
     var isBuilding by remember { mutableStateOf(false) }
     var isInstallingTools by remember { mutableStateOf(false) }
     var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var activeProcess by remember { mutableStateOf<Process?>(null) }
+
+    var isCheckingEnv by remember { mutableStateOf(true) }
+    var isUbuntuReady by remember { mutableStateOf(false) }
+    var toolStatuses by remember { mutableStateOf<List<AndroidToolStatus>>(emptyList()) }
+
+    var rawLogOutput by remember { mutableStateOf("") }
+    var currentTaskName by remember { mutableStateOf("جاري فحص بيئة البناء...") }
+    var buildSuccess by remember { mutableStateOf<Boolean?>(null) }
+    var apkOutputPath by remember { mutableStateOf<String?>(null) }
+
+    // Tree / List of Build Steps
+    val buildSteps = remember { mutableStateListOf<BuildTaskStep>() }
+    var selectedSheetStep by remember { mutableStateOf<BuildTaskStep?>(null) }
+    var expandedStepIds by remember { mutableStateOf(setOf<String>()) }
+
+    val terminalScrollState = rememberScrollState()
 
     fun cancelAndClose() {
         runCatching {
@@ -117,6 +163,7 @@ fun IdeTerminalGradleBuildSheet(
         activeJob = null
         isBuilding = false
         isInstallingTools = false
+        onBack()
         onDismiss()
     }
 
@@ -124,23 +171,134 @@ fun IdeTerminalGradleBuildSheet(
         cancelAndClose()
     }
 
-        val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
-    var isCheckingEnv by remember { mutableStateOf(true) }
-    var isUbuntuReady by remember { mutableStateOf(false) }
-    var toolStatuses by remember { mutableStateOf<List<AndroidToolStatus>>(emptyList()) }
-
-    var logOutput by remember { mutableStateOf("") }
-    var currentTaskName by remember { mutableStateOf("جاري فحص بيئة البناء...") }
-    var buildSuccess by remember { mutableStateOf<Boolean?>(null) }
-    var apkOutputPath by remember { mutableStateOf<String?>(null) }
-
-    val logScrollState = rememberScrollState()
-
     fun appendLog(line: String) {
-        logOutput = if (logOutput.isBlank()) line else "$logOutput\n$line"
+        rawLogOutput = if (rawLogOutput.isBlank()) line else "$rawLogOutput\n$line"
+
+        // Step categorization & Tree parser
+        val trimmed = line.trim()
+        val gradleTaskPattern = Pattern.compile("^>\\s*Task\\s+([:\\w\\-\\.]+)(?:\\s+([\\w\\-]+))?")
+        val matcher = gradleTaskPattern.matcher(trimmed)
+
+        when {
+            trimmed.startsWith("===>") -> {
+                val stepTitle = trimmed.removePrefix("===>").trim()
+                if (stepTitle.isNotBlank()) {
+                    val stepId = "step_${System.currentTimeMillis()}_${buildSteps.size}"
+                    // Mark previous running steps as success
+                    val lastIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                    if (lastIdx >= 0) {
+                        val prev = buildSteps[lastIdx]
+                        buildSteps[lastIdx] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
+                    }
+                    buildSteps.add(
+                        BuildTaskStep(
+                            id = stepId,
+                            title = stepTitle,
+                            subtitle = if (isFlutter) "عملية إعداد محرك فلاتر" else "خطوة إعداد البيئة ومسارات البناء",
+                            status = BuildTaskStepStatus.RUNNING,
+                            logs = listOf(line),
+                        )
+                    )
+                }
+            }
+            matcher.find() -> {
+                val taskName = matcher.group(1) ?: trimmed
+                val tag = matcher.group(2) ?: "EXECUTED"
+                val stepStatus = when (tag) {
+                    "UP-TO-DATE", "SKIPPED", "FROM-CACHE" -> BuildTaskStepStatus.SKIPPED
+                    "FAILED" -> BuildTaskStepStatus.FAILED
+                    else -> BuildTaskStepStatus.RUNNING
+                }
+                val lastRunning = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                if (lastRunning >= 0) {
+                    val prev = buildSteps[lastRunning]
+                    buildSteps[lastRunning] = prev.copy(status = BuildTaskStepStatus.SUCCESS)
+                }
+                val existingIdx = buildSteps.indexOfFirst { it.title == taskName }
+                if (existingIdx >= 0) {
+                    val item = buildSteps[existingIdx]
+                    buildSteps[existingIdx] = item.copy(
+                        status = stepStatus,
+                        logs = item.logs + line,
+                    )
+                } else {
+                    buildSteps.add(
+                        BuildTaskStep(
+                            id = "task_${taskName.replace(':', '_')}",
+                            title = taskName,
+                            subtitle = when {
+                                taskName.contains("Kotlin", true) -> "مترجم كود Kotlin (kotlinc)"
+                                taskName.contains("Java", true) -> "مترجم كود Java (javac)"
+                                taskName.contains("dex", true) -> "تحويل الأكواد إلى تنسيق Dalvik (D8/Dex)"
+                                taskName.contains("Res", true) || taskName.contains("Aapt", true) -> "معالجة وضغط الموارد بواسطة AAPT2"
+                                taskName.contains("Manifest", true) -> "دمج وضبط أذونات AndroidManifest.xml"
+                                taskName.contains("package", true) -> "تجميع وحزم الـ APK النهائي"
+                                else -> "مهمة بناء Gradle الفرعية"
+                            },
+                            status = stepStatus,
+                            logs = listOf(line),
+                        )
+                    )
+                }
+            }
+            trimmed.contains("flutter pub get", true) || trimmed.contains("resolving dependencies", true) -> {
+                val existingIdx = buildSteps.indexOfFirst { it.id == "flutter_pub_get" }
+                if (existingIdx >= 0) {
+                    val item = buildSteps[existingIdx]
+                    buildSteps[existingIdx] = item.copy(logs = item.logs + line)
+                } else {
+                    buildSteps.add(
+                        BuildTaskStep(
+                            id = "flutter_pub_get",
+                            title = "flutter pub get (جلب وتحميل حزم المكتبات)",
+                            subtitle = "فحص pubspec.yaml وتنزيل حزم Dart و Flutter",
+                            status = BuildTaskStepStatus.RUNNING,
+                            logs = listOf(line),
+                        )
+                    )
+                }
+            }
+            trimmed.contains("flutter build apk", true) || trimmed.contains("Compiling, licensing", true) -> {
+                val existingIdx = buildSteps.indexOfFirst { it.id == "flutter_build_apk" }
+                if (existingIdx >= 0) {
+                    val item = buildSteps[existingIdx]
+                    buildSteps[existingIdx] = item.copy(logs = item.logs + line)
+                } else {
+                    buildSteps.add(
+                        BuildTaskStep(
+                            id = "flutter_build_apk",
+                            title = "flutter build apk (بناء حزمة أندرويد عبر Flutter)",
+                            subtitle = "ترجمة شجرة الودجات وإنشاء حزم APK للهاتف",
+                            status = BuildTaskStepStatus.RUNNING,
+                            logs = listOf(line),
+                        )
+                    )
+                }
+            }
+            else -> {
+                // Append line to current active step
+                val activeIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                if (activeIdx >= 0) {
+                    val item = buildSteps[activeIdx]
+                    buildSteps[activeIdx] = item.copy(logs = item.logs + line)
+                } else if (buildSteps.isNotEmpty()) {
+                    val lastIdx = buildSteps.lastIndex
+                    val item = buildSteps[lastIdx]
+                    buildSteps[lastIdx] = item.copy(logs = item.logs + line)
+                }
+            }
+        }
+
+        // If a bottom sheet is opened for this step, update its reference
+        if (selectedSheetStep != null) {
+            val updated = buildSteps.firstOrNull { it.id == selectedSheetStep?.id }
+            if (updated != null) {
+                selectedSheetStep = updated
+            }
+        }
     }
 
-        fun installApk(filePath: String) {
+    fun installApk(filePath: String) {
         try {
             val file = File(filePath)
             val authority = "${context.packageName}.fileprovider"
@@ -155,11 +313,11 @@ fun IdeTerminalGradleBuildSheet(
         }
     }
 
-    fun copyLogToClipboard() {
+    fun copyLogToClipboard(textToCopy: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Gradle Build Logs", logOutput)
+        val clip = ClipData.newPlainText("Build Logs", textToCopy)
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(context, "تم نسخ سجلات البناء بنجاح ✓", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "تم نسخ السجل بنجاح ✓", Toast.LENGTH_SHORT).show()
     }
 
     fun checkToolsEnvironment() {
@@ -180,8 +338,7 @@ fun IdeTerminalGradleBuildSheet(
                 return@launch
             }
 
-            // Check tools via Ubuntu exec
-                        val checks = if (isFlutter) {
+            val checks = if (isFlutter) {
                 listOf(
                     "Flutter SDK" to "command -v flutter || [ -f /root/flutter/bin/flutter ]",
                     "Dart SDK" to "command -v dart || [ -f /root/flutter/bin/cache/dart-sdk/bin/dart ]",
@@ -223,8 +380,9 @@ fun IdeTerminalGradleBuildSheet(
                     currentTaskName = "بيئة البناء جاهزة ومكتملة"
                     appendLog("✓ جميع أدوات الأندرويد وجافا ومحرك Gradle متوفرة وجاهزة.")
                 } else {
-                    currentTaskName = "بعض أدوات البناء غير متوفرة"
-                    appendLog("⚠️ بعض أدوات Android SDK / Gradle غير مثبتة داخل Ubuntu.")
+                    val missingNames = results.filter { !it.isInstalled }.joinToString { it.name }
+                    currentTaskName = "أدوات البناء غير مكتملة ($missingNames)"
+                    appendLog("⚠️ يلزم تثبيت الأدوات التالية قبل تشغيل البناء: $missingNames")
                 }
             }
         }
@@ -232,12 +390,12 @@ fun IdeTerminalGradleBuildSheet(
 
     fun installMissingTools() {
         isInstallingTools = true
-                currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
+        currentTaskName = if (isFlutter) "جاري تثبيت بيئة Flutter SDK و Android Tools في Ubuntu..." else "جاري تثبيت أدوات Android SDK و Gradle في Ubuntu..."
         appendLog(if (isFlutter) "\n=== بدء تثبيت بيئة Flutter SDK و Android Tools في Ubuntu ===" else "\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
         activeJob = coroutineScope.launch(Dispatchers.IO) {
-            val installScript = listOf(
+            listOf(
                 "export DEBIAN_FRONTEND=noninteractive",
                 "echo '===> تنظيف حزم Gradle و Kotlin القديمة من apt...'",
                 "apt-get remove -y gradle kotlin ant 2>/dev/null || true",
@@ -343,7 +501,7 @@ fun IdeTerminalGradleBuildSheet(
 
     fun startGradleBuild() {
         if (isBuilding || isInstallingTools) return
-                val missing = toolStatuses.filter { !it.isInstalled }
+        val missing = toolStatuses.filter { !it.isInstalled }
         if (missing.isNotEmpty()) {
             appendLog("\n⚠️ بعض أدوات البناء غير متوفرة (${missing.joinToString { it.name }}).")
             appendLog("===> جاري تحميل وتثبيت الأدوات المطلوبة تلقائيًا أولاً قبل البناء...")
@@ -353,15 +511,17 @@ fun IdeTerminalGradleBuildSheet(
         isBuilding = true
         buildSuccess = null
         apkOutputPath = null
-                currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش..."
+        buildSteps.clear()
+        expandedStepIds = emptySet()
+        currentTaskName = if (isFlutter) "جاري تنفيذ flutter build apk --debug -v..." else "جاري تنفيذ Gradle assembleDebug مع تفعيل الكاش والتفاصيل..."
         appendLog("\n==========================================")
         appendLog("=== بدء بناء مشروع: ${project.name} ===")
-        appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug ===" else "=== الأمر: ./gradlew assembleDebug --build-cache ===")
+        appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug -v ===" else "=== الأمر: ./gradlew assembleDebug --info --build-cache --stacktrace ===")
         appendLog("==========================================")
 
         activeJob = coroutineScope.launch(Dispatchers.IO) {
             val projectRoot = repository.ensureProjectFullRoot(project)
-            val buildScript = listOf(
+            listOf(
                 "export HOME=/root",
                 "export GRADLE_USER_HOME=/root/.gradle",
                 "export ANDROID_HOME=/root/android-sdk",
@@ -647,7 +807,7 @@ fun IdeTerminalGradleBuildSheet(
                 if (isFlutter) "echo '===> مشروع Flutter: التحقق من حزم pubspec.yaml وأمر flutter build...'" else "echo ''",
                 if (isFlutter) "export PATH=/root/flutter/bin:\$PATH" else "echo ''",
                 if (isFlutter) "if [ -f pubspec.yaml ] && grep -q \"^name:[[:space:]]*flutter[[:space:]]*$\" pubspec.yaml; then sed -i \"s/^name:[[:space:]]*flutter[[:space:]]*$/name: flutter_app/\" pubspec.yaml; fi" else "echo ''",
-                if (isFlutter) "if command -v flutter >/dev/null 2>&1; then echo '===> flutter pub get...'; flutter pub get 2>&1; echo '===> flutter build apk --debug...'; flutter build apk --debug 2>&1; exit \$?; fi" else "echo ''",
+                if (isFlutter) "if command -v flutter >/dev/null 2>&1; then echo '===> flutter pub get...'; flutter pub get 2>&1; echo '===> flutter build apk --debug...'; flutter build apk --debug -v 2>&1; exit \$?; fi" else "echo ''",
                 "TASK_CMD=\":app:assembleDebug\"",
                 "if [ ! -d ./app ]; then",
                 "    TASK_CMD=\"assembleDebug\"",
@@ -683,6 +843,15 @@ fun IdeTerminalGradleBuildSheet(
 
             withContext(Dispatchers.Main) {
                 isBuilding = false
+                // Mark any last running step
+                val runningIdx = buildSteps.indexOfLast { it.status == BuildTaskStepStatus.RUNNING }
+                if (runningIdx >= 0) {
+                    val prev = buildSteps[runningIdx]
+                    buildSteps[runningIdx] = prev.copy(
+                        status = if (rc == 0) BuildTaskStepStatus.SUCCESS else BuildTaskStepStatus.FAILED
+                    )
+                }
+
                 if (rc == 0) {
                     buildSuccess = true
                     currentTaskName = "اكتمل البناء بنجاح ✓"
@@ -694,12 +863,12 @@ fun IdeTerminalGradleBuildSheet(
                         appendLog("\n🎉 تم العثور على ملف APK بنجاح:\n${foundApk.absolutePath}")
                         installApk(foundApk.absolutePath)
                     } else {
-                        appendLog("\n✓ اكتمل أمر البناء (كود 0)، لكن لم يتم العثور على ملف apk مجمع داخل المشروع. تحقق من المسارات أو الأخطاء في السجل أعلاه.")
+                        appendLog("\n✓ اكتمل أمر البناء (كود 0)، لكن لم يتم العثور على ملف apk مجمع داخل المشروع.")
                     }
                 } else {
                     buildSuccess = false
                     currentTaskName = "فشل البناء (كود الخطأ: $rc)"
-                    appendLog("\n✕ فشلت عملية البناء. يمكنك فحص الخطأ أعلاه أو نسخ السجل.")
+                    appendLog("\n✕ فشلت عملية البناء. يمكنك فحص الخطأ أعلاه أو فتح تفاصيل المهمة.")
                 }
             }
         }
@@ -709,371 +878,646 @@ fun IdeTerminalGradleBuildSheet(
         checkToolsEnvironment()
     }
 
-    LaunchedEffect(logOutput) {
-        logScrollState.animateScrollTo(logScrollState.maxValue)
+    LaunchedEffect(rawLogOutput) {
+        terminalScrollState.animateScrollTo(terminalScrollState.maxValue)
     }
 
-    Dialog(
-        onDismissRequest = {},
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
-        ),
+    // -------------------------------------------------------------------------
+    // Full Screen Activity Layout
+    // -------------------------------------------------------------------------
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Midnight)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
-        Box(
+        // Top App Bar
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.65f)),
-            contentAlignment = Alignment.BottomCenter,
+                .fillMaxWidth()
+                .background(DeepNavy)
+                .border(1.dp, GlassStrokeTop)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                IconButton(onClick = { cancelAndClose() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Ink,
+                    )
+                }
+                Column {
+                    Text(
+                        text = if (isFlutter) "بناء محلي Flutter (Terminal Engine)" else "بناء محلي Gradle (Terminal Engine)",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                        ),
+                        color = Ink,
+                    )
+                    Text(
+                        text = "${project.name} • ${project.packageName}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                        ),
+                        color = Cyan,
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(
+                    onClick = { copyLogToClipboard(rawLogOutput) },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "نسخ السجل",
+                        tint = Cyan,
+                    )
+                }
+                IconButton(onClick = { cancelAndClose() }) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = Muted,
+                    )
+                }
+            }
+        }
+
+        // Status Card Banner
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(IndigoDeep)
+                .border(1.dp, Cyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = currentTaskName,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = when (buildSuccess) {
+                        true -> Color(0xFF22C55E)
+                        false -> Color(0xFFF87171)
+                        else -> Ink
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (isFlutter) "محرك Flutter SDK + PRoot Ubuntu ARM64" else "محرك Gradle Daemon + كاش دائم /root/.gradle",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.sp,
+                    ),
+                    color = Muted,
+                )
+            }
+
+            if (isBuilding || isInstallingTools) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.5.dp,
+                    color = Cyan,
+                )
+            } else if (buildSuccess == true) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF22C55E)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+
+        if (isBuilding || isInstallingTools) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = Cyan,
+                trackColor = DeepNavy,
+            )
+        }
+
+        // Missing Tools Notice
+        val missingTools = toolStatuses.filter { !it.isInstalled }
+        if (!isCheckingEnv && missingTools.isNotEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.92f)
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(DeepNavy)
-                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFF59E0B).copy(alpha = 0.12f))
+                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-            // Header Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Text(
+                    text = if (isFlutter) "الأدوات المطلوبة لبناء تطبيق Flutter" else "الأدوات المطلوبة لبناء Android و Gradle",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFFF59E0B),
+                )
+                missingTools.forEach { tool ->
+                    Text(
+                        text = "• ${tool.name}: ${tool.description}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = Ink.copy(alpha = 0.85f),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF59E0B))
+                        .clickable { installMissingTools() },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF10B981).copy(alpha = 0.2f))
-                            .border(1.dp, Color(0xFF10B981), CircleShape),
-                        contentAlignment = Alignment.Center,
+                    Text(
+                        text = if (isFlutter) "تحميل وتثبيت Flutter SDK والأدوات الآن" else "تثبيت أدوات Android SDK و Gradle الآن",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                        ),
+                        color = Color.Black,
+                    )
+                }
+            }
+        }
+
+        // Main Content Area: Tree / ListView of operations
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "شجرة عمليات البناء (Build Tasks Tree):",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                    ),
+                    color = Cyan,
+                )
+                Text(
+                    text = "اضغط لعرض التفاصيل في نافذة سفلية",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                    color = Muted,
+                )
+            }
+
+            if (buildSteps.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DeepNavy)
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null,
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(20.dp),
+                            tint = Cyan.copy(alpha = 0.6f),
+                            modifier = Modifier.size(36.dp),
                         )
-                    }
-                    Column {
                         Text(
-                            text = "بناء محلي عبر محرك Gradle",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                            ),
+                            text = "جاهز لتنفيذ عملية البناء المفصلة",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                             color = Ink,
                         )
                         Text(
-                            text = "Ubuntu PRoot Terminal • كاش التبعيات الدائم",
-                            style = MaterialTheme.typography.labelSmall.copy(
+                            text = if (isFlutter) "سيتم تتبع أوامر flutter pub get و flutter build apk -v خطوة بخطوة" else "سيتم استخراج كل مهمة Gradle وعرض تفاصيلها المباشرة",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = Muted,
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DeepNavy)
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(buildSteps, key = { it.id }) { step ->
+                        val isExpanded = expandedStepIds.contains(step.id)
+                        val statusColor = when (step.status) {
+                            BuildTaskStepStatus.SUCCESS -> Color(0xFF10B981)
+                            BuildTaskStepStatus.RUNNING -> Cyan
+                            BuildTaskStepStatus.FAILED -> Color(0xFFEF4444)
+                            BuildTaskStepStatus.SKIPPED -> Muted
+                            BuildTaskStepStatus.PENDING -> Muted
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(IndigoDeep)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (step.status == BuildTaskStepStatus.RUNNING) Cyan.copy(alpha = 0.5f) else GlassStrokeTop,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .padding(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        // Tap opens bottom sheet details
+                                        selectedSheetStep = step
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    // Status Indicator
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(statusColor),
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = step.title,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.5.sp,
+                                            ),
+                                            color = Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        if (step.subtitle.isNotBlank()) {
+                                            Text(
+                                                text = step.subtitle,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 9.5.sp,
+                                                ),
+                                                color = Muted,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(statusColor.copy(alpha = 0.15f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        Text(
+                                            text = step.status.name,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                            color = statusColor,
+                                        )
+                                    }
+                                    IconButton(
+                                        modifier = Modifier.size(28.dp),
+                                        onClick = {
+                                            expandedStepIds = if (isExpanded) {
+                                                expandedStepIds - step.id
+                                            } else {
+                                                expandedStepIds + step.id
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = Muted,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Inline preview details when toggled
+                            AnimatedVisibility(
+                                visible = isExpanded,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut(),
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF030712))
+                                        .padding(8.dp),
+                                ) {
+                                    Text(
+                                        text = step.logs.takeLast(10).joinToString("\n").ifBlank { "لا توجد تفاصيل إضافية مسجلة لهذه المهمة." },
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.5.sp,
+                                            lineHeight = 14.sp,
+                                        ),
+                                        color = Color(0xFFE2E8F0),
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "اضغط على المهمة لفتح النافذة السفلية الكاملة",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = Cyan,
+                                        modifier = Modifier.clickable { selectedSheetStep = step },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Install APK bar if generated
+        if (apkOutputPath != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
+                    .clickable { installApk(apkOutputPath!!) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "تثبيت على الهاتف",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                        ),
+                        color = Color.White,
+                    )
+                }
+            }
+        }
+
+        // Bottom Controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val btnTitle = when {
+                isBuilding -> "جاري البناء..."
+                isFlutter && missingTools.isNotEmpty() -> "تحميل Flutter SDK والأدوات وبدء البناء"
+                !isFlutter && missingTools.isNotEmpty() -> "تثبيت الأدوات وبدء البناء"
+                isFlutter -> "بدء بناء Flutter الآن (flutter build apk -v)"
+                else -> "بدء بناء Gradle الآن (assembleDebug)"
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (isBuilding) DeepNavy else Brush.horizontalGradient(listOf(Color(0xFF0284C7), Cyan))
+                    )
+                    .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    .clickable(enabled = !isBuilding && !isInstallingTools) {
+                        startGradleBuild()
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = btnTitle,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                    ),
+                    color = if (isBuilding) Muted else Color.Black,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(IndigoDeep)
+                    .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
+                    .clickable { cancelAndClose() }
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "إغلاق",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink,
+                )
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Bottom Sheet for Operation Details (نافذة سفلية لعرض التفاصيل)
+    // -------------------------------------------------------------------------
+    val activeStep = selectedSheetStep
+    if (activeStep != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { selectedSheetStep = null },
+            sheetState = sheetState,
+            containerColor = DeepNavy,
+            contentColor = Ink,
+            scrimColor = Color.Black.copy(alpha = 0.65f),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = activeStep.title,
+                            style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = JetBrainsMono,
-                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                            ),
+                            color = Ink,
+                        )
+                        if (activeStep.subtitle.isNotBlank()) {
+                            Text(
+                                text = activeStep.subtitle,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = Muted,
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(IndigoDeep)
+                            .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .clickable {
+                                copyLogToClipboard(activeStep.logs.joinToString("\n"))
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = "نسخ التفاصيل",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.5.sp,
                             ),
                             color = Cyan,
                         )
                     }
                 }
 
-                IconButton(
-                    onClick = { cancelAndClose() },
-                ) {
-                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = Muted)
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Current Status Banner
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(IndigoDeep)
-                    .border(1.dp, Cyan.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = currentTaskName,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                        color = when (buildSuccess) {
-                            true -> Color(0xFF22C55E)
-                            false -> Color(0xFFF87171)
-                            else -> Ink
-                        },
-                    )
-                    Text(
-                        text = "المشروع: ${project.name} (${project.packageName})",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = JetBrainsMono,
-                            fontSize = 9.5.sp,
-                        ),
-                        color = Muted,
-                    )
-                }
-
-                if (isCheckingEnv || isInstallingTools || isBuilding) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Cyan,
-                        strokeWidth = 2.dp,
-                    )
-                }
-            }
-
-            if (isInstallingTools || isBuilding) {
-                Spacer(Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = Cyan,
-                    trackColor = IndigoDeep,
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Environment Tools List Card (if missing tools or not checked)
-            val missingTools = toolStatuses.filter { !it.isInstalled }
-            if (missingTools.isNotEmpty() && !isInstallingTools && !isBuilding) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(IndigoDeep)
-                        .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .padding(12.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = if (isFlutter) "الأدوات المطلوبة لبناء تطبيق Flutter" else "الأدوات المطلوبة لبناء Android و Gradle",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFFF59E0B),
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "بعض حزم وأدوات النظام غير متوفرة في بيئة Ubuntu. اضغط على الزر لتثبيتها بضغطة واحدة:",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = Ink.copy(alpha = 0.85f),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    missingTools.forEach { tool ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(text = "•", color = Color(0xFFF87171), fontWeight = FontWeight.Bold)
-                            Text(
-                                text = "${tool.name}: ${tool.description}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                                color = Ink.copy(alpha = 0.9f),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFFD97706), Color(0xFFB45309))))
-                            .clickable { installMissingTools() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = if (isFlutter) "تحميل وتثبيت Flutter SDK والأدوات الآن" else "تثبيت أدوات Android SDK و Gradle الآن",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.5.sp,
-                            ),
-                            color = Color.White,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-            }
-
-            // Terminal Logs Viewer Header with "Copy Text" button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "سجل الطرفية ومخرجات البناء (Terminal Logs):",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = JetBrainsMono,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.5.sp,
-                    ),
-                    color = Cyan,
-                )
-
-                // Dedicated "Copy Text" button (نسخ النص)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(IndigoDeep)
-                        .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                        .clickable { copyLogToClipboard() }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text(
-                        text = "نسخ النص",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp,
-                        ),
-                        color = Cyan,
-                    )
-                }
-            }
-
-            // Console output box (LTR)
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF030712))
-                        .border(1.dp, IndigoDeep, RoundedCornerShape(10.dp))
-                        .padding(10.dp),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(logScrollState)
-                            .horizontalScroll(rememberScrollState()),
-                    ) {
-                        Text(
-                            text = logOutput.ifBlank { "جاهز لبدء العملية...\nاضغط على 'بدء البناء الآن'." },
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 10.5.sp,
-                                lineHeight = 16.sp,
-                            ),
-                            color = Color(0xFFE2E8F0),
-                        )
-                    }
-                }
-            }
-
-            if (apkOutputPath != null) {
-                Spacer(Modifier.height(10.dp))
+                // Status Badge
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    Text(
+                        text = "الحالة:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                    Text(
+                        text = activeStep.status.name,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = when (activeStep.status) {
+                            BuildTaskStepStatus.SUCCESS -> Color(0xFF10B981)
+                            BuildTaskStepStatus.RUNNING -> Cyan
+                            BuildTaskStepStatus.FAILED -> Color(0xFFEF4444)
+                            else -> Muted
+                        },
+                    )
+                    Text(
+                        text = "• عدد السطور: ${activeStep.logs.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Muted,
+                    )
+                }
+
+                // Detailed Log Console
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(340.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
-                            .clickable { installApk(apkOutputPath!!) },
-                        contentAlignment = Alignment.Center,
+                            .background(Color(0xFF030712))
+                            .border(1.dp, IndigoDeep, RoundedCornerShape(10.dp))
+                            .padding(10.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState()),
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
                             Text(
-                                text = "تثبيت على الهاتف",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                text = activeStep.logs.joinToString("\n").ifBlank { "لا توجد مخرجات تفصيلية مسجلة لهذه العملية." },
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 10.sp,
+                                    lineHeight = 15.sp,
                                 ),
-                                color = Color.White,
+                                color = Color(0xFFE2E8F0),
                             )
                         }
                     }
                 }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Action Buttons Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .then(
-                            if (isBuilding || isInstallingTools) {
-                                Modifier.background(IndigoDeep)
-                            } else {
-                                Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
-                            }
-                        )
-                        .clickable(enabled = !isBuilding && !isInstallingTools) {
-                            startGradleBuild()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                                        val btnTitle = when {
-                        isBuilding -> "جاري البناء..."
-                        isFlutter && missingTools.isNotEmpty() -> "تحميل Flutter SDK والأدوات وبدء البناء"
-                        !isFlutter && missingTools.isNotEmpty() -> "تثبيت الأدوات وبدء البناء"
-                        isFlutter -> "بدء بناء Flutter الآن (flutter build apk)"
-                        else -> "بدء بناء Gradle الآن"
-                    }
-                    Text(
-                        text = btnTitle,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.5.sp,
-                        ),
-                        color = Color.White,
-                    )
-                }
 
                 Box(
                     modifier = Modifier
-                        .width(90.dp)
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(IndigoDeep)
-                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
-                        .clickable(enabled = !isBuilding && !isInstallingTools) {
-                            checkToolsEnvironment()
-                        },
+                        .border(1.dp, GlassStrokeTop, RoundedCornerShape(8.dp))
+                        .clickable { selectedSheetStep = null },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "فحص البيئة",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Muted,
+                        text = "إغلاق التفاصيل",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Ink,
                     )
                 }
             }
-            Spacer(Modifier.height(4.dp))
         }
     }
-}
 }
