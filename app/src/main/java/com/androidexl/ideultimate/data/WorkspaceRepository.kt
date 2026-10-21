@@ -3653,7 +3653,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
             // android/settings.gradle
             val androidSettingsFile = File(androidDir, "settings.gradle")
-            if (!androidSettingsFile.exists()) {
+            if (!androidSettingsFile.exists() || androidSettingsFile.readText().contains("\${flutterSdkPath}")) {
                 androidSettingsFile.writeText(
                     """pluginManagement {
     def flutterSdkPath = {
@@ -3666,7 +3666,7 @@ class _MyHomePageState extends State<MyHomePage> {
         return sdk
     }()
 
-    includeBuild("\${"$"}{flutterSdkPath}/packages/flutter_tools/gradle")
+    includeBuild("\$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
         google()
@@ -3700,7 +3700,7 @@ include ":app"
 
 rootProject.buildDir = "../build"
 subprojects {
-    project.buildDir = "\${"$"}{rootProject.buildDir}/\${"$"}{project.name}"
+    project.buildDir = "\$rootProject.buildDir/\$project.name"
     project.evaluationDependsOn(":app")
 }
 
@@ -3781,8 +3781,8 @@ android {
 
     defaultConfig {
         applicationId = "${project.packageName}"
-        minSdk = 24
-        targetSdk = 35
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
     }
