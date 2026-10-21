@@ -93,6 +93,9 @@ import com.androidexl.ideultimate.ui.components.ProjectIconView
 import com.androidexl.ideultimate.ui.components.languageColor
 import com.androidexl.ideultimate.ui.components.savePickedProjectIcon
 import com.androidexl.ideultimate.ui.theme.Cyan
+import com.androidexl.ideultimate.ui.theme.GlassStrokeTop
+import com.androidexl.ideultimate.ui.theme.IndigoDeep
+import com.androidexl.ideultimate.ui.theme.Midnight
 import com.androidexl.ideultimate.ui.theme.Fuchsia
 import com.androidexl.ideultimate.ui.theme.Ink
 import com.androidexl.ideultimate.ui.theme.JetBrainsMono

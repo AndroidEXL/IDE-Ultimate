@@ -195,11 +195,11 @@ fun IdeTerminalGradleBuildSheet(
     }
 
     fun checkToolsEnvironment() {
-        isCheckingEnv = true
+        buildMgr.isCheckingEnv = true
         coroutineScope.launch(Dispatchers.IO) {
             val ubuntuInstalled = Installer.looksInstalled(context) || Installer.isInstalled(context)
             withContext(Dispatchers.Main) {
-                isUbuntuReady = ubuntuInstalled
+                buildMgr.isUbuntuReady = ubuntuInstalled
             }
 
             if (!ubuntuInstalled) {
