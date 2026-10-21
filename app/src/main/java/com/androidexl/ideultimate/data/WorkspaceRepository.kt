@@ -3666,7 +3666,7 @@ class _MyHomePageState extends State<MyHomePage> {
         return sdk
     }()
 
-    includeBuild("\$flutterSdkPath/packages/flutter_tools/gradle")
+    includeBuild("\${'$'}flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
         google()
@@ -3700,7 +3700,7 @@ include ":app"
 
 rootProject.buildDir = "../build"
 subprojects {
-    project.buildDir = "\$rootProject.buildDir/\$project.name"
+    project.buildDir = "\${'$'}rootProject.buildDir/\${'$'}project.name"
     project.evaluationDependsOn(":app")
 }
 
