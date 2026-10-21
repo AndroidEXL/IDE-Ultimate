@@ -105,13 +105,23 @@ fun IdeTerminalGradleBuildSheet(
     val repository = remember { WorkspaceRepository(context) }
     var isBuilding by remember { mutableStateOf(false) }
     var isInstallingTools by remember { mutableStateOf(false) }
+    var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var activeProcess by remember { mutableStateOf<Process?>(null) }
+
+    fun cancelAndClose() {
+        runCatching {
+            activeProcess?.destroyForcibly()
+        }
+        activeProcess = null
+        activeJob?.cancel()
+        activeJob = null
+        isBuilding = false
+        isInstallingTools = false
+        onDismiss()
+    }
 
     BackHandler(enabled = true) {
-        if (!isBuilding && !isInstallingTools) {
-            onDismiss()
-        } else {
-            Toast.makeText(context, "يرجى الانتظار حتى اكتمال العملية الحالية...", Toast.LENGTH_SHORT).show()
-        }
+        cancelAndClose()
     }
 
         val isFlutter = (project.language == com.androidexl.ideultimate.data.ProjectLanguage.FLUTTER)
@@ -226,7 +236,7 @@ fun IdeTerminalGradleBuildSheet(
         appendLog(if (isFlutter) "\n=== بدء تثبيت بيئة Flutter SDK و Android Tools في Ubuntu ===" else "\n=== بدء تثبيت بيئة وأدوات Android Tools في Ubuntu ===")
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
-        coroutineScope.launch(Dispatchers.IO) {
+        activeJob = coroutineScope.launch(Dispatchers.IO) {
             val installScript = listOf(
                 "export DEBIAN_FRONTEND=noninteractive",
                 "echo '===> تنظيف حزم Gradle و Kotlin القديمة من apt...'",
@@ -297,6 +307,7 @@ fun IdeTerminalGradleBuildSheet(
                 if (isFlutter) "git config --global --add safe.directory /root/flutter 2>/dev/null || true" else "echo ''",
                 if (isFlutter) "if [ ! -d /root/flutter ]; then echo '===> تحميل حزمة Flutter SDK من المستودع الرسمي (stable branch)...'; git clone -b stable --depth 1 https://github.com/flutter/flutter.git /root/flutter 2>&1 || true; fi" else "echo ''",
                 if (isFlutter) "export PATH=/root/flutter/bin:\$PATH; echo 'export PATH=/root/flutter/bin:\$PATH' >> /root/.bashrc" else "echo ''",
+                if (isFlutter) "if [ -f pubspec.yaml ] && grep -q \"^name:[[:space:]]*flutter[[:space:]]*$\" pubspec.yaml; then sed -i \"s/^name:[[:space:]]*flutter[[:space:]]*$/name: flutter_app/\" pubspec.yaml; fi" else "echo ''",
                 if (isFlutter) "echo '===> ضبط إعدادات Flutter وتحديد مسار Android SDK...'; /root/flutter/bin/flutter config --no-analytics 2>/dev/null || true; /root/flutter/bin/flutter config --android-sdk /root/android-sdk 2>/dev/null || true" else "echo ''",
                 if (isFlutter) "echo '===> الموافقة على تراخيص Android SDK...'; yes | /root/flutter/bin/flutter doctor --android-licenses 2>/dev/null || true" else "echo ''",
                 if (isFlutter) "echo '===> تنزيل وتخزين محرك ومكونات Dart و Flutter مسبقاً (precache)...'; /root/flutter/bin/flutter precache --android 2>&1 || true" else "echo ''",
@@ -312,7 +323,11 @@ fun IdeTerminalGradleBuildSheet(
                         appendLog(line)
                     }
                 },
+                onProcessStarted = { proc ->
+                    activeProcess = proc
+                },
             )
+            activeProcess = null
 
             withContext(Dispatchers.Main) {
                 isInstallingTools = false
@@ -344,7 +359,7 @@ fun IdeTerminalGradleBuildSheet(
         appendLog(if (isFlutter) "=== الأمر: flutter build apk --debug ===" else "=== الأمر: ./gradlew assembleDebug --build-cache ===")
         appendLog("==========================================")
 
-        coroutineScope.launch(Dispatchers.IO) {
+        activeJob = coroutineScope.launch(Dispatchers.IO) {
             val projectRoot = repository.ensureProjectFullRoot(project)
             val buildScript = listOf(
                 "export HOME=/root",
@@ -631,6 +646,7 @@ fun IdeTerminalGradleBuildSheet(
                 "fi",
                 if (isFlutter) "echo '===> مشروع Flutter: التحقق من حزم pubspec.yaml وأمر flutter build...'" else "echo ''",
                 if (isFlutter) "export PATH=/root/flutter/bin:\$PATH" else "echo ''",
+                if (isFlutter) "if [ -f pubspec.yaml ] && grep -q \"^name:[[:space:]]*flutter[[:space:]]*$\" pubspec.yaml; then sed -i \"s/^name:[[:space:]]*flutter[[:space:]]*$/name: flutter_app/\" pubspec.yaml; fi" else "echo ''",
                 if (isFlutter) "if command -v flutter >/dev/null 2>&1; then echo '===> flutter pub get...'; flutter pub get 2>&1; echo '===> flutter build apk --debug...'; flutter build apk --debug 2>&1; exit \$?; fi" else "echo ''",
                 "TASK_CMD=\":app:assembleDebug\"",
                 "if [ ! -d ./app ]; then",
@@ -659,7 +675,11 @@ fun IdeTerminalGradleBuildSheet(
                         appendLog(line)
                     }
                 },
+                onProcessStarted = { proc ->
+                    activeProcess = proc
+                },
             )
+            activeProcess = null
 
             withContext(Dispatchers.Main) {
                 isBuilding = false
@@ -762,8 +782,7 @@ fun IdeTerminalGradleBuildSheet(
                 }
 
                 IconButton(
-                    onClick = onDismiss,
-                    enabled = !isBuilding && !isInstallingTools,
+                    onClick = { cancelAndClose() },
                 ) {
                     Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = Muted)
                 }

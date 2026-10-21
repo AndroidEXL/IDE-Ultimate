@@ -3542,7 +3542,7 @@ $activitiesXml
         if (project.language == ProjectLanguage.FLUTTER) {
             val pubspecFile = File(root, "pubspec.yaml")
             if (!pubspecFile.exists()) {
-                val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                val dartSlug = ProjectZipExporter.dartPackageSlug(project.name)
                 pubspecFile.writeText(
                     """name: $dartSlug
 description: "${project.name} — built with IDE Ultimate"
@@ -3891,7 +3891,7 @@ kotlin.jvm.target.validation.mode=warning
                 if (project.language == ProjectLanguage.FLUTTER) {
                     val pubspecFile = File(projDir, "pubspec.yaml")
                     if (!pubspecFile.exists()) {
-                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        val dartSlug = ProjectZipExporter.dartPackageSlug(project.name)
                         pubspecFile.writeText(
                             """name: $dartSlug
 description: "${project.name} — built with IDE Ultimate"
@@ -4193,7 +4193,7 @@ flutter:
                 if (project.language == ProjectLanguage.FLUTTER) {
                     val pubspecFile = File(projDir, "pubspec.yaml")
                     if (!pubspecFile.exists()) {
-                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        val dartSlug = ProjectZipExporter.dartPackageSlug(project.name)
                         pubspecFile.writeText(
                             """name: $dartSlug
 description: "${project.name} — built with IDE Ultimate"
@@ -4463,7 +4463,7 @@ flutter:
                 if (project.language == ProjectLanguage.FLUTTER) {
                     val pubspecFile = File(projDir, "pubspec.yaml")
                     if (!pubspecFile.exists()) {
-                        val dartSlug = project.name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifBlank { "my_flutter_app" }
+                        val dartSlug = ProjectZipExporter.dartPackageSlug(project.name)
                         pubspecFile.writeText(
                             """name: $dartSlug
 description: "${project.name} — built with IDE Ultimate"

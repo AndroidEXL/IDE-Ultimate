@@ -556,7 +556,8 @@ object TerminalManager {
     fun execInUbuntu(
         app: Context, command: String, timeoutSec: Long = 600L,
         extraBind: Pair<String, String>? = null,
-        onOutputLine: ((String) -> Unit)? = null
+        onOutputLine: ((String) -> Unit)? = null,
+        onProcessStarted: ((Process) -> Unit)? = null
     ): Pair<Int, String> {
         return try {
             val rootfs = Installer.rootfsDir(app)
@@ -607,6 +608,7 @@ object TerminalManager {
             }
 
             val proc = pb.start()
+            onProcessStarted?.invoke(proc)
             val sb = StringBuilder()
             val reader = Thread {
                 runCatching {

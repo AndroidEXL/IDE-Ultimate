@@ -69,6 +69,17 @@ class ProjectZipExporterTest {
         assertTrue(flutterFiles.keys.any { it.endsWith("lib/main.dart") })
         val pubspec = flutterFiles.entries.first { it.key.endsWith("pubspec.yaml") }.value
         assertTrue(pubspec.contains("version: 1.5.0+4"))
+        assertTrue(pubspec.contains("name: fluttershop"))
+    }
+
+    @Test
+    fun dartPackageSlugNeverCollidesWithFlutterOrDigits() {
+        assertEquals("flutter_app", ProjectZipExporter.dartPackageSlug("flutter"))
+        assertEquals("flutter_app", ProjectZipExporter.dartPackageSlug("Flutter"))
+        assertEquals("flutter_test_app", ProjectZipExporter.dartPackageSlug("flutter_test"))
+        assertEquals("app_123_test", ProjectZipExporter.dartPackageSlug("123 test"))
+        assertEquals("my_flutter_app", ProjectZipExporter.dartPackageSlug(""))
+        assertEquals("my_app", ProjectZipExporter.dartPackageSlug("My App!"))
     }
 
     @Test
