@@ -3538,7 +3538,7 @@ $activitiesXml
     fun ensureProjectFullRoot(project: WorkspaceItem): File {
         val root = File(appContext.filesDir, "project_full/${project.id}").apply { mkdirs() }
         val pkgPath = project.packageName.replace('.', '/')
-                // 0. If Flutter project, ensure complete Flutter & Android wrapper scaffolding exists
+                // 0. If Flutter project, ensure complete official Flutter project structure exists
         if (project.language == ProjectLanguage.FLUTTER) {
             val pubspecFile = File(root, "pubspec.yaml")
             if (!pubspecFile.exists()) {
@@ -3556,12 +3556,76 @@ dependencies:
   flutter:
     sdk: flutter
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
 flutter:
   uses-material-design: true
 """,
                     Charsets.UTF_8,
                 )
             }
+
+            val analysisOptionsFile = File(root, "analysis_options.yaml")
+            if (!analysisOptionsFile.exists()) {
+                analysisOptionsFile.writeText(
+                    """include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+""",
+                    Charsets.UTF_8,
+                )
+            }
+
+            val gitignoreFile = File(root, ".gitignore")
+            if (!gitignoreFile.exists()) {
+                gitignoreFile.writeText(
+                    """# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Android related
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+""",
+                    Charsets.UTF_8,
+                )
+            }
+
             val mainDartFile = File(root, "lib/main.dart")
             if (!mainDartFile.exists()) {
                 mainDartFile.parentFile?.mkdirs()
@@ -3651,20 +3715,24 @@ class _MyHomePageState extends State<MyHomePage> {
             val androidDir = File(root, "android").apply { mkdirs() }
             val androidAppDir = File(androidDir, "app").apply { mkdirs() }
 
-            // android/settings.gradle
-            val androidSettingsFile = File(androidDir, "settings.gradle")
-            if (!androidSettingsFile.exists() || androidSettingsFile.readText().contains("\${flutterSdkPath}")) {
-                androidSettingsFile.writeText(
+            // android/settings.gradle.kts
+            val androidSettingsKts = File(androidDir, "settings.gradle.kts")
+            val androidSettingsOld = File(androidDir, "settings.gradle")
+            if (androidSettingsOld.exists() && !androidSettingsKts.exists()) {
+                androidSettingsOld.delete()
+            }
+            if (!androidSettingsKts.exists() || androidSettingsKts.readText().contains("\${"\$"}flutterSdkPath")) {
+                androidSettingsKts.writeText(
                     """pluginManagement {
-    def flutterSdkPath = {
-        def properties = new Properties()
-        File localProperties = file("local.properties")
-        if (localProperties.exists()) {
-            localProperties.withInputStream { properties.load(it) }
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            val localProperties = file("local.properties")
+            if (localProperties.exists()) {
+                localProperties.inputStream().use { properties.load(it) }
+            }
+            properties.getProperty("flutter.sdk") ?: System.getenv("FLUTTER_ROOT") ?: "/root/flutter"
         }
-        def sdk = properties.getProperty("flutter.sdk") ?: System.getenv("FLUTTER_ROOT") ?: "/root/flutter"
-        return sdk
-    }()
 
     includeBuild("\${'$'}flutterSdkPath/packages/flutter_tools/gradle")
 
@@ -3676,21 +3744,25 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 plugins {
-    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.3.2" apply false
-    id "org.jetbrains.kotlin.android" version "2.0.0" apply false
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "8.3.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.0" apply false
 }
 
-include ":app"
+include(":app")
 """,
                     Charsets.UTF_8,
                 )
             }
 
-            // android/build.gradle
-            val androidRootBuildFile = File(androidDir, "build.gradle")
-            if (!androidRootBuildFile.exists()) {
-                androidRootBuildFile.writeText(
+            // android/build.gradle.kts
+            val androidRootBuildKts = File(androidDir, "build.gradle.kts")
+            val androidRootBuildOld = File(androidDir, "build.gradle")
+            if (androidRootBuildOld.exists() && !androidRootBuildKts.exists()) {
+                androidRootBuildOld.delete()
+            }
+            if (!androidRootBuildKts.exists()) {
+                androidRootBuildKts.writeText(
                     """allprojects {
     repositories {
         google()
@@ -3698,14 +3770,22 @@ include ":app"
     }
 }
 
-rootProject.buildDir = "../build"
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
 subprojects {
-    project.buildDir = "\${'$'}rootProject.buildDir/\${'$'}project.name"
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 
-tasks.register("clean", Delete) {
-    delete rootProject.buildDir
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
 }
 """,
                     Charsets.UTF_8,
@@ -3716,9 +3796,11 @@ tasks.register("clean", Delete) {
             val androidProps = File(androidDir, "gradle.properties")
             if (!androidProps.exists()) {
                 androidProps.writeText(
-                    """org.gradle.jvmargs=-Xmx2048M
+                    """org.gradle.jvmargs=-Xmx2048M -XX:MaxMetaspaceSize=1024M -Dfile.encoding=UTF-8
 android.useAndroidX=true
 android.enableJetifier=true
+android.newDsl=false
+android.builtInKotlin=false
 """,
                     Charsets.UTF_8,
                 )
@@ -3733,37 +3815,26 @@ flutter.sdk=/root/flutter
 flutter.buildMode=debug
 flutter.versionName=${project.versionName}
 flutter.versionCode=${project.versionCode}
+flutter.compileSdkVersion=35
+flutter.minSdkVersion=24
+flutter.targetSdkVersion=35
 """,
                     Charsets.UTF_8,
                 )
             }
 
-            // android/app/build.gradle
-            val flutterAppBuildGradle = File(androidAppDir, "build.gradle")
-            if (!flutterAppBuildGradle.exists()) {
-                flutterAppBuildGradle.writeText(
+            // android/app/build.gradle.kts
+            val flutterAppBuildKts = File(androidAppDir, "build.gradle.kts")
+            val flutterAppBuildOld = File(androidAppDir, "build.gradle")
+            if (flutterAppBuildOld.exists() && !flutterAppBuildKts.exists()) {
+                flutterAppBuildOld.delete()
+            }
+            if (!flutterAppBuildKts.exists()) {
+                flutterAppBuildKts.writeText(
                     """plugins {
-    id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withInputStream { properties ->
-        localProperties.load(properties)
-    }
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-if (flutterVersionCode == null) {
-    flutterVersionCode = '${project.versionCode}'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
-if (flutterVersionName == null) {
-    flutterVersionName = '${project.versionName}'
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
@@ -3776,26 +3847,26 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "${project.packageName}"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutterVersionCode.toInteger()
-        versionName = flutterVersionName
+        minSdk = 24
+        targetSdk = 35
+        versionCode = ${project.versionCode}
+        versionName = "${project.versionName}"
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
 
 flutter {
-    source = '../..'
+    source = "../.."
 }
 """,
                     Charsets.UTF_8,
@@ -3816,6 +3887,7 @@ flutter {
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -3833,6 +3905,12 @@ flutter {
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
 </manifest>
 """,
                     Charsets.UTF_8,
@@ -3844,6 +3922,25 @@ flutter {
             if (!flutterStyles.exists()) {
                 flutterStyles.parentFile?.mkdirs()
                 flutterStyles.writeText(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>
+""",
+                    Charsets.UTF_8,
+                )
+            }
+
+            // android/app/src/main/res/values-night/styles.xml
+            val flutterStylesNight = File(androidAppDir, "src/main/res/values-night/styles.xml")
+            if (!flutterStylesNight.exists()) {
+                flutterStylesNight.parentFile?.mkdirs()
+                flutterStylesNight.writeText(
                     """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
@@ -3865,7 +3962,21 @@ flutter {
                 flutterLaunchBg.writeText(
                     """<?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/black" />
+    <item android:drawable="@android:color/white" />
+</layer-list>
+""",
+                    Charsets.UTF_8,
+                )
+            }
+
+            // android/app/src/main/res/drawable-v21/launch_background.xml
+            val flutterLaunchBgV21 = File(androidAppDir, "src/main/res/drawable-v21/launch_background.xml")
+            if (!flutterLaunchBgV21.exists()) {
+                flutterLaunchBgV21.parentFile?.mkdirs()
+                flutterLaunchBgV21.writeText(
+                    """<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="?android:colorBackground" />
 </layer-list>
 """,
                     Charsets.UTF_8,
@@ -3881,13 +3992,37 @@ flutter {
 
 import io.flutter.embedding.android.FlutterActivity
 
-class MainActivity: FlutterActivity()
+class MainActivity : FlutterActivity()
 """,
                     Charsets.UTF_8,
                 )
             }
-        }
 
+            // Vendor standard Gradle Wrapper files in android/ if missing
+            runCatching {
+                val gradlewTarget = File(androidDir, "gradlew")
+                if (!gradlewTarget.exists()) {
+                    appContext.assets.open("gradle-wrapper/gradlew").use { input ->
+                        gradlewTarget.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    gradlewTarget.setExecutable(true, false)
+                }
+                val wrapperJarTarget = File(androidDir, "gradle/wrapper/gradle-wrapper.jar")
+                if (!wrapperJarTarget.exists()) {
+                    wrapperJarTarget.parentFile?.mkdirs()
+                    appContext.assets.open("gradle-wrapper/gradle/wrapper/gradle-wrapper.jar").use { input ->
+                        wrapperJarTarget.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+                val wrapperPropsTarget = File(androidDir, "gradle/wrapper/gradle-wrapper.properties")
+                if (!wrapperPropsTarget.exists()) {
+                    wrapperPropsTarget.parentFile?.mkdirs()
+                    appContext.assets.open("gradle-wrapper/gradle/wrapper/gradle-wrapper.properties").use { input ->
+                        wrapperPropsTarget.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
+        }
 
         // 1. Sync AndroidManifest.xml
         val manifestFile = File(root, "app/src/main/AndroidManifest.xml")
