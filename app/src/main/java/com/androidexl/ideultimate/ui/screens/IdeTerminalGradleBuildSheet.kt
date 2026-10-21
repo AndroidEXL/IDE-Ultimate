@@ -197,6 +197,7 @@ fun IdeTerminalGradleBuildSheet(
     fun checkToolsEnvironment() {
         buildMgr.isCheckingEnv = true
         coroutineScope.launch(Dispatchers.IO) {
+            val projectRoot = repository.ensureProjectFullRoot(project)
             val ubuntuInstalled = Installer.looksInstalled(context) || Installer.isInstalled(context)
             withContext(Dispatchers.Main) {
                 buildMgr.isUbuntuReady = ubuntuInstalled
@@ -216,23 +217,28 @@ fun IdeTerminalGradleBuildSheet(
                 listOf(
                     "Flutter SDK" to "command -v flutter || [ -f /root/flutter/bin/flutter ]",
                     "Dart SDK" to "command -v dart || [ -f /root/flutter/bin/cache/dart-sdk/bin/dart ]",
-                    "OpenJDK 17" to "java -version",
+                    "OpenJDK 17" to "command -v java || [ -f /usr/bin/java ]",
                     "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
-                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
+                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2 || [ -f /root/android-arm-tools/build-tools/aapt2 ]",
                 )
             } else {
                 listOf(
-                    "OpenJDK 17" to "java -version",
+                    "OpenJDK 17" to "command -v java || [ -f /usr/bin/java ]",
                     "Android SDK (Platform 34/35)" to "[ -d /root/android-sdk/platforms ] || [ -d /root/Android/Sdk/platforms ]",
-                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2",
+                    "Android Build Tools (aapt2/zipalign)" to "[ -d /root/android-sdk/build-tools ] || [ -d /root/Android/Sdk/build-tools ] || command -v aapt2 || [ -f /root/android-arm-tools/build-tools/aapt2 ]",
                     "Commandline Tools & sdkmanager" to "command -v sdkmanager || [ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ] || [ -f /root/Android/Sdk/cmdline-tools/latest/bin/sdkmanager ]",
-                    "Gradle Engine & Wrapper" to "command -v gradle || [ -f /root/.gradle/wrapper/dists ] || [ -f /root/project_build/gradlew ]",
+                    "Gradle Engine & Wrapper" to "command -v gradle || [ -f /usr/bin/gradle ] || [ -d /root/.gradle/wrapper/dists ] || [ -f /root/project_build/gradlew ] || [ -f /root/project_build/gradle/wrapper/gradle-wrapper.jar ] || [ -f /root/gradle-wrapper/gradlew ]",
                 )
             }
 
             val results = mutableListOf<AndroidToolStatus>()
             checks.forEach { (name, cmd) ->
-                val (rc, _) = TerminalManager.execInUbuntu(context, cmd, timeoutSec = 15)
+                val (rc, _) = TerminalManager.execInUbuntu(
+                    context,
+                    cmd,
+                    timeoutSec = 15,
+                    extraBind = projectRoot.absolutePath to "/root/project_build",
+                )
                 val ok = (rc == 0)
                 val desc = when (name) {
                     "Flutter SDK" -> "محرك Flutter الرسمي لتطوير وبناء التطبيقات"
@@ -281,6 +287,13 @@ fun IdeTerminalGradleBuildSheet(
                 "mkdir -p /root/android-sdk/cmdline-tools",
                 "mkdir -p /root/Android/Sdk/cmdline-tools",
                 "mkdir -p /root/.gradle/caches",
+                "mkdir -p /root/.gradle/wrapper/dists",
+                "if [ -d /root/project_build ] && [ -f /root/project_build/gradlew ]; then",
+                "    chmod +x /root/project_build/gradlew 2>/dev/null || true",
+                "    mkdir -p /root/gradle-wrapper",
+                "    cp -f /root/project_build/gradlew /root/gradle-wrapper/gradlew 2>/dev/null || true",
+                "    chmod +x /root/gradle-wrapper/gradlew 2>/dev/null || true",
+                "fi",
                 "cd /root/android-sdk/cmdline-tools",
                 "if [ ! -d latest ]; then",
                 "    echo '===> تحميل وتثبيت Google Android Commandline Tools الرسمي...'",
@@ -346,10 +359,12 @@ fun IdeTerminalGradleBuildSheet(
                 if (isFlutter) "echo '✓ اكتمل تحميل وتثبيت بيئة Flutter SDK بنجاح!'" else "echo ''",
             ).joinToString("\n")
 
+            val projectRoot = repository.ensureProjectFullRoot(project)
             val (rc, output) = TerminalManager.execInUbuntu(
                 context,
                 installScript,
                 timeoutSec = 1200,
+                extraBind = projectRoot.absolutePath to "/root/project_build",
                 onOutputLine = { line ->
                     coroutineScope.launch(Dispatchers.Main) {
                         appendLog(line)
