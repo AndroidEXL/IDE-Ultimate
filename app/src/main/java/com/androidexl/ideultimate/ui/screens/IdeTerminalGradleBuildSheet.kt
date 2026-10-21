@@ -395,7 +395,7 @@ fun IdeTerminalGradleBuildSheet(
         appendLog("ملاحظة: سيتم تنزيل الحزم وتخزين الكاش في الذاكرة حتى لا تعاد مستقبلاً.")
 
         activeJob = coroutineScope.launch(Dispatchers.IO) {
-            listOf(
+            val installScript = listOf(
                 "export DEBIAN_FRONTEND=noninteractive",
                 "echo '===> تنظيف حزم Gradle و Kotlin القديمة من apt...'",
                 "apt-get remove -y gradle kotlin ant 2>/dev/null || true",
@@ -521,7 +521,7 @@ fun IdeTerminalGradleBuildSheet(
 
         activeJob = coroutineScope.launch(Dispatchers.IO) {
             val projectRoot = repository.ensureProjectFullRoot(project)
-            listOf(
+            val buildScript = listOf(
                 "export HOME=/root",
                 "export GRADLE_USER_HOME=/root/.gradle",
                 "export ANDROID_HOME=/root/android-sdk",
@@ -1341,8 +1341,10 @@ fun IdeTerminalGradleBuildSheet(
                         if (isBuilding) DeepNavy else Brush.horizontalGradient(listOf(Color(0xFF0284C7), Cyan))
                     )
                     .border(1.dp, Cyan.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .clickable(enabled = !isBuilding && !isInstallingTools) {
-                        startGradleBuild()
+                    .clickable {
+                        if (!isBuilding && !isInstallingTools) {
+                            startGradleBuild()
+                        }
                     },
                 contentAlignment = Alignment.Center,
             ) {
