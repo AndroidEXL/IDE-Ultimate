@@ -58,10 +58,8 @@ object TerminalBuildManager {
         val currentRaw = rawLogOutput
         val updatedRaw = if (currentRaw.isBlank()) line else "$currentRaw\n$line"
         rawLogOutput = if (updatedRaw.length > MAX_RAW_LOG_CHARS) {
-            val cutIndex = updatedRaw.indexOf('
-', updatedRaw.length - TRIM_RAW_LOG_CHARS)
-            if (cutIndex != -1) "[... تم اقتطاع السجلات القديمة تلقائياً لتسريع الأداء وتفادي ثقل الصفحة ...]
-" + updatedRaw.substring(cutIndex + 1)
+            val cutIndex = updatedRaw.indexOf('\n', updatedRaw.length - TRIM_RAW_LOG_CHARS)
+            if (cutIndex != -1) "[... تم اقتطاع السجلات القديمة تلقائياً لتسريع الأداء وتفادي ثقل الصفحة ...]\n" + updatedRaw.substring(cutIndex + 1)
             else updatedRaw.takeLast(TRIM_RAW_LOG_CHARS)
         } else {
             updatedRaw
