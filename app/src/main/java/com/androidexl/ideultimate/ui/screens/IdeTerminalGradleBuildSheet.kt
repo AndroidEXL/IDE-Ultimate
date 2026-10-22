@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,6 +68,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
+import com.androidexl.ideultimate.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -772,7 +775,9 @@ fun IdeTerminalGradleBuildSheet(
     }
 
     LaunchedEffect(rawLogOutput) {
-        terminalScrollState.animateScrollTo(terminalScrollState.maxValue)
+        if (!terminalScrollState.isScrollInProgress) {
+            terminalScrollState.scrollTo(terminalScrollState.maxValue)
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -831,9 +836,10 @@ fun IdeTerminalGradleBuildSheet(
                     onClick = { copyLogToClipboard(rawLogOutput) },
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Refresh,
+                        painter = painterResource(R.drawable.ic_content_copy),
                         contentDescription = "نسخ السجل",
                         tint = Cyan,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
                 IconButton(onClick = { onBack(); onDismiss() }) {
@@ -1219,21 +1225,25 @@ fun IdeTerminalGradleBuildSheet(
                             .border(1.dp, GlassStrokeTop, RoundedCornerShape(12.dp))
                             .padding(10.dp),
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(terminalScrollState)
-                                .horizontalScroll(rememberScrollState()),
+                        SelectionContainer(
+                            modifier = Modifier.fillMaxSize(),
                         ) {
-                            Text(
-                                text = rawLogOutput.ifBlank { "جاهز لبدء البناء... ستظهر مخرجات الطرفية الكاملة هنا مباشرة." },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    lineHeight = 15.sp,
-                                ),
-                                color = Color(0xFFE2E8F0),
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(terminalScrollState)
+                                    .horizontalScroll(rememberScrollState()),
+                            ) {
+                                Text(
+                                    text = rawLogOutput.ifBlank { "جاهز لبدء البناء... ستظهر مخرجات الطرفية الكاملة هنا مباشرة." },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 10.sp,
+                                        lineHeight = 15.sp,
+                                    ),
+                                    color = Color(0xFFE2E8F0),
+                                )
+                            }
                         }
                     }
                 }
@@ -1463,21 +1473,25 @@ fun IdeTerminalGradleBuildSheet(
                             .border(1.dp, IndigoDeep, RoundedCornerShape(10.dp))
                             .padding(10.dp),
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .horizontalScroll(rememberScrollState()),
+                        SelectionContainer(
+                            modifier = Modifier.fillMaxSize(),
                         ) {
-                            Text(
-                                text = activeStep.logs.joinToString("\n").ifBlank { "لا توجد مخرجات تفصيلية مسجلة لهذه العملية." },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    lineHeight = 15.sp,
-                                ),
-                                color = Color(0xFFE2E8F0),
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .horizontalScroll(rememberScrollState()),
+                            ) {
+                                Text(
+                                    text = activeStep.logs.joinToString("\n").ifBlank { "لا توجد مخرجات تفصيلية مسجلة لهذه العملية." },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = JetBrainsMono,
+                                        fontSize = 10.sp,
+                                        lineHeight = 15.sp,
+                                    ),
+                                    color = Color(0xFFE2E8F0),
+                                )
+                            }
                         }
                     }
                 }

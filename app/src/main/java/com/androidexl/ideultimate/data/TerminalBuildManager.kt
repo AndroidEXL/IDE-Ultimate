@@ -50,8 +50,22 @@ object TerminalBuildManager {
 
     var activeStepId: String? = null
 
+    private const val MAX_RAW_LOG_CHARS = 300_000
+    private const val TRIM_RAW_LOG_CHARS = 240_000
+    private const val MAX_TASK_LOG_LINES = 1_500
+
     fun appendLog(line: String, isFlutter: Boolean) {
-        rawLogOutput = if (rawLogOutput.isBlank()) line else "$rawLogOutput\n$line"
+        val currentRaw = rawLogOutput
+        val updatedRaw = if (currentRaw.isBlank()) line else "$currentRaw\n$line"
+        rawLogOutput = if (updatedRaw.length > MAX_RAW_LOG_CHARS) {
+            val cutIndex = updatedRaw.indexOf('
+', updatedRaw.length - TRIM_RAW_LOG_CHARS)
+            if (cutIndex != -1) "[... تم اقتطاع السجلات القديمة تلقائياً لتسريع الأداء وتفادي ثقل الصفحة ...]
+" + updatedRaw.substring(cutIndex + 1)
+            else updatedRaw.takeLast(TRIM_RAW_LOG_CHARS)
+        } else {
+            updatedRaw
+        }
 
         val trimmed = line.trim()
         val gradleTaskPattern = Pattern.compile("^>\\s*Task\\s+([:\\w\\-\\.]+)(?:\\s+([\\w\\-]+))?")
@@ -100,9 +114,14 @@ object TerminalBuildManager {
                     } else {
                         stepStatus
                     }
+                    val nextLogs = if (item.logs.size >= MAX_TASK_LOG_LINES) {
+                        item.logs.drop(item.logs.size - MAX_TASK_LOG_LINES + 1) + line
+                    } else {
+                        item.logs + line
+                    }
                     buildSteps[existingIdx] = item.copy(
                         status = updatedStatus,
-                        logs = item.logs + line,
+                        logs = nextLogs,
                     )
                     activeStepId = item.id
                 } else {
@@ -172,9 +191,14 @@ object TerminalBuildManager {
                                      trimmed.contains("error:", ignoreCase = true) ||
                                      trimmed.contains("Android resource linking failed", ignoreCase = true)
                     val newStatus = if (markFailed) BuildTaskStepStatus.FAILED else currentStep.status
+                    val nextLogs = if (currentStep.logs.size >= MAX_TASK_LOG_LINES) {
+                        currentStep.logs.drop(currentStep.logs.size - MAX_TASK_LOG_LINES + 1) + line
+                    } else {
+                        currentStep.logs + line
+                    }
                     buildSteps[targetIdx] = currentStep.copy(
                         status = newStatus,
-                        logs = currentStep.logs + line,
+                        logs = nextLogs,
                     )
                 }
             }
