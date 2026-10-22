@@ -4236,19 +4236,41 @@ kotlin.jvm.target.validation.mode=warning
             }
         }
 
-        // Sync any existing external files from /storage/emulated/0/.IDE Ultimate/<project>
+        // Two-way synchronization between external /storage/emulated/0/.IDE Ultimate/<project> and project_full
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
                 if (projDir.exists() && projDir.isDirectory) {
+                    // 1. If a file was renamed or deleted in external storage, delete orphaned counterpart in root
+                    val externalRelPaths = projDir.walkTopDown()
+                        .filter { it.isFile && !it.name.startsWith(".ide_") }
+                        .map { it.relativeTo(projDir).path.replace('\\', '/') }
+                        .toSet()
+
+                    // Remove files in root that existed in source directories (app/src, res, lib) but no longer exist externally
+                    root.walkTopDown().filter { it.isFile }.forEach { rf ->
+                        val rRel = rf.relativeTo(root).path.replace('\\', '/')
+                        if (!rRel.startsWith("build") && !rRel.startsWith(".gradle") && !rRel.startsWith("gradle/") &&
+                            rRel != "gradlew" && rRel != "gradlew.bat" && !rRel.startsWith(".ide_") &&
+                            !externalRelPaths.contains(rRel) &&
+                            File(projDir, rRel.substringBefore('/')).exists()) {
+                            // Only clean if the top folder exists in external storage but file itself was deleted/renamed
+                            rf.delete()
+                        }
+                    }
+
+                    // 2. Copy/update all files from external disk to root (always overwrite if newer or modified)
                     projDir.walkTopDown().forEach { f ->
                         val rel = f.relativeTo(projDir).path
                         if (rel.isNotEmpty() && !rel.startsWith(".ide_")) {
                             val dst = File(root, rel)
                             if (f.isDirectory) {
                                 dst.mkdirs()
-                            } else if (!dst.exists()) {
-                                dst.parentFile?.mkdirs()
-                                f.copyTo(dst, overwrite = false)
+                            } else {
+                                if (!dst.exists() || dst.lastModified() != f.lastModified() || dst.length() != f.length()) {
+                                    dst.parentFile?.mkdirs()
+                                    f.copyTo(dst, overwrite = true)
+                                    dst.setLastModified(f.lastModified())
+                                }
                             }
                         }
                     }
@@ -4271,21 +4293,8 @@ kotlin.jvm.target.validation.mode=warning
         if (!root.exists() || !root.isDirectory) return
 
         runCatching {
-            // First sync any modified source/resource changes back to /storage/emulated/0/.IDE Ultimate/
+            // Sync all project files, outputs, and build reports back to /storage/emulated/0/.IDE Ultimate/
             syncFullRootToExternal(project, root)
-
-            // Delete temporary build outputs, Gradle daemons, intermediate dex/aapt files
-            listOf(
-                File(root, "build"),
-                File(root, "app/build"),
-                File(root, ".gradle"),
-                File(root, ".dart_tool"),
-                File(root, ".idea"),
-            ).forEach { dir ->
-                if (dir.exists()) {
-                    dir.deleteRecursively()
-                }
-            }
         }
     }
 
@@ -4328,13 +4337,16 @@ flutter:
 
                 root.walkTopDown().forEach { f ->
                     val rel = f.relativeTo(root).path
-                    if (rel.isNotEmpty()) {
+                    if (rel.isNotEmpty() && !rel.startsWith(".gradle") && !rel.startsWith(".idea")) {
                         val dst = File(projDir, rel)
                         if (f.isDirectory) {
                             dst.mkdirs()
                         } else {
-                            dst.parentFile?.mkdirs()
-                            f.copyTo(dst, overwrite = true)
+                            if (!dst.exists() || dst.lastModified() != f.lastModified() || dst.length() != f.length()) {
+                                dst.parentFile?.mkdirs()
+                                f.copyTo(dst, overwrite = true)
+                                dst.setLastModified(f.lastModified())
+                            }
                         }
                     }
                 }
@@ -4415,20 +4427,57 @@ flutter:
         entryRelativePath: String,
         rawNewName: String,
     ): Boolean {
-        val cleanNew = rawNewName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        val cleanNew = rawNewName.trim().replace(Regex("[\\/:*?"<>|]"), "_")
         if (cleanNew.isBlank()) return false
         val root = ensureProjectFullRoot(project)
-        val target = File(root, entryRelativePath.trim('/'))
+        val cleanOldRel = entryRelativePath.trim('/').replace('\\', '/')
+        val target = File(root, cleanOldRel)
         if (!target.exists()) return false
         val dest = File(target.parentFile ?: root, cleanNew)
         if (dest.exists()) return false
         val ok = runCatching { target.renameTo(dest) }.getOrDefault(false)
         if (ok) {
+            val oldParentRel = if (cleanOldRel.contains('/')) cleanOldRel.substringBeforeLast('/') else ""
+            val cleanNewRel = if (oldParentRel.isEmpty()) cleanNew else "$oldParentRel/$cleanNew"
+
+            // 1. Rename on external storage mirrors
             projectDirectoriesFor(project).forEach { projDir ->
                 runCatching {
-                    val extOld = File(projDir, entryRelativePath.trim('/'))
-                    val extNew = File(extOld.parentFile ?: projDir, cleanNew)
-                    if (extOld.exists()) extOld.renameTo(extNew)
+                    val extOld = File(projDir, cleanOldRel)
+                    val extNew = File(projDir, cleanNewRel)
+                    if (extOld.exists()) {
+                        extNew.parentFile?.mkdirs()
+                        extOld.renameTo(extNew)
+                    }
+                }
+            }
+
+            // 2. If an XML layout page was renamed, migrate saved preferences and Activity bindings
+            if (cleanOldRel.startsWith("app/src/main/res/layout/") && cleanOldRel.endsWith(".xml", ignoreCase = true)) {
+                val oldXmlName = cleanOldRel.substringAfterLast('/')
+                val newXmlName = cleanNew
+                val currentSet = prefs.getStringSet("xml_pages_${project.id}", emptySet()).orEmpty().toMutableSet()
+                if (currentSet.remove(oldXmlName)) {
+                    currentSet.add(newXmlName)
+                    prefs.edit().putStringSet("xml_pages_${project.id}", currentSet).apply()
+                }
+                val oldWidgets = prefs.getString("widgets_${project.id}_$oldXmlName", null)
+                if (oldWidgets != null) {
+                    prefs.edit()
+                        .putString("widgets_${project.id}_$newXmlName", oldWidgets)
+                        .remove("widgets_${project.id}_$oldXmlName")
+                        .apply()
+                }
+            }
+
+            // 3. Keep internal res mirror synchronized if file was inside res/
+            if (cleanOldRel.startsWith("app/src/main/res/")) {
+                val resRel = cleanOldRel.removePrefix("app/src/main/res/")
+                val resRoot = ensureProjectResRoot(project)
+                val internalResOld = File(resRoot, resRel)
+                val internalResNew = File(internalResOld.parentFile ?: resRoot, cleanNew)
+                if (internalResOld.exists()) {
+                    internalResOld.renameTo(internalResNew)
                 }
             }
         }

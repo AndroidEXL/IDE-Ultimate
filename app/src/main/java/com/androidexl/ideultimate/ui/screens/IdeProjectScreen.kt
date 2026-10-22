@@ -3652,9 +3652,9 @@ internal fun RenderWidgetNodeOnPhone(
         else -> Modifier.wrapContentHeight()
     }
 
-    val visualPad = (node.paddingDp / 2).coerceIn(2, 16).dp
-    val containerVisualPad = (node.paddingDp / 2).coerceAtLeast(if (node.children.isNotEmpty()) 8 else 3).coerceAtMost(18).dp
-    val visualMargin = (node.marginDp / 2).coerceIn(0, 16).dp
+    val visualPad = node.paddingDp.coerceIn(0, 100).dp
+    val containerVisualPad = node.paddingDp.coerceIn(0, 100).dp
+    val visualMargin = node.marginDp.coerceIn(0, 100).dp
     val parsedBgColor = remember(node.backgroundColor) {
         parseHexColorOrNull(node.backgroundColor)
     }
@@ -3787,7 +3787,7 @@ internal fun RenderWidgetNodeOnPhone(
                         .fillMaxWidth()
                         .then(if (node.layoutHeight == "match_parent") Modifier.fillMaxHeight() else Modifier)
                         .then(scrollMod)
-                        .padding(if (isEmpty) 0.dp else containerVisualPad),
+                        .padding(containerVisualPad),
                     verticalAlignment = verticalAlign,
                     horizontalArrangement = horizontalArr,
                 ) {
@@ -3907,7 +3907,7 @@ internal fun RenderWidgetNodeOnPhone(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(if (node.layoutHeight == "match_parent") Modifier.fillMaxHeight() else Modifier)
-                        .padding(if (isEmpty) 0.dp else containerVisualPad),
+                        .padding(containerVisualPad),
                     verticalArrangement = verticalArr,
                     horizontalAlignment = horizontalAlign,
                 ) {
@@ -4056,10 +4056,7 @@ internal fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
-                    .padding(
-                        horizontal = (node.paddingDp.coerceIn(4, 24)).dp,
-                        vertical = (node.paddingDp / 2).coerceIn(3, 16).dp,
-                    ),
+                    .padding(visualPad),
                 contentAlignment = boxAlignment,
             ) {
                 Column(
@@ -4306,7 +4303,7 @@ internal fun RenderWidgetNodeOnPhone(
                             onDragCancel = { currentOnCancelMove() },
                         )
                     }
-                    .padding((node.paddingDp / 2).coerceIn(2, 12).dp),
+                    .padding(visualPad),
                 contentAlignment = Alignment.Center,
             ) {
                 if (decodedBitmap != null) {
