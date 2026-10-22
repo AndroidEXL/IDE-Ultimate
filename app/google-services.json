@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "481936198924",
+    "firebase_url": "https://sketchware-f2a24-default-rtdb.firebaseio.com",
+    "project_id": "sketchware-f2a24",
+    "storage_bucket": "sketchware-f2a24.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481936198924:android:506fe0f2635857d461cd29",
+        "android_client_info": {
+          "package_name": "pro.sketchware"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABSZalOZMBGQR6z9NKm-tEVmY6ZfDqhLA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481936198924:android:506fe0f2635857d461cd29",
+        "android_client_info": {
+          "package_name": "com.androidexl.ideultimate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABSZalOZMBGQR6z9NKm-tEVmY6ZfDqhLA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

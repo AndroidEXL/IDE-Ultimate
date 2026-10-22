@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ubuntu_orange">#E95420</color>
+    <color name="ubuntu_orange_dark">#B3401A</color>
+    <color name="term_bg">#121212</color>
+    <color name="term_fg">#EEEEEE</color>
+    <color name="white">#FFFFFF</color>
+</resources>
