@@ -154,16 +154,24 @@ fun IdeTerminalGradleBuildSheet(
     var buildViewTab by remember { mutableStateOf(0) } // 0: Tasks Tree, 1: Raw Log
     val terminalScrollState = rememberScrollState()
 
-    // Keep running in background when user navigates back!
-    BackHandler(enabled = true) {
+    fun performCloseAndCleanup() {
+        if (!isBuilding && !isInstallingTools) {
+            coroutineScope.launch(Dispatchers.IO) {
+                repository.cleanProjectBuildArtifacts(project)
+            }
+        }
         onBack()
         onDismiss()
     }
 
+    // Keep running in background when user navigates back, or clean up if idle!
+    BackHandler(enabled = true) {
+        performCloseAndCleanup()
+    }
+
     fun abortBuildAndClose() {
         buildMgr.abortBuild()
-        onBack()
-        onDismiss()
+        performCloseAndCleanup()
     }
 
     fun appendLog(line: String) {
@@ -804,7 +812,7 @@ fun IdeTerminalGradleBuildSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IconButton(onClick = { onBack(); onDismiss() }) {
+                IconButton(onClick = { performCloseAndCleanup() }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -842,7 +850,7 @@ fun IdeTerminalGradleBuildSheet(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                IconButton(onClick = { onBack(); onDismiss() }) {
+                IconButton(onClick = { performCloseAndCleanup() }) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "Close",
@@ -1353,7 +1361,7 @@ fun IdeTerminalGradleBuildSheet(
                     .clip(RoundedCornerShape(10.dp))
                     .background(IndigoDeep)
                     .border(1.dp, GlassStrokeTop, RoundedCornerShape(10.dp))
-                    .clickable { onBack(); onDismiss() }
+                    .clickable { performCloseAndCleanup() }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {

@@ -4259,6 +4259,36 @@ kotlin.jvm.target.validation.mode=warning
         return root
     }
 
+    /**
+     * Cleans up temporary build files and caches generated during Gradle/Flutter builds
+     * from project_full/<id> when closing the build sheet.
+     * Keeps source code, resources, manifests, and scripts safe, while reclaiming device storage.
+     * When reopening the build screen, ensureProjectFullRoot automatically refreshes and syncs
+     * latest files from /storage/emulated/0/.IDE Ultimate/<project> seamlessly.
+     */
+    fun cleanProjectBuildArtifacts(project: WorkspaceItem) {
+        val root = File(appContext.filesDir, "project_full/${project.id}")
+        if (!root.exists() || !root.isDirectory) return
+
+        runCatching {
+            // First sync any modified source/resource changes back to /storage/emulated/0/.IDE Ultimate/
+            syncFullRootToExternal(project, root)
+
+            // Delete temporary build outputs, Gradle daemons, intermediate dex/aapt files
+            listOf(
+                File(root, "build"),
+                File(root, "app/build"),
+                File(root, ".gradle"),
+                File(root, ".dart_tool"),
+                File(root, ".idea"),
+            ).forEach { dir ->
+                if (dir.exists()) {
+                    dir.deleteRecursively()
+                }
+            }
+        }
+    }
+
     private fun syncFullRootToExternal(project: WorkspaceItem, root: File) {
         projectDirectoriesFor(project).forEach { projDir ->
             runCatching {
