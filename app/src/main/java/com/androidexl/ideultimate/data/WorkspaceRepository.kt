@@ -4427,7 +4427,7 @@ flutter:
         entryRelativePath: String,
         rawNewName: String,
     ): Boolean {
-        val cleanNew = rawNewName.trim().replace(Regex("[\\/:*?"<>|]"), "_")
+        val cleanNew = rawNewName.trim().replace(Regex("""[\\/:*?"<>|]"""), "_")
         if (cleanNew.isBlank()) return false
         val root = ensureProjectFullRoot(project)
         val cleanOldRel = entryRelativePath.trim('/').replace('\\', '/')
