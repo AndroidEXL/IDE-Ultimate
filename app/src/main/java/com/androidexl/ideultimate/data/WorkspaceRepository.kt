@@ -11,9 +11,13 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import org.json.JSONArray
 import org.json.JSONObject
+import org.w3c.dom.Element
+import org.w3c.dom.Node
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.Locale
 import java.util.UUID
+import javax.xml.parsers.DocumentBuilderFactory
 
 enum class WorkspaceItemType { FOLDER, PROJECT }
 
@@ -1528,6 +1532,9 @@ class WorkspaceRepository(context: Context) {
 
     /**
      * Loads the visual widget tree placed on the white phone canvas for [xmlPage].
+     * If no serialized widget JSON exists yet (e.g. freshly imported Android project or
+     * externally created layout), automatically parses the project's actual XML layout file
+     * on disk and converts its elements into interactive [IdeWidgetNode]s for the View designer!
      */
     fun loadWidgetsForXmlPage(
         project: WorkspaceItem,
@@ -1546,6 +1553,37 @@ class WorkspaceRepository(context: Context) {
                 }.getOrDefault(emptyList())
             }
         }
+
+        // Automatic Layout Reverse-Parser for imported or external projects:
+        // Reads res/layout/<xmlPage.xmlFileName> from disk, parses views & hierarchies, and saves widgets
+        for (projDir in projectDirectoriesFor(project)) {
+            val layoutDirs = listOf(
+                File(projDir, "app/src/main/res/layout"),
+                File(projDir, "res/layout"),
+                File(projDir, "layout"),
+            )
+            for (dir in layoutDirs) {
+                val layoutFile = File(dir, xmlPage.xmlFileName)
+                if (layoutFile.exists() && layoutFile.isFile && layoutFile.canRead()) {
+                    val xmlContent = runCatching { layoutFile.readText(Charsets.UTF_8) }.getOrNull()
+                    if (!xmlContent.isNullOrBlank()) {
+                        val parsed = LayoutXmlParser.parseXmlToWidgetNodes(xmlContent)
+                        if (parsed.isNotEmpty()) {
+                            // Persist to JSON cache so subsequent loads are lightning fast
+                            val serialized = serializeWidgetNodes(parsed).toString(2)
+                            prefs.edit().putString(key, serialized).apply()
+                            runCatching {
+                                val metaJson = File(projDir, ".ide-widgets-${xmlPage.layoutResourceName}.json")
+                                metaJson.parentFile?.mkdirs()
+                                metaJson.writeText(serialized, Charsets.UTF_8)
+                            }
+                            return parsed
+                        }
+                    }
+                }
+            }
+        }
+
         return emptyList()
     }
 
@@ -4535,6 +4573,22 @@ flutter:
         if (cleanRel.startsWith("app/src/main/res/")) {
             val resRel = cleanRel.removePrefix("app/src/main/res/")
             writeProjectResourceFile(project, resRel, content)
+            if (resRel.startsWith("layout/") && resRel.endsWith(".xml", ignoreCase = true)) {
+                val xmlName = resRel.removePrefix("layout/")
+                val parsed = LayoutXmlParser.parseXmlToWidgetNodes(content)
+                if (parsed.isNotEmpty()) {
+                    val serialized = serializeWidgetNodes(parsed).toString(2)
+                    prefs.edit().putString("widgets_${project.id}_$xmlName", serialized).apply()
+                    projectDirectoriesFor(project).forEach { projDir ->
+                        runCatching {
+                            val layoutResName = xmlName.removeSuffix(".xml")
+                            val metaJson = File(projDir, ".ide-widgets-$layoutResName.json")
+                            metaJson.parentFile?.mkdirs()
+                            metaJson.writeText(serialized, Charsets.UTF_8)
+                        }
+                    }
+                }
+            }
         }
         syncFullRootToExternal(project, root)
     }
@@ -5703,6 +5757,29 @@ object AppLogger {
             // Ensure essential files & manifest
             ensureDefaultProjectFiles(projectItem)
 
+            // Pre-parse all XML layout files found in the imported project
+            // so opening any XML immediately loads its visual design into the View canvas!
+            runCatching {
+                val layoutDir = File(fullRoot, "app/src/main/res/layout")
+                if (layoutDir.exists() && layoutDir.isDirectory) {
+                    layoutDir.listFiles()?.filter { it.isFile && it.name.endsWith(".xml", true) }?.forEach { layoutFile ->
+                        val xmlContent = layoutFile.readText(Charsets.UTF_8)
+                        val parsed = LayoutXmlParser.parseXmlToWidgetNodes(xmlContent)
+                        if (parsed.isNotEmpty()) {
+                            val xmlName = layoutFile.name.lowercase(Locale.ROOT)
+                            val serialized = serializeWidgetNodes(parsed).toString(2)
+                            prefs.edit().putString("widgets_${projectItem.id}_$xmlName", serialized).apply()
+                            projectDirectoriesFor(projectItem).forEach { projDir ->
+                                val layoutResName = xmlName.removeSuffix(".xml")
+                                val metaJson = File(projDir, ".ide-widgets-$layoutResName.json")
+                                metaJson.parentFile?.mkdirs()
+                                metaJson.writeText(serialized, Charsets.UTF_8)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Extract custom icon if any launcher icon exists in res/mipmap or res/drawable
             val resDir = File(fullRoot, "app/src/main/res")
             if (resDir.exists()) {
@@ -5739,4 +5816,443 @@ object AppLogger {
         return uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':')
     }
 
+}
+
+object LayoutXmlParser {
+
+    fun parseXmlToWidgetNodes(xmlContent: String): List<IdeWidgetNode> {
+        if (xmlContent.isBlank()) return emptyList()
+        return runCatching {
+            val db = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = false
+                isValidating = false
+            }.newDocumentBuilder()
+            val doc = db.parse(ByteArrayInputStream(xmlContent.toByteArray(Charsets.UTF_8)))
+            val rootEl = doc.documentElement ?: return emptyList()
+
+            val rootTag = rootEl.tagName.substringAfterLast('.').lowercase(Locale.ROOT)
+            val rootChildren = getChildElements(rootEl)
+
+            // If the root is a top-level ScrollView wrapping a single container layout, peel ScrollView
+            if ((rootTag == "scrollview" || rootTag == "horizontalscrollview") &&
+                rootChildren.size == 1 &&
+                isLayoutTag(rootChildren[0].tagName)
+            ) {
+                val innerContainer = rootChildren[0]
+                val innerChildren = getChildElements(innerContainer)
+                return if (innerChildren.isNotEmpty()) {
+                    innerChildren.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
+                } else {
+                    listOf(elementToWidgetNode(innerContainer, 1))
+                }
+            }
+
+            // If the root tag is a standard root container (LinearLayout, RelativeLayout, FrameLayout, ConstraintLayout, etc.)
+            // In Android layouts, the root element covers the canvas. Its children become the primary widgets on the canvas.
+            if (isLayoutTag(rootTag)) {
+                if (rootChildren.isNotEmpty()) {
+                    return rootChildren.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
+                } else {
+                    return listOf(elementToWidgetNode(rootEl, 1))
+                }
+            }
+
+            // Otherwise, convert the root element itself
+            listOf(elementToWidgetNode(rootEl, 1))
+        }.getOrDefault(emptyList())
+    }
+
+    private fun isLayoutTag(tag: String): Boolean {
+        val t = tag.substringAfterLast('.').lowercase(Locale.ROOT)
+        return t in setOf(
+            "linearlayout",
+            "relativelayout",
+            "framelayout",
+            "constraintlayout",
+            "coordinatorlayout",
+            "motionlayout",
+            "nestedscrollview",
+            "scrollview",
+            "horizontalscrollview",
+        )
+    }
+
+    private fun getChildElements(parent: Element): List<Element> {
+        val list = mutableListOf<Element>()
+        val children = parent.childNodes
+        for (i in 0 until children.length) {
+            val item = children.item(i)
+            if (item.nodeType == Node.ELEMENT_NODE && item is Element) {
+                list.add(item)
+            }
+        }
+        return list
+    }
+
+    private fun getAttr(elem: Element, attrName: String): String {
+        val lower = attrName.lowercase(Locale.ROOT)
+        // 1. Try exact attribute name
+        if (elem.hasAttribute(attrName)) return elem.getAttribute(attrName).trim()
+        if (elem.hasAttribute("android:$attrName")) return elem.getAttribute("android:$attrName").trim()
+        if (elem.hasAttribute("app:$attrName")) return elem.getAttribute("app:$attrName").trim()
+        if (elem.hasAttribute("tools:$attrName")) return elem.getAttribute("tools:$attrName").trim()
+
+        // 2. Scan all attributes ignoring namespace prefix
+        val attrs = elem.attributes
+        for (i in 0 until attrs.length) {
+            val item = attrs.item(i)
+            val name = item.nodeName
+            val localName = name.substringAfterLast(':').lowercase(Locale.ROOT)
+            if (localName == lower) {
+                return item.nodeValue.trim()
+            }
+        }
+        return ""
+    }
+
+    private fun parseDimen(raw: String, default: Int): Int {
+        if (raw.isBlank()) return default
+        val digits = StringBuilder()
+        for (ch in raw.trim()) {
+            if (ch.isDigit() || ch == '.' || ch == '-') {
+                digits.append(ch)
+            } else if (digits.isNotEmpty()) {
+                break
+            }
+        }
+        return digits.toString().toFloatOrNull()?.toInt() ?: default
+    }
+
+    private fun elementToWidgetNode(elem: Element, fallbackIndex: Int): IdeWidgetNode {
+        val tagName = elem.tagName
+        val rawTag = tagName.substringAfterLast('.')
+        val type = mapTagToWidgetType(elem)
+
+        val rawId = getAttr(elem, "id")
+        val viewId = when {
+            rawId.startsWith("@+id/") -> rawId.removePrefix("@+id/")
+            rawId.startsWith("@id/") -> rawId.removePrefix("@id/")
+            rawId.isNotBlank() -> rawId
+            else -> "${type.idPrefix}$fallbackIndex"
+        }
+
+        val rawOrientation = getAttr(elem, "orientation").lowercase(Locale.ROOT)
+        val orientation = when {
+            rawOrientation.isNotBlank() -> rawOrientation
+            type == IdeWidgetType.LINEAR_H ||
+                type == IdeWidgetType.SCROLL_V ||
+                type == IdeWidgetType.VIEW_PAGER ||
+                type == IdeWidgetType.HORIZONTAL_LIST_VIEW ||
+                type == IdeWidgetType.CAROUSEL_VIEW -> "horizontal"
+            else -> "vertical"
+        }
+
+        val rawWidth = getAttr(elem, "layout_width")
+        val layoutWidth = when {
+            rawWidth.isNotBlank() -> rawWidth
+            type.isContainer ||
+                type.isInputTextWidget ||
+                type.isWebWidget ||
+                type.isListWidget ||
+                type == IdeWidgetType.SPINNER ||
+                type == IdeWidgetType.CALENDAR_VIEW ||
+                type == IdeWidgetType.DATE_PICKER ||
+                type == IdeWidgetType.TIME_PICKER ||
+                type == IdeWidgetType.DATE_RANGE_PICKER -> "match_parent"
+            else -> "wrap_content"
+        }
+
+        val rawHeight = getAttr(elem, "layout_height")
+        val layoutHeight = when {
+            rawHeight.isNotBlank() -> rawHeight
+            type.isWebWidget -> "180dp"
+            type.isListWidget -> "140dp"
+            else -> "wrap_content"
+        }
+
+        val paddingDp = parseDimen(getAttr(elem, "padding"), if (type.isContainer) 8 else 4)
+        val marginDp = parseDimen(
+            getAttr(elem, "layout_margin").ifBlank { getAttr(elem, "margin") },
+            0,
+        )
+
+        val gravity = getAttr(elem, "gravity").ifBlank {
+            if (type.isButtonWidget) "center" else "left|top"
+        }
+        val layoutGravity = getAttr(elem, "layout_gravity").ifBlank { "left|top" }
+        val weight = parseDimen(getAttr(elem, "layout_weight"), 0)
+
+        val text = getAttr(elem, "text").ifBlank {
+            when {
+                type == IdeWidgetType.TEXT_VIEW -> "TextView"
+                type == IdeWidgetType.CHECKED_TEXT_VIEW -> "CheckedTextView"
+                type.isButtonWidget && type != IdeWidgetType.FAB_BUTTON -> type.displayName
+                type.isChooseWidget && type != IdeWidgetType.SPINNER -> type.displayName
+                type.isClockTextWidget -> "12:30:45"
+                else -> ""
+            }
+        }
+
+        val hint = getAttr(elem, "hint").ifBlank {
+            when (type) {
+                IdeWidgetType.EDIT_TEXT -> "EditText"
+                IdeWidgetType.AUTO_COMPLETE_TEXT -> "AutoCompleteTextView"
+                IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT -> "MultiAutoCompleteTextView"
+                IdeWidgetType.TEXT_INPUT_EDIT_TEXT -> "TextInputEditText"
+                else -> "Hint"
+            }
+        }
+        val hintColor = getAttr(elem, "textColorHint").ifBlank { "#94A3B8" }
+        val inputType = getAttr(elem, "inputType").ifBlank { "text" }
+        val imeOptions = getAttr(elem, "imeOptions").ifBlank { "actionUnspecified" }
+        val singleLine = getAttr(elem, "singleLine").equals("true", ignoreCase = true)
+        val checked = getAttr(elem, "checked").let { if (it.isBlank()) true else it.equals("true", ignoreCase = true) }
+        val completionThreshold = parseDimen(getAttr(elem, "completionThreshold"), 1).coerceIn(1, 10)
+
+        val textSizeSp = parseDimen(getAttr(elem, "textSize"), 12)
+        val textStyle = getAttr(elem, "textStyle").ifBlank {
+            if (type.isButtonWidget) "bold" else "normal"
+        }
+        val textColor = getAttr(elem, "textColor").ifBlank {
+            when {
+                type == IdeWidgetType.BUTTON ||
+                    type == IdeWidgetType.MATERIAL_BUTTON ||
+                    type == IdeWidgetType.FAB_BUTTON ||
+                    type == IdeWidgetType.EXTENDED_FAB -> "#FFFFFF"
+                type == IdeWidgetType.OUTLINED_BUTTON ||
+                    type == IdeWidgetType.TEXT_BUTTON -> "#2563EB"
+                else -> "#000000"
+            }
+        }
+
+        val rawSrc = getAttr(elem, "src").ifBlank { getAttr(elem, "imageResource") }
+        val imageResName = if (rawSrc.startsWith("@drawable/")) {
+            rawSrc.removePrefix("@drawable/")
+        } else if (rawSrc.startsWith("@mipmap/")) {
+            rawSrc.removePrefix("@mipmap/")
+        } else if (rawSrc.isNotBlank()) {
+            rawSrc
+        } else {
+            "default_image"
+        }
+
+        val rawScaleType = getAttr(elem, "scaleType")
+        val scaleType = when (rawScaleType.lowercase(Locale.ROOT)) {
+            "center" -> "CENTER"
+            "centercrop", "center_crop" -> "CENTER_CROP"
+            "centerinside", "center_inside" -> "CENTER_INSIDE"
+            "fitstart", "fit_start" -> "FIT_START"
+            "fitend", "fit_end" -> "FIT_END"
+            "fitxy", "fit_xy" -> "FIT_XY"
+            else -> if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) "CENTER_CROP" else "FIT_CENTER"
+        }
+
+        val imageTint = getAttr(elem, "tint").ifBlank { "none" }
+        val civBorderWidthDp = parseDimen(
+            getAttr(elem, "civ_border_width").ifBlank { getAttr(elem, "strokeWidth") },
+            if (type == IdeWidgetType.CIRCLE_IMAGE_VIEW) 2 else if (type == IdeWidgetType.OUTLINED_BUTTON) 1 else 0,
+        )
+        val civBorderColor = getAttr(elem, "civ_border_color").ifBlank {
+            getAttr(elem, "strokeColor").ifBlank { if (type == IdeWidgetType.OUTLINED_BUTTON) "#2563EB" else "#38BDF8" }
+        }
+        val civCircleBgColor = getAttr(elem, "civ_circle_background_color").ifBlank { "transparent" }
+
+        val cornerRadiusDp = parseDimen(
+            getAttr(elem, "cornerRadius").ifBlank {
+                getAttr(elem, "riv_corner_radius").ifBlank { getAttr(elem, "round") }
+            },
+            when (type) {
+                IdeWidgetType.ROUNDED_IMAGE_VIEW, IdeWidgetType.SHAPEABLE_IMAGE_VIEW -> 14
+                IdeWidgetType.IMAGE_BUTTON, IdeWidgetType.BUTTON -> 8
+                IdeWidgetType.MATERIAL_BUTTON, IdeWidgetType.OUTLINED_BUTTON, IdeWidgetType.TOGGLE_BUTTON -> 12
+                IdeWidgetType.EXTENDED_FAB, IdeWidgetType.CHIP_BUTTON -> 20
+                IdeWidgetType.FAB_BUTTON -> 28
+                else -> 0
+            },
+        )
+
+        val rawBg = getAttr(elem, "background")
+        val (backgroundResource, backgroundColor) = when {
+            rawBg.startsWith("@drawable/") || rawBg.startsWith("@color/") ->
+                rawBg to "transparent"
+            rawBg.startsWith("#") ->
+                "none" to rawBg
+            rawBg.isNotBlank() ->
+                rawBg to "transparent"
+            else -> {
+                val defBg = when (type) {
+                    IdeWidgetType.BUTTON,
+                    IdeWidgetType.MATERIAL_BUTTON,
+                    IdeWidgetType.FAB_BUTTON,
+                    IdeWidgetType.EXTENDED_FAB -> "#2563EB"
+                    IdeWidgetType.CHIP_BUTTON -> "#E0F2FE"
+                    IdeWidgetType.TOGGLE_BUTTON -> "#E2E8F0"
+                    else -> "transparent"
+                }
+                "none" to defBg
+            }
+        }
+
+        val buttonTint = getAttr(elem, "buttonTint").ifBlank {
+            getAttr(elem, "thumbTint").ifBlank { "#0284C7" }
+        }
+        val trackTint = getAttr(elem, "trackTint").ifBlank { "#93C5FD" }
+        val textOn = getAttr(elem, "textOn").ifBlank { "ON" }
+        val textOff = getAttr(elem, "textOff").ifBlank { "OFF" }
+
+        val webUrl = getAttr(elem, "url").ifBlank { "https://google.com" }
+        val numColumns = parseDimen(getAttr(elem, "numColumns").ifBlank { getAttr(elem, "spanCount") }, if (type == IdeWidgetType.GRID_VIEW || type == IdeWidgetType.STAGGERED_GRID_VIEW) 2 else 1)
+        val dividerHeightDp = parseDimen(getAttr(elem, "dividerHeight"), 1)
+
+        val childElements = getChildElements(elem)
+        val parsedChildren = if (type.isContainer && childElements.isNotEmpty()) {
+            childElements.mapIndexed { idx, childEl -> elementToWidgetNode(childEl, idx + 1) }
+        } else {
+            emptyList()
+        }
+
+        return IdeWidgetNode(
+            uid = UUID.randomUUID().toString(),
+            viewId = viewId,
+            type = type,
+            text = text,
+            hint = hint,
+            hintColor = hintColor,
+            inputType = inputType,
+            imeOptions = imeOptions,
+            singleLine = singleLine,
+            checked = checked,
+            completionThreshold = completionThreshold,
+            buttonTint = buttonTint,
+            trackTint = trackTint,
+            textOn = textOn,
+            textOff = textOff,
+            spinnerMode = getAttr(elem, "spinnerMode").ifBlank { "dropdown" },
+            spinnerEntries = getAttr(elem, "entries").ifBlank { "Item 1, Item 2, Item 3" },
+            spinnerPrompt = getAttr(elem, "prompt").ifBlank { "Select option" },
+            webUrl = webUrl,
+            webJavaScript = getAttr(elem, "javaScriptEnabled").let { if (it.isBlank()) true else it.equals("true", ignoreCase = true) },
+            webDomStorage = getAttr(elem, "domStorageEnabled").let { if (it.isBlank()) true else it.equals("true", ignoreCase = true) },
+            webSupportZoom = getAttr(elem, "supportZoom").let { if (it.isBlank()) true else it.equals("true", ignoreCase = true) },
+            webDesktopMode = getAttr(elem, "desktopMode").equals("true", ignoreCase = true),
+            elevationDp = parseDimen(getAttr(elem, "elevation"), if (type.isButtonWidget) 2 else 0),
+            rippleColor = getAttr(elem, "rippleColor").ifBlank { "#38BDF8" },
+            allCaps = getAttr(elem, "textAllCaps").equals("true", ignoreCase = true),
+            enabled = !getAttr(elem, "enabled").equals("false", ignoreCase = true),
+            orientation = orientation,
+            customView = getAttr(elem, "listitem").ifBlank { "none" },
+            dividerHeightDp = dividerHeightDp,
+            numColumns = numColumns,
+            horizontalSpacingDp = parseDimen(getAttr(elem, "horizontalSpacing"), 4),
+            verticalSpacingDp = parseDimen(getAttr(elem, "verticalSpacing"), 4),
+            choiceMode = getAttr(elem, "choiceMode").ifBlank { "none" },
+            layoutManager = getAttr(elem, "layoutManager").ifBlank {
+                when (type) {
+                    IdeWidgetType.GRID_VIEW -> "Grid"
+                    IdeWidgetType.STAGGERED_GRID_VIEW -> "StaggeredGrid"
+                    IdeWidgetType.HORIZONTAL_LIST_VIEW, IdeWidgetType.CAROUSEL_VIEW -> "LinearHorizontal"
+                    else -> "LinearVertical"
+                }
+            },
+            stackFromBottom = getAttr(elem, "stackFromBottom").equals("true", ignoreCase = true),
+            fastScroll = !getAttr(elem, "fastScrollEnabled").equals("false", ignoreCase = true),
+            pageLimit = parseDimen(getAttr(elem, "offscreenPageLimit"), 2),
+            format12Hour = getAttr(elem, "format12Hour").ifBlank { "hh:mm:ss a" },
+            format24Hour = getAttr(elem, "format24Hour").ifBlank { "HH:mm:ss" },
+            is24HourView = getAttr(elem, "is24HourView").equals("true", ignoreCase = true),
+            pickerMode = getAttr(elem, "timePickerMode").ifBlank {
+                getAttr(elem, "datePickerMode").ifBlank {
+                    if (type == IdeWidgetType.DATE_PICKER || type == IdeWidgetType.DATE_RANGE_PICKER) "calendar" else "clock"
+                }
+            },
+            firstDayOfWeek = parseDimen(getAttr(elem, "firstDayOfWeek"), 1),
+            minDate = getAttr(elem, "minDate").ifBlank { "01/01/2000" },
+            maxDate = getAttr(elem, "maxDate").ifBlank { "12/31/2035" },
+            showWeekNumber = getAttr(elem, "showWeekNumber").equals("true", ignoreCase = true),
+            timeZone = getAttr(elem, "timeZone").ifBlank { "Default" },
+            countDown = getAttr(elem, "countDown").equals("true", ignoreCase = true) || type == IdeWidgetType.COUNTDOWN_VIEW,
+            layoutWidth = layoutWidth,
+            layoutHeight = layoutHeight,
+            paddingDp = paddingDp,
+            marginDp = marginDp,
+            gravity = gravity,
+            layoutGravity = layoutGravity,
+            weight = weight,
+            textSizeSp = textSizeSp,
+            textStyle = textStyle,
+            textColor = textColor,
+            lines = parseDimen(getAttr(elem, "lines"), 0),
+            imageResName = imageResName,
+            scaleType = scaleType,
+            imageTint = imageTint,
+            civBorderWidthDp = civBorderWidthDp,
+            civBorderColor = civBorderColor,
+            civCircleBgColor = civCircleBgColor,
+            cornerRadiusDp = cornerRadiusDp,
+            backgroundResource = backgroundResource,
+            backgroundColor = backgroundColor,
+            children = parsedChildren,
+        )
+    }
+
+    private fun mapTagToWidgetType(elem: Element): IdeWidgetType {
+        val fullTag = elem.tagName.lowercase(Locale.ROOT)
+        val localTag = fullTag.substringAfterLast('.')
+        val orientation = getAttr(elem, "orientation").lowercase(Locale.ROOT)
+
+        return when {
+            localTag == "linearlayout" ->
+                if (orientation == "horizontal") IdeWidgetType.LINEAR_H else IdeWidgetType.LINEAR_V
+            localTag == "horizontalscrollview" -> IdeWidgetType.SCROLL_V
+            localTag == "scrollview" -> IdeWidgetType.SCROLL_H
+            localTag in setOf("framelayout", "relativelayout", "constraintlayout", "coordinatorlayout", "nestedscrollview") ->
+                if (orientation == "horizontal") IdeWidgetType.LINEAR_H else IdeWidgetType.LINEAR_V
+
+            localTag == "textview" -> IdeWidgetType.TEXT_VIEW
+            localTag == "checkedtextview" -> IdeWidgetType.CHECKED_TEXT_VIEW
+            localTag == "edittext" -> IdeWidgetType.EDIT_TEXT
+            localTag == "autocompletetextview" -> IdeWidgetType.AUTO_COMPLETE_TEXT
+            localTag == "multiautocompletetextview" -> IdeWidgetType.MULTI_AUTO_COMPLETE_TEXT
+            fullTag.contains("textinputedittext") -> IdeWidgetType.TEXT_INPUT_EDIT_TEXT
+
+            fullTag.contains("circleimageview") -> IdeWidgetType.CIRCLE_IMAGE_VIEW
+            fullTag.contains("roundedimageview") -> IdeWidgetType.ROUNDED_IMAGE_VIEW
+            fullTag.contains("shapeableimageview") -> IdeWidgetType.SHAPEABLE_IMAGE_VIEW
+            fullTag.contains("touchimageview") -> IdeWidgetType.ZOOM_IMAGE_VIEW
+            localTag == "imagebutton" -> IdeWidgetType.IMAGE_BUTTON
+            localTag in setOf("imageview", "appcompatimageview") -> IdeWidgetType.IMAGE_VIEW
+
+            fullTag.contains("materialbutton") -> IdeWidgetType.MATERIAL_BUTTON
+            fullTag.contains("extendedfloatingactionbutton") -> IdeWidgetType.EXTENDED_FAB
+            fullTag.contains("floatingactionbutton") -> IdeWidgetType.FAB_BUTTON
+            localTag == "togglebutton" -> IdeWidgetType.TOGGLE_BUTTON
+            fullTag.contains("chip") -> IdeWidgetType.CHIP_BUTTON
+            localTag == "button" -> IdeWidgetType.BUTTON
+
+            localTag == "checkbox" -> IdeWidgetType.CHECK_BOX
+            localTag == "radiobutton" -> IdeWidgetType.RADIO_BUTTON
+            localTag in setOf("switch", "switchmaterial", "compatswitch") -> IdeWidgetType.SWITCH
+            localTag == "spinner" -> IdeWidgetType.SPINNER
+
+            fullTag.contains("geckoview") -> IdeWidgetType.GECKO_WEB_VIEW
+            fullTag.contains("webview") -> IdeWidgetType.WEB_VIEW
+            fullTag.contains("swiperefreshlayout") -> IdeWidgetType.SWIPE_LIST_VIEW
+
+            localTag == "recyclerview" -> IdeWidgetType.RECYCLER_VIEW
+            localTag == "listview" -> IdeWidgetType.LIST_VIEW
+            localTag == "gridview" -> IdeWidgetType.GRID_VIEW
+            fullTag.contains("viewpager") -> IdeWidgetType.VIEW_PAGER
+            localTag == "expandablelistview" -> IdeWidgetType.EXPANDABLE_LIST_VIEW
+
+            localTag == "analogclock" -> IdeWidgetType.ANALOG_CLOCK
+            localTag == "digitalclock" -> IdeWidgetType.DIGITAL_CLOCK
+            localTag == "textclock" -> IdeWidgetType.TEXT_CLOCK
+            localTag == "chronometer" -> IdeWidgetType.CHRONOMETER
+            localTag == "timepicker" -> IdeWidgetType.TIME_PICKER
+            localTag == "datepicker" -> IdeWidgetType.DATE_PICKER
+            localTag == "calendarview" -> IdeWidgetType.CALENDAR_VIEW
+
+            else -> IdeWidgetType.TEXT_VIEW
+        }
+    }
 }

@@ -806,7 +806,20 @@ fun IdeProjectScreen(
         IdeFilesManagerScreen(
             project = project,
             repository = repository,
-            onBack = { showFilesManagerScreen = false },
+            onBack = {
+                refreshProjectXmlPages()
+                showFilesManagerScreen = false
+            },
+            onOpenInViewDesigner = { targetXmlName ->
+                refreshProjectXmlPages()
+                val targetPage = repository.xmlPageForName(project, targetXmlName)
+                if (xmlPages.none { it.xmlFileName.equals(targetPage.xmlFileName, ignoreCase = true) }) {
+                    xmlPages.add(targetPage)
+                }
+                selectedXmlFileName = targetPage.xmlFileName
+                activeTabName = IdeProjectTab.VIEW.name
+                showFilesManagerScreen = false
+            },
             modifier = modifier,
         )
         return

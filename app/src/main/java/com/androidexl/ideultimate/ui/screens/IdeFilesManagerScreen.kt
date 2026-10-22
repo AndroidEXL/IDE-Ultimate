@@ -93,6 +93,7 @@ fun IdeFilesManagerScreen(
     project: WorkspaceItem,
     repository: WorkspaceRepository,
     onBack: () -> Unit,
+    onOpenInViewDesigner: ((xmlFileName: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var currentPath by rememberSaveable { mutableStateOf("") }
@@ -424,6 +425,47 @@ fun IdeFilesManagerScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = Muted,
                         )
+                    }
+                }
+
+                // If this is an XML layout file, show option to open directly in View Designer
+                val isLayoutXml = entryToManage.name.endsWith(".xml", ignoreCase = true) &&
+                    (entryToManage.relativePath.contains("layout") || entryToManage.name.startsWith("activity_") || entryToManage.name.startsWith("fragment_") || entryToManage.name.startsWith("item_") || entryToManage.name.startsWith("view_"))
+
+                if (isLayoutXml && onOpenInViewDesigner != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Cyan.copy(alpha = 0.16f))
+                            .border(1.dp, Cyan.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                val xmlName = entryToManage.name
+                                longPressedEntry = null
+                                onOpenInViewDesigner(xmlName)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Cyan,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column {
+                            Text(
+                                text = "فتح في مصمم الواجهات (View)",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Cyan,
+                            )
+                            Text(
+                                text = "تحويل التصميم البصري وعرضه على شاشة الهاتف التفاعلية",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Muted,
+                            )
+                        }
                     }
                 }
 
