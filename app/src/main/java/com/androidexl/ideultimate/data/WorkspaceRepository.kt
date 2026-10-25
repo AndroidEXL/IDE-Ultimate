@@ -5757,24 +5757,25 @@ object AppLogger {
             // Ensure essential files & manifest
             ensureDefaultProjectFiles(projectItem)
 
-            // Pre-parse all XML layout files found in the imported project
-            // so opening any XML immediately loads its visual design into the View canvas!
+            // Pre-parse all XML layout files found across the imported project
+            // in any layout folder (app/src/main/res/layout, res/layout, etc.)
+            // so opening any XML immediately extracts all elements into the View canvas!
             runCatching {
-                val layoutDir = File(fullRoot, "app/src/main/res/layout")
-                if (layoutDir.exists() && layoutDir.isDirectory) {
-                    layoutDir.listFiles()?.filter { it.isFile && it.name.endsWith(".xml", true) }?.forEach { layoutFile ->
-                        val xmlContent = layoutFile.readText(Charsets.UTF_8)
-                        val parsed = LayoutXmlParser.parseXmlToWidgetNodes(xmlContent)
-                        if (parsed.isNotEmpty()) {
-                            val xmlName = layoutFile.name.lowercase(Locale.ROOT)
-                            val serialized = serializeWidgetNodes(parsed).toString(2)
-                            prefs.edit().putString("widgets_${projectItem.id}_$xmlName", serialized).apply()
-                            projectDirectoriesFor(projectItem).forEach { projDir ->
-                                val layoutResName = xmlName.removeSuffix(".xml")
-                                val metaJson = File(projDir, ".ide-widgets-$layoutResName.json")
-                                metaJson.parentFile?.mkdirs()
-                                metaJson.writeText(serialized, Charsets.UTF_8)
-                            }
+                fullRoot.walkTopDown().filter {
+                    it.isFile && it.name.endsWith(".xml", true) &&
+                        (it.parentFile?.name.equals("layout", true) || it.name.startsWith("activity_", true) || it.name.startsWith("fragment_", true))
+                }.forEach { layoutFile ->
+                    val xmlContent = layoutFile.readText(Charsets.UTF_8)
+                    val parsed = LayoutXmlParser.parseXmlToWidgetNodes(xmlContent)
+                    if (parsed.isNotEmpty()) {
+                        val xmlName = layoutFile.name.lowercase(Locale.ROOT)
+                        val serialized = serializeWidgetNodes(parsed).toString(2)
+                        prefs.edit().putString("widgets_${projectItem.id}_$xmlName", serialized).apply()
+                        projectDirectoriesFor(projectItem).forEach { projDir ->
+                            val layoutResName = xmlName.removeSuffix(".xml")
+                            val metaJson = File(projDir, ".ide-widgets-$layoutResName.json")
+                            metaJson.parentFile?.mkdirs()
+                            metaJson.writeText(serialized, Charsets.UTF_8)
                         }
                     }
                 }
@@ -5839,18 +5840,23 @@ object LayoutXmlParser {
                 isLayoutTag(rootChildren[0].tagName)
             ) {
                 val innerContainer = rootChildren[0]
-                val innerChildren = getChildElements(innerContainer)
-                return if (innerChildren.isNotEmpty()) {
-                    innerChildren.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
+                val visibleChildren = collectVisibleElements(innerContainer)
+                return if (visibleChildren.isNotEmpty()) {
+                    visibleChildren.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
                 } else {
                     listOf(elementToWidgetNode(innerContainer, 1))
                 }
             }
 
-            // If the root tag is a standard root container (LinearLayout, RelativeLayout, FrameLayout, ConstraintLayout, etc.)
-            // In Android layouts, the root element covers the canvas. Its children become the primary widgets on the canvas.
+            // Extract all visible child elements under the root container.
+            // If the layout uses complex or unrenderable containers (ConstraintLayout, RelativeLayout, CardView, FrameLayout, etc.)
+            // we recursively unpack their children so that ALL widgets (TextView, Button, EditText, ImageView, etc.)
+            // are extracted and placed directly onto the phone canvas without getting hidden!
             if (isLayoutTag(rootTag)) {
-                if (rootChildren.isNotEmpty()) {
+                val visibleElements = collectVisibleElements(rootEl)
+                if (visibleElements.isNotEmpty()) {
+                    return visibleElements.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
+                } else if (rootChildren.isNotEmpty()) {
                     return rootChildren.mapIndexed { idx, elem -> elementToWidgetNode(elem, idx + 1) }
                 } else {
                     return listOf(elementToWidgetNode(rootEl, 1))
@@ -5874,7 +5880,41 @@ object LayoutXmlParser {
             "nestedscrollview",
             "scrollview",
             "horizontalscrollview",
+            "cardview",
+            "radiogroup",
         )
+    }
+
+    private fun isLinearOrScroll(tag: String): Boolean {
+        val t = tag.substringAfterLast('.').lowercase(Locale.ROOT)
+        return t in setOf("linearlayout", "scrollview", "horizontalscrollview")
+    }
+
+    private fun isComplexContainer(tag: String): Boolean {
+        val t = tag.substringAfterLast('.').lowercase(Locale.ROOT)
+        return t.endsWith("layout") ||
+            t.endsWith("viewgroup") ||
+            t in setOf("cardview", "nestedscrollview", "radiogroup", "toolbar")
+    }
+
+    private fun collectVisibleElements(parent: Element): List<Element> {
+        val result = mutableListOf<Element>()
+        val children = getChildElements(parent)
+        for (c in children) {
+            val subChildren = getChildElements(c)
+            if (isLinearOrScroll(c.tagName)) {
+                // Supported linear or scroll container: keep container so its children render in row/column
+                result.add(c)
+            } else if (subChildren.isNotEmpty() && isComplexContainer(c.tagName)) {
+                // Complex or unsupported container (ConstraintLayout, RelativeLayout, CardView, etc.):
+                // Unpack its children recursively so NONE of the child widgets are lost or hidden!
+                result.addAll(collectVisibleElements(c))
+            } else {
+                // Leaf widget or any other view
+                result.add(c)
+            }
+        }
+        return result
     }
 
     private fun getChildElements(parent: Element): List<Element> {
