@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">IDE Ultimate</string>
+
+    <!-- Splash -->
+    <string name="splash_tagline">بيئة تطوير متكاملة… في راحة يدك</string>
+    <string name="splash_status_workspace">تهيئة مساحة العمل</string>
+    <string name="splash_status_kotlin">تحميل إضافات Kotlin</string>
+    <string name="splash_status_preview">تجهيز المعاينة الفورية</string>
+    <string name="splash_status_ready">جاهز للبرمجة</string>
+    <string name="splash_skip">تخطي</string>
+    <string name="splash_powered">KOTLIN  •  FLUTTER  •  JAVA</string>
+    <string name="splash_version">v1.20.0</string>
+
+    <!-- Home -->
+    <string name="home_greeting">أهلًا بك من جديد</string>
+    <string name="home_title">ابنِ تطبيقك\nالقادم هنا</string>
+    <string name="home_subtitle">محرر Kotlin سريع، معاينة فورية، وأدوات ذكية — كل ذلك في مكان واحد.</string>
+    <string name="home_new_project">مشروع جديد</string>
+    <string name="home_new_project_desc">ابدأ من قالب جاهز أو من صفحة بيضاء تمامًا.</string>
+    <string name="home_start">ابدأ الآن</string>
+    <string name="home_tools">أدواتك</string>
+    <string name="home_code_title">MainActivity.kt</string>
+    <string name="home_version">الإصدار 1.20.0</string>
+    <string name="home_replay_splash">إعادة الافتتاحية</string>
+    <string name="home_footer">صُنع بشغف باستخدام Kotlin و Jetpack Compose</string>
+    <string name="home_soon">قادمة قريبًا في هذا العرض</string>
+    <string name="home_settings">الإعدادات</string>
+
+    <string name="feature_editor">محرر ذكي</string>
+    <string name="feature_editor_desc">إكمال تلقائي وإبراز للأكواد.</string>
+    <string name="feature_preview">معاينة فورية</string>
+    <string name="feature_preview_desc">شاهد واجهتك أثناء الكتابة.</string>
+    <string name="feature_plugins">إضافات</string>
+    <string name="feature_plugins_desc">وسّع بيئتك بحزم مخصصة.</string>
+    <string name="feature_build">بناء وتوقيع</string>
+    <string name="feature_build_desc">أنشئ APK بضغطة واحدة.</string>
+
+    <!-- Workspace / Project Manager -->
+    <string name="workspace_title">Project Manager</string>
+    <string name="workspace_subtitle">نظّم فولدراتك ومشاريعك في /storage/emulated/0/.IDE Ultimate</string>
+    <string name="workspace_back">رجوع</string>
+    <string name="workspace_root">الجذر</string>
+    <string name="workspace_root_inside">المسار: %1$s</string>
+    <string name="workspace_empty_title">لا توجد عناصر بعد</string>
+    <string name="workspace_empty_desc">اضغط زر + لإنشاء فولدر أو مشروع جديد وبدء التنظيم.</string>
+    <string name="workspace_count">العناصر: %1$d</string>
+    <string name="workspace_empty_folder">فولدر فارغ</string>
+    <string name="workspace_fab">إضافة عنصر</string>
+
+    <string name="stat_folders">الفولدرات</string>
+    <string name="stat_projects">المشاريع</string>
+    <string name="filter_all">الكل</string>
+    <string name="search_placeholder">ابحث عن مشروع أو كود أو مكتبة…</string>
+
+    <string name="sheet_create_title">ماذا تريد أن تنشئ؟</string>
+    <string name="sheet_create_subtitle">اختر نوع العنصر الجديد في هذا الموقع (الجذر أو الفولدر).</string>
+    <string name="sheet_create_folder_only_subtitle">أنشئ فولدر مربع لتنظيم مشاريعك بداخله.</string>
+    <string name="sheet_new_folder">إنشاء فولدر جديد</string>
+    <string name="sheet_new_folder_desc">أنشئ فولدر مربع لتنظيم مشاريعك.</string>
+    <string name="sheet_new_project">إنشاء مشروع جديد</string>
+    <string name="sheet_new_project_desc">افتح صفحة إعداد مشروع جديد (الأيقونة، الاسم، الحزمة، اللغة، الإصدار).</string>
+    <string name="sheet_folder_hint">اضغط على الفولدر لفتحه، أو اضغط مطولًا لمزيد من الخيارات.</string>
+    <string name="sheet_folder_actions">خيارات الفولدر</string>
+    <string name="sheet_project_actions">خيارات المشروع</string>
+    <string name="folder_label">فولدر</string>
+    <string name="project_label">مشروع</string>
+
+    <string name="action_rename">تعديل الاسم</string>
+    <string name="action_rename_desc">غيّر اسم العنصر في أي وقت.</string>
+    <string name="action_edit_project">تعديل المشروع</string>
+    <string name="action_edit_project_desc">عدّل الأيقونة والاسم والحزمة ورقم/اسم الإصدار.</string>
+    <string name="action_delete">حذف العنصر</string>
+    <string name="action_delete_project">حذف المشروع</string>
+    <string name="action_delete_folder_desc">حذف الفولدر وكل ما بداخله.</string>
+    <string name="action_delete_project_desc">حذف المشروع نهائيًا.</string>
+    <string name="action_export">تصدير إلى ZIP Code</string>
+    <string name="action_export_desc">تصدير الكود كملف ZIP جاهز للفتح حسب لغة المشروع.</string>
+    <string name="action_new_project_here">إنشاء مشروع جديد</string>
+    <string name="action_new_project_here_desc">أنشئ مشروعًا جديدًا في نفس الموقع.</string>
+
+    <string name="dialog_new_folder">إنشاء فولدر جديد</string>
+    <string name="dialog_new_project">إنشاء مشروع جديد</string>
+    <string name="dialog_rename">تعديل الاسم</string>
+    <string name="dialog_edit_project">تعديل المشروع</string>
+    <string name="dialog_name_label">الاسم</string>
+    <string name="dialog_name_hint">اكتب اسمًا واضحًا…</string>
+    <string name="dialog_cancel">إلغاء</string>
+    <string name="dialog_create">إنشاء</string>
+    <string name="dialog_save">حفظ</string>
+    <string name="error_name_empty">اكتب اسمًا أولًا.</string>
+    <string name="error_name_taken">هذا الاسم مستخدم بالفعل هنا.</string>
+    <string name="error_name_too_long">الاسم طويل جدًا (40 حرفًا كحد أقصى).</string>
+    <string name="error_package_invalid">صيغة الحزمة غير صحيحة (مثال: com.ideultimate.app).</string>
+    <string name="error_version_code_invalid">رقم الإصدار يجب أن يكون رقمًا صحيحًا أكبر من 0.</string>
+    <string name="error_version_name_empty">اكتب اسم الإصدار (مثال: 1.0.0).</string>
+
+    <!-- Create / Edit Project Screen -->
+    <string name="create_project_title">إنشاء مشروع جديد</string>
+    <string name="create_project_edit_title">تعديل المشروع</string>
+    <string name="create_project_preview_default_name">مشروعي الجديد</string>
+    <string name="field_icon_title">الأيقونة</string>
+    <string name="field_icon_subtitle">اختر صورة من جهازك أو أحد القوالب المضيئة</string>
+    <string name="field_icon_pick_gallery">اختيار أيقونة من المعرض</string>
+    <string name="field_icon_reset_preset">استعادة الأيقونة الافتراضية</string>
+    <string name="field_identity_title">الاسم والحزمة</string>
+    <string name="field_identity_subtitle">حدد اسم التطبيق ومعرّف الحزمة الفريد (Package)</string>
+    <string name="field_project_name_label">اسم المشروع</string>
+    <string name="field_project_name_hint">مثال: My Super App</string>
+    <string name="field_package_label">الحزمة (Package Name)</string>
+    <string name="field_language_title">اللغة البرمجية</string>
+    <string name="field_language_once_note">تُحدَّد مرة واحدة فقط عند إنشاء المشروع</string>
+    <string name="field_language_locked_note">تم تحديد اللغة عند الإنشاء ولا يمكن تغييرها</string>
+    <string name="badge_once_only">تُحدَّد مرة واحدة</string>
+    <string name="badge_locked">مقفلة</string>
+    <string name="lang_desc_flutter">Flutter SDK • Dart &amp; Material 3</string>
+    <string name="lang_desc_kotlin">Kotlin • Jetpack Compose &amp; Android</string>
+    <string name="lang_desc_java">Java • Android SDK الكلاسيكي</string>
+    <string name="field_version_title">رقم الإصدار واسم الإصدار</string>
+    <string name="field_version_subtitle">ضبط versionCode و versionName للمشروع</string>
+    <string name="field_version_code_label">رقم الإصدار (Code)</string>
+    <string name="field_version_name_label">اسم الإصدار (Name)</string>
+    <string name="create_project_submit_btn">إنشاء المشروع الآن</string>
+    <string name="create_project_save_btn">حفظ تعديلات المشروع</string>
+
+    <!-- Authentication Bottom Sheet (تسجيل الدخول / تسجيل دخول جديد) -->
+    <string name="auth_title_login">تسجيل الدخول</string>
+    <string name="auth_title_register">تسجيل دخول جديد</string>
+    <string name="auth_subtitle">سجّل دخولك أو أنشئ حسابًا جديدًا لنشر مشاريعك وأكوادك ومكتباتك</string>
+    <string name="auth_tab_login">تسجيل الدخول</string>
+    <string name="auth_tab_register">تسجيل دخول جديد</string>
+    <string name="auth_pick_avatar_hint">اختر أيقونة حسابك من الجهاز</string>
+    <string name="auth_field_name">الاسم</string>
+    <string name="auth_field_email">الإيميل</string>
+    <string name="auth_field_password">الباسورد</string>
+    <string name="auth_field_confirm_password">تأكيد الباسورد</string>
+    <string name="auth_btn_login">تسجيل الدخول</string>
+    <string name="auth_btn_register">إنشاء الحساب وتسجيل الدخول</string>
+    <string name="auth_btn_logout">تسجيل الخروج</string>
+    <string name="auth_error_email_invalid">اكتب بريدًا إلكترونيًا صحيحًا.</string>
+    <string name="auth_error_password_short">كلمة المرور يجب أن تكون 6 أحرف على الأقل.</string>
+    <string name="auth_error_password_mismatch">كلمتا المرور غير متطابقتين.</string>
+    <string name="auth_error_email_taken">هذا الإيميل مسجّل بالفعل، استخدم تسجيل الدخول.</string>
+    <string name="auth_error_invalid_credentials">الإيميل أو الباسورد غير صحيح.</string>
+    <string name="auth_msg_logged_in">مرحباً بك %1$s</string>
+    <string name="auth_msg_logged_out">تم تسجيل الخروج</string>
+
+    <!-- Store Code Screen (3 Sections) -->
+    <string name="store_code_title">Store Code</string>
+    <string name="store_code_subtitle">المشاريع الجديدة · الأكواد البرمجية · المكتبات الخاصة</string>
+    <string name="section_new_projects">قسم المشاريع الجديدة</string>
+    <string name="section_new_projects_desc">أحدث المشاريع المضافة في المتجر (اضغط للعرض والتحميل)</string>
+    <string name="section_code_snippets">قسم الأكواد البرمجية</string>
+    <string name="section_code_snippets_desc">أكواد برمجية جاهزة للعرض والنسخ والاستيراد</string>
+    <string name="section_custom_libraries">قسم المكتبات الخاصة</string>
+    <string name="section_custom_libraries_desc">مكتبات وحزم خاصة جاهزة للعرض والنسخ</string>
+    <string name="store_use_as_project">استيراد كمشروع</string>
+    <string name="store_copy_code">نسخ الكود</string>
+    <string name="store_copied_msg">تم نسخ %1$s</string>
+
+    <!-- User Profile Screen -->
+    <string name="profile_title">ملف المستخدم</string>
+    <string name="profile_stat_projects">المشاريع</string>
+    <string name="profile_stat_likes">اللايكات</string>
+    <string name="profile_stat_dislikes">عدم الإعجاب</string>
+    <string name="profile_stat_subscribers">المشتركين</string>
+    <string name="profile_empty_projects">لم تقم بإضافة عناصر بعد. اضغط زر + لإنشاء مشروع أو كود أو مكتبة.</string>
+    <string name="profile_empty_collection">لا توجد عناصر محفوظة في Collection بعد.</string>
+    <string name="profile_action_edit_data">تعديل البيانات</string>
+    <string name="profile_action_edit_data_desc">تعديل الاسم، الأيقونة، النوع، التفاصيل، الكود أو الروابط والصور.</string>
+
+    <!-- Store Item Form (Create / Edit: Project / Code Snippet / Library) -->
+    <string name="store_form_create_title">إضافة عنصر جديد</string>
+    <string name="store_form_edit_title">تعديل البيانات</string>
+    <string name="store_form_subtitle">اختر النوع (مشروع · كود برمجي · مكتبة) واملأ البيانات</string>
+    <string name="store_form_type_label">نوع المشروع / الإضافة</string>
+    <string name="store_form_type_hint">لو اخترت كود برمجي أو مكتبة سيظهر حقل الكود مباشرةً تحت التفاصيل بدون روابط أو صور</string>
+    <string name="store_type_project">مشروع</string>
+    <string name="store_type_code">كود برمجي</string>
+    <string name="store_type_library">مكتبة</string>
+    <string name="store_form_pick_icon">الأيقونة من الجهاز</string>
+    <string name="store_form_program_name">اسم البرنامج</string>
+    <string name="store_form_code_name">اسم الكود البرمجي</string>
+    <string name="store_form_library_name">اسم المكتبة</string>
+    <string name="store_form_program_name_hint">اكتب الاسم هنا…</string>
+    <string name="store_form_details_label">تفاصيل المشروع</string>
+    <string name="store_form_code_details_label">تفاصيل الكود البرمجي</string>
+    <string name="store_form_library_details_label">تفاصيل المكتبة</string>
+    <string name="store_form_details_hint">اكتب وصفًا وتفاصيل كاملة…</string>
+    <string name="store_form_code_box_label">الكود البرمجي</string>
+    <string name="store_form_code_box_hint">اكتب الكود البرمجي كاملًا هنا تحت التفاصيل مباشرةً</string>
+    <string name="store_form_library_box_label">كود المكتبة / التضمين</string>
+    <string name="store_form_library_box_hint">اكتب سطر تضمين المكتبة أو كود المكتبة هنا تحت التفاصيل مباشرةً</string>
+    <string name="store_form_links_section">روابط التحميل</string>
+    <string name="store_form_add_link_btn">إضافة رابط تحميل</string>
+    <string name="store_form_images_section">صور المشروع</string>
+    <string name="store_form_add_images_btn">إضافة صور المشروع</string>
+    <string name="store_form_add_image_url_btn">رابط صورة</string>
+    <string name="store_form_save_btn">حفظ</string>
+    <string name="store_form_error_details">اكتب التفاصيل أولًا.</string>
+    <string name="store_form_error_code">اكتب الكود أولًا.</string>
+
+    <!-- Store View Screens (Project View, Code Snippet View, Library View) -->
+    <string name="code_view_screen_title">عرض الكود البرمجي</string>
+    <string name="library_view_screen_title">عرض المكتبة الخاصة</string>
+    <string name="store_save_later">حفظ لاحقًا</string>
+    <string name="store_saved_in_collection">محفوظ في Collection</string>
+    <string name="store_btn_like">أعجبني</string>
+    <string name="store_btn_dislike">لم يعجبني</string>
+    <string name="store_view_images_title">صور المشروع</string>
+    <string name="store_view_images_hint">اضغط على أي صورة لعرضها بالحجم الكامل داخل التطبيق</string>
+    <string name="store_view_no_images">لا توجد صور مرفقة لهذا المشروع.</string>
+    <string name="store_view_open_image_link">فتح الرابط في الصورة</string>
+    <string name="store_fab_download">تحميل</string>
+    <string name="store_download_sheet_title">تحميل &quot;%1$s&quot;</string>
+    <string name="store_download_sheet_subtitle">اختر رابط التحميل أو نزّل ملف ZIP مباشرةً:</string>
+    <string name="store_download_link_item">رابط التحميل #%1$d</string>
+    <string name="store_download_zip_direct">تحميل كملف ZIP جاهز</string>
+    <string name="msg_saved_to_collection">تم الحفظ في Collection</string>
+    <string name="msg_removed_from_collection">تمت الإزالة من Collection</string>
+
+    <string name="delete_folder_title">حذف الفولدر &quot;%1$s&quot;؟</string>
+    <string name="delete_project_title">حذف العنصر &quot;%1$s&quot;؟</string>
+    <string name="delete_folder_message">سيُحذف الفولدر وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_project_message">سيُحذف العنصر نهائيًا. لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="delete_folder_count">يحتوي الفولدر على %1$d عنصرًا ستتم إزالته أيضًا.</string>
+    <string name="delete_confirm">حذف نهائي</string>
+
+    <string name="msg_folder_created">تم إنشاء الفولدر</string>
+    <string name="msg_project_created">تم الحفظ بنجاح</string>
+    <string name="msg_project_updated">تم حفظ التعديلات</string>
+    <string name="msg_renamed">تم تحديث الاسم</string>
+    <string name="msg_deleted">تم الحذف</string>
+    <string name="export_success">تم تصدير &quot;%1$s&quot; بنجاح</string>
+    <string name="export_failed">تعذّر تصدير المشروع</string>
+
+    <!-- Project detail -->
+    <string name="project_detail_ready">جاهز للتصدير والبناء</string>
+    <string name="project_detail_package">اسم الحزمة (applicationId)</string>
+    <string name="project_detail_export">تصدير ZIP Code</string>
+    <string name="project_detail_hint">سيُصدَّر مشروع كامل بلغة المشروع المحددة مع الحزمة ورقم الإصدار.</string>
+    <string name="project_detail_files">ملفات المشروع</string>
+    <string name="project_detail_files_desc">هذه الملفات تُضمَّن داخل ملف الـ ZIP.</string>
+    <string name="project_file_settings">إعدادات المشروع</string>
+    <string name="project_file_root_build">إعدادات البناء الرئيسية</string>
+    <string name="project_file_app_build">إعدادات بناء التطبيق</string>
+    <string name="project_file_manifest">بيان التطبيق</string>
+    <string name="project_file_code">الملف البرمجي الرئيسي</string>
+    <string name="project_file_resources">نصوص التطبيق</string>
+    <string name="project_file_readme">دليل التشغيل</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_project_manager">Project Manager</string>
+    <string name="nav_store_code">Store Code</string>
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_workspace">مساحة العمل</string>
+
+    <!-- IDE Project Screen & Disk Restore -->
+    <string name="msg_disk_projects_restored">تمت مزامنة واسترداد المشاريع من الذاكرة (%1$d جديد)</string>
+    <string name="ide_run_button">Run</string>
+    <string name="ide_xml_sheet_title">صفحات XML Layout</string>
+    <string name="ide_xml_sheet_subtitle">اختر صفحة XML لتغيير الواجهة وتبديل الـ Activity المقابل لها تلقائيًا</string>
+    <string name="ide_xml_add_btn">إضافة XML</string>
+    <string name="ide_xml_add_dialog_title">إضافة صفحة XML Layout جديدة</string>
+    <string name="ide_xml_add_dialog_desc">اكتب اسم ملف الـ XML (مثل activity_profile.xml) وسيتم إنشاء الـ Activity الخاص به تلقائيًا:</string>
+    <string name="ide_temp_run_title">صفحة التشغيل المؤقتة (Run Preview)</string>
+    <string name="ide_temp_run_subtitle">صفحة مؤقتة لتشغيل المشروع</string>
+    <string name="ide_temp_run_desc">يتم الآن تشغيل المشروع في الصفحة المؤقتة على الواجهة والـ Activity المحددين أعلاه.</string>
+    <string name="ide_temp_run_close">العودة إلى IDE Project</string>
+    <string name="ide_view_drag_hint">اسحب أي عنصر من قائمة Widgets وأفلته داخل شاشة الهاتف البيضاء</string>
+    <string name="sheet_import_project">استيراد مشروع أندرويد من الهاتف</string>
+    <string name="sheet_import_project_desc">اختر مجلد مشروع أندرويد من ذاكرة الهاتف لاستخراجه وإضافته للمشاريع تلقائيًا.</string>
+    <string name="msg_project_imported">تم استيراد مشروع %1$s بنجاح!</string>
+        <string name="dialog_importing_title">جاري استيراد المشروع…</string>
+    <string name="dialog_importing_desc">يتم الآن نسخ الملفات ومعالجة البيانات دون استهلاك موارد النظام، يرجى الانتظار.</string>
+    <string name="msg_import_failed">فشل استيراد المشروع: %1$s</string>
+</resources>

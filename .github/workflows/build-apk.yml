@@ -1,0 +1,215 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+      - "arena/**"
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Assemble debug & release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Ensure Android SDK platform 35
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "Using Android SDK at: $SDK"
+          echo "Platforms: $(ls "$SDK/platforms" | tr '\n' ' ')"
+          echo "Build-tools: $(ls "$SDK/build-tools" | tr '\n' ' ')"
+          if [ ! -d "$SDK/platforms/android-35" ] || [ ! -d "$SDK/build-tools/35.0.0" ]; then
+            echo "Installing missing SDK packages…"
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+              --install "platforms;android-35" "build-tools;35.0.0"
+          fi
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build APKs
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest assembleDebug assembleRelease --stacktrace 2>&1 | tee build.log
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Report build failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f build.log ]; then
+            # Surface the key lines as annotations (readable even without log access).
+            grep -a -E '^(e: |> Task .*FAILED|FAILURE:|What went wrong|Caused by|Execution failed|AAPT|ERROR)' build.log \
+              | tail -10 | while IFS= read -r line; do
+                echo "::error title=Gradle::${line:0:900}"
+              done
+            jq -Rs '{body: ("### ❌ Gradle build log\n```\n" + (.[-12000:]) + "\n```")}' build.log > /tmp/payload.json
+            gh api --method POST "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" --input /tmp/payload.json || true
+          fi
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          echo "Building IDE Ultimate version: $VERSION_NAME"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/IDE-Ultimate-${VERSION_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/IDE-Ultimate-${VERSION_NAME}-release.apk"
+          cd dist
+          sha256sum *.apk | tee checksums.txt
+          ls -lh
+      - name: Verify packaged version
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          AAPT2="$(find "$SDK/build-tools" -maxdepth 2 -type f -name aapt2 | sort -V | tail -1)"
+          EXPECTED_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          EXPECTED_CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
+          echo "Gradle: versionName=$EXPECTED_NAME versionCode=$EXPECTED_CODE"
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            BADGING="$("$AAPT2" dump badging "$apk" 2>/dev/null | head -1)"
+            NAME=$(printf '%s' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+            CODE=$(printf '%s' "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+            echo "== $apk -> versionName=$NAME versionCode=$CODE"
+            echo "::notice title=APK $(basename "$apk")::versionName=$NAME versionCode=$CODE"
+            if [ "$NAME" != "$EXPECTED_NAME" ] || [ "$CODE" != "$EXPECTED_CODE" ]; then
+              echo "::error title=Version mismatch::$apk reports $NAME/$CODE, expected $EXPECTED_NAME/$EXPECTED_CODE"
+              exit 1
+            fi
+          done
+      - name: Verify APK signatures
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "build-tools: $(ls "$SDK/build-tools" 2>/dev/null | tr '\n' ' ')"
+          APKSIGNER="$(find "$SDK/build-tools" -maxdepth 2 -type f -name apksigner 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error title=Signing::apksigner was not found in the Android SDK"
+            exit 1
+          fi
+          echo "apksigner: $APKSIGNER"
+          DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
+          RELEASE_APK=app/build/outputs/apk/release/app-release.apk
+          DEBUG_OUT="$("$APKSIGNER" verify --print-certs "$DEBUG_APK" 2>&1 || true)"
+          RELEASE_OUT="$("$APKSIGNER" verify --print-certs "$RELEASE_APK" 2>&1 || true)"
+          echo "--- debug ---"
+          echo "$DEBUG_OUT"
+          echo "--- release ---"
+          echo "$RELEASE_OUT"
+          # apksigner prints "Signer #1 certificate SHA-256 digest: …" for v1
+          # and "V2 Signer: certificate SHA-256 digest: …" for v2+, so match both.
+          DEBUG_SHA="$(printf '%s\n' "$DEBUG_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
+          RELEASE_SHA="$(printf '%s\n' "$RELEASE_OUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
+          echo "debug=$DEBUG_SHA"
+          echo "release=$RELEASE_SHA"
+          if [ -z "$DEBUG_SHA" ] || [ -z "$RELEASE_SHA" ]; then
+            echo "::error title=Signing::Could not read the certificate digest from one of the APKs"
+            printf '%s\n' "$DEBUG_OUT" | head -12 | while IFS= read -r line; do
+              echo "::error title=apksigner debug::${line:0:400}"
+            done
+            printf '%s\n' "$RELEASE_OUT" | head -12 | while IFS= read -r line; do
+              echo "::error title=apksigner release::${line:0:400}"
+            done
+            exit 1
+          fi
+          if [ "$DEBUG_SHA" != "$RELEASE_SHA" ]; then
+            echo "::error title=Signing::Debug ($DEBUG_SHA) and release ($RELEASE_SHA) use different keys"
+            exit 1
+          fi
+          {
+            echo ""
+            echo "Signing certificate SHA-256: \`$DEBUG_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify APK contents
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import zipfile
+          ok = True
+          for apk in sorted(glob.glob("app/build/outputs/apk/*/*.apk")):
+              with zipfile.ZipFile(apk) as bundle:
+                  names = bundle.namelist()
+              fonts = [n for n in names if n.endswith(".ttf")]
+              dex = [n for n in names if n.endswith(".dex")]
+              webp = [n for n in names if n.endswith(".webp")]
+              res = [n for n in names if n.startswith("res/")]
+              print(f"== {apk}")
+              print(f"   entries={len(names)} fonts={len(fonts)} dex={len(dex)} webp={len(webp)} res={len(res)}")
+              print(f"   font files: {fonts}")
+              if "AndroidManifest.xml" not in names or not dex or len(fonts) < 5 or not webp:
+                  print(f"::error title=APK verification::Missing packaged assets in {apk}")
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDE-Ultimate-APK
+          path: |
+            dist/*.apk
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write build summary
+        run: |
+          {
+            echo "## 📱 IDE Ultimate — APK ready"
+            echo ""
+            echo "| File | Size |"
+            echo "| --- | --- |"
+            for f in dist/*.apk; do
+              echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) |"
+            done
+            echo ""
+            echo "Download the APK from the **Artifacts** section of this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.apk dist/checksums.txt \
+              --title "IDE Ultimate $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
